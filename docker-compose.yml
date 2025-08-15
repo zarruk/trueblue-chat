@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  # Base de datos PostgreSQL local para desarrollo
+  postgres:
+    image: postgres:15
+    container_name: trueblue-postgres
+    environment:
+      POSTGRES_DB: trueblue_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - trueblue-network
+
+  # Redis para caché y sesiones
+  redis:
+    image: redis:7-alpine
+    container_name: trueblue-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - trueblue-network
+
+  # n8n para automatización local
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: trueblue-n8n
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=admin123
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - N8N_USER_MANAGEMENT_DISABLED=true
+      - N8N_DISABLE_UI=false
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=America/Bogota
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n-workflows:/home/node/.n8n/workflows
+    networks:
+      - trueblue-network
+    depends_on:
+      - postgres
+
+  # Supabase local (opcional)
+  supabase:
+    image: supabase/supabase-dev:latest
+    container_name: trueblue-supabase
+    environment:
+      - POSTGRES_PASSWORD=your-super-secret-and-long-postgres-password
+      - JWT_SECRET=your-super-secret-jwt-token-with-at-least-32-characters-long
+      - ANON_KEY=your-anon-key
+      - SERVICE_KEY=your-service-key
+    ports:
+      - "54321:54321"
+      - "54322:54322"
+    volumes:
+      - supabase_data:/root/.supabase
+    networks:
+      - trueblue-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  n8n_data:
+  supabase_data:
+
+networks:
+  trueblue-network:
+    driver: bridge
