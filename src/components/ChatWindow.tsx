@@ -1,10 +1,17 @@
 
 import React, { useState, useEffect, useRef } from 'react'
-import { Send, Paperclip, Smile } from 'lucide-react'
+import { Send, Paperclip, Smile, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { useAuth } from '@/hooks/useAuth'
 import { useConversations } from '@/hooks/useConversations'
 import { format } from 'date-fns'
@@ -12,6 +19,9 @@ import { es } from 'date-fns/locale'
 
 interface ChatWindowProps {
   conversationId?: string
+  messages?: any[]
+  loading?: boolean
+  onSendMessage?: (conversationId: string, content: string, role: string) => Promise<void>
 }
 
 interface Message {
@@ -23,12 +33,68 @@ interface Message {
   created_at: string
 }
 
-export function ChatWindow({ conversationId }: ChatWindowProps) {
+interface Conversation {
+  id: string
+  status: 'active_ai' | 'active_human' | 'closed' | 'pending_human'
+  user_id: string
+  username?: string
+  phone_number?: string
+  assigned_agent_id?: string
+  assigned_agent_email?: string
+  assigned_agent_name?: string
+  created_at: string
+  updated_at: string
+}
+
+export function ChatWindow({ conversationId, messages: propMessages, loading: propLoading, onSendMessage }: ChatWindowProps) {
   const [message, setMessage] = useState('')
+  const [localMessages, setLocalMessages] = useState<Message[]>([])
+  const [conversation, setConversation] = useState<Conversation | null>(null)
+  const [updatingStatus, setUpdatingStatus] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const { profile } = useAuth()
-  const { sendMessage, messages, loading } = useConversations()
+  const { 
+    sendMessage: hookSendMessage, 
+    messages: hookMessages, 
+    loading: hookLoading, 
+    fetchMessages,
+    updateConversationStatus,
+    conversations
+  } = useConversations()
+
+  // Use prop messages if provided, otherwise use hook messages
+  const messages = propMessages || hookMessages
+  const loading = propLoading !== undefined ? propLoading : hookLoading
+
+  // Load messages when conversationId changes
+  useEffect(() => {
+    if (conversationId && fetchMessages) {
+      console.log('🔄 ChatWindow: Loading messages for conversation:', conversationId)
+      fetchMessages(conversationId)
+    }
+  }, [conversationId, fetchMessages])
+
+  // Get conversation data when conversationId changes
+  useEffect(() => {
+    if (conversationId && conversations) {
+      const currentConversation = conversations.find(conv => conv.id === conversationId)
+      if (currentConversation) {
+        console.log('🔄 ChatWindow: Actualizando conversación local:', currentConversation)
+        setConversation(currentConversation)
+      }
+    }
+  }, [conversationId, conversations])
+
+  // Remove the complex comparison useEffect that was causing issues
+  // The real-time updates will come directly from the conversations array
+
+  // Update local messages when messages change
+  useEffect(() => {
+    if (messages) {
+      setLocalMessages(messages)
+    }
+  }, [messages])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -36,17 +102,84 @@ export function ChatWindow({ conversationId }: ChatWindowProps) {
 
   useEffect(() => {
     scrollToBottom()
-  }, [messages])
+  }, [localMessages])
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!message.trim() || !conversationId) return
 
     try {
-      await sendMessage(conversationId, message, 'agent')
+      // Use prop onSendMessage if provided, otherwise use hook
+      if (onSendMessage) {
+        await onSendMessage(conversationId, message, 'agent')
+      } else {
+        await hookSendMessage(conversationId, message, 'agent')
+      }
       setMessage('')
     } catch (error) {
       console.error('Error sending message:', error)
+    }
+  }
+
+  const handleStatusChange = async (newStatus: string) => {
+    if (!conversationId || !updateConversationStatus) return
+
+    try {
+      setUpdatingStatus(true)
+      await updateConversationStatus(conversationId, newStatus as Conversation['status'])
+      
+      // No necesitamos actualizar el estado local aquí porque el hook ya lo hace
+      // y se sincroniza automáticamente con el array de conversaciones
+      console.log('✅ Status actualizado, sincronización automática en progreso...')
+    } catch (error) {
+      console.error('Error updating conversation status:', error)
+    } finally {
+      setUpdatingStatus(false)
+    }
+  }
+
+  const getStatusBadgeVariant = (status: string) => {
+    switch (status) {
+      case 'active_ai':
+        return 'default'
+      case 'active_human':
+        return 'secondary'
+      case 'closed':
+        return 'destructive'
+      case 'pending_human':
+        return 'outline'
+      default:
+        return 'secondary'
+    }
+  }
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'active_ai':
+        return '🤖 IA Activa'
+      case 'active_human':
+        return '👤 Agente Activo'
+      case 'closed':
+        return '🔒 Cerrada'
+      case 'pending_human':
+        return '⏳ Pendiente'
+      default:
+        return status
+    }
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'active_ai':
+        return 'text-blue-600'
+      case 'active_human':
+        return 'text-green-600'
+      case 'closed':
+        return 'text-red-600'
+      case 'pending_human':
+        return 'text-orange-600'
+      default:
+        return 'text-gray-600'
     }
   }
 
@@ -93,16 +226,66 @@ export function ChatWindow({ conversationId }: ChatWindowProps) {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <Avatar className="h-10 w-10">
-              <AvatarFallback>U</AvatarFallback>
+              <AvatarFallback>
+                {conversation?.username?.charAt(0)?.toUpperCase() || 
+                 conversation?.phone_number?.charAt(0)?.toUpperCase() || 'U'}
+              </AvatarFallback>
             </Avatar>
             <div>
-              <h3 className="font-semibold">Conversación #{conversationId.slice(0, 8)}</h3>
+              <h3 className="font-semibold">
+                {conversation?.username || conversation?.phone_number || `Conversación #${conversationId?.slice(0, 8)}`}
+              </h3>
               <div className="flex items-center space-x-2">
-                <Badge variant="secondary">Activa</Badge>
-                <span className="text-sm text-muted-foreground">
-                  Última actividad: {format(new Date(), 'HH:mm', { locale: es })}
-                </span>
+                <Badge variant={getStatusBadgeVariant(conversation?.status || 'closed')}>
+                  {getStatusLabel(conversation?.status || 'Cerrada')}
+                </Badge>
+                {conversation?.assigned_agent_name && (
+                  <span className="text-sm text-muted-foreground">
+                    Agente: {conversation.assigned_agent_name}
+                  </span>
+                )}
               </div>
+            </div>
+          </div>
+          
+          {/* Status Selector */}
+          <div className="flex items-center space-x-4">
+            <div className="flex flex-col items-end space-y-1">
+              <label className="text-xs text-muted-foreground font-medium">
+                Estado de la conversación
+              </label>
+              <div className="flex items-center space-x-2">
+                <Select 
+                  onValueChange={handleStatusChange} 
+                  value={conversation?.status || 'closed'}
+                  disabled={updatingStatus}
+                >
+                  <SelectTrigger className="h-8 w-[160px]">
+                    <SelectValue placeholder="Cambiar estado" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending_human">⏳ Pendiente</SelectItem>
+                    <SelectItem value="active_ai">🤖 IA Activa</SelectItem>
+                    <SelectItem value="active_human">👤 Agente Activo</SelectItem>
+                    <SelectItem value="closed">🔒 Cerrada</SelectItem>
+                  </SelectContent>
+                </Select>
+                {updatingStatus && (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                )}
+              </div>
+            </div>
+            
+            <div className="flex flex-col items-end space-y-1">
+              <label className="text-xs text-muted-foreground font-medium">
+                Última actividad
+              </label>
+              <span className={`text-sm font-medium ${getStatusColor(conversation?.status || 'closed')}`}>
+                {conversation?.updated_at ? 
+                  format(new Date(conversation.updated_at), 'dd/MM HH:mm', { locale: es }) : 
+                  format(new Date(), 'dd/MM HH:mm', { locale: es })
+                }
+              </span>
             </div>
           </div>
         </div>
@@ -114,12 +297,12 @@ export function ChatWindow({ conversationId }: ChatWindowProps) {
           <div className="flex items-center justify-center h-full">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
           </div>
-        ) : messages.length === 0 ? (
+        ) : localMessages.length === 0 ? (
           <div className="text-center text-muted-foreground">
             <p>No hay mensajes aún. ¡Sé el primero en escribir!</p>
           </div>
         ) : (
-          messages.map((msg) => {
+          localMessages.map((msg) => {
             const senderInfo = getSenderInfo(msg)
             const alignment = getMessageAlignment(msg)
             

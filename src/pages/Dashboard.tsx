@@ -116,10 +116,8 @@ export default function Dashboard() {
         {/* Conversations List */}
         <div className="lg:col-span-1">
           <ConversationTabs
-            conversations={conversations}
             selectedConversationId={selectedConversationId || undefined}
             onSelectConversation={handleSelectConversation}
-            agents={agents}
           />
         </div>
 
@@ -130,10 +128,9 @@ export default function Dashboard() {
               {selectedConversation ? (
                 <ChatWindow
                   conversationId={selectedConversationId || undefined}
-                  agents={agents}
-                  onSendMessage={sendMessage}
-                  onUpdateStatus={updateConversationStatus}
-                  onAssignAgent={() => {}}
+                  messages={messages}
+                  loading={loading}
+                  onSendMessage={(conversationId, content, senderRole) => sendMessage(conversationId, content, senderRole as 'user' | 'ai' | 'agent')}
                 />
               ) : (
                 <div className="flex items-center justify-center h-full text-muted-foreground">

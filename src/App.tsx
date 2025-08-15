@@ -4,7 +4,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import Dashboard from "./pages/Dashboard";
 import Agents from "./pages/Agents";
@@ -12,8 +11,12 @@ import Settings from "./pages/Settings";
 import Placeholder from "./pages/Placeholder";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
-import { BarChart3 } from "lucide-react";
+import Debug from "./pages/Debug";
+import { BarChart3, Bug, Menu } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { checkAndAddChannelColumn } from "@/utils/databaseStructureCheck";
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -52,26 +55,40 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AppLayout({ children }: { children: React.ReactNode }) {
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  
+  useEffect(() => {
+    // Verificar y agregar la columna channel si es necesario
+    checkAndAddChannelColumn();
+  }, []);
+
   return (
-    <SidebarProvider>
-      <div className="min-h-screen flex w-full">
-        <AppSidebar isOpen={false} onToggle={() => {}} />
-        <main className="flex-1 overflow-hidden">
-          <header className="h-12 flex items-center justify-between border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="flex items-center">
-              <SidebarTrigger className="ml-2" />
-              <div className="ml-4 text-lg font-semibold">Trueblue</div>
-            </div>
-            <div className="mr-4">
-              <ThemeToggle />
-            </div>
-          </header>
-          <div className="h-[calc(100vh-3rem)] overflow-auto">
-            {children}
+    <div className="min-h-screen flex w-full">
+      <AppSidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
+      <main className={`flex-1 overflow-hidden transition-all duration-300 ease-in-out ${
+        sidebarOpen ? 'lg:ml-64' : 'lg:ml-16'
+      }`}>
+        <header className="h-12 flex items-center justify-between border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <div className="flex items-center">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="lg:hidden mr-2"
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+            <div className="text-lg font-semibold">Trueblue</div>
           </div>
-        </main>
-      </div>
-    </SidebarProvider>
+          <div className="mr-4">
+            <ThemeToggle />
+          </div>
+        </header>
+        <div className="h-[calc(100vh-3rem)] overflow-auto">
+          {children}
+        </div>
+      </main>
+    </div>
   );
 }
 
@@ -95,14 +112,21 @@ const App = () => (
                 </AppLayout>
               </ProtectedRoute>
             } />
-            <Route path="/agentes" element={
+            <Route path="/dashboard" element={
+              <ProtectedRoute>
+                <AppLayout>
+                  <Dashboard />
+                </AppLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/agents" element={
               <ProtectedRoute>
                 <AppLayout>
                   <Agents />
                 </AppLayout>
               </ProtectedRoute>
             } />
-            <Route path="/metricas" element={
+            <Route path="/metrics" element={
               <ProtectedRoute>
                 <AppLayout>
                   <Placeholder 
@@ -113,10 +137,17 @@ const App = () => (
                 </AppLayout>
               </ProtectedRoute>
             } />
-            <Route path="/configuracion" element={
+            <Route path="/settings" element={
               <ProtectedRoute>
                 <AppLayout>
                   <Settings />
+                </AppLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/debug" element={
+              <ProtectedRoute>
+                <AppLayout>
+                  <Debug />
                 </AppLayout>
               </ProtectedRoute>
             } />

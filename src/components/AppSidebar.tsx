@@ -6,7 +6,8 @@ import {
   BarChart3, 
   Settings, 
   LogOut,
-
+  Bug,
+  Menu,
   X
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -20,24 +21,41 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { useAuth } from '@/hooks/useAuth'
-import { useMobile } from '@/hooks/use-mobile'
+import { useState, useEffect } from 'react'
+
+const navigation = [
+  { name: 'Dashboard', href: '/dashboard', icon: MessageSquare },
+  { name: 'Agentes', href: '/agents', icon: Users },
+  { name: 'Métricas', href: '/metrics', icon: BarChart3 },
+  { name: 'Debug', href: '/debug', icon: Bug },
+  { name: 'Configuración', href: '/settings', icon: Settings },
+]
 
 interface AppSidebarProps {
   isOpen: boolean
   onToggle: () => void
 }
 
-const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: MessageSquare },
-  { name: 'Agentes', href: '/agents', icon: Users },
-  { name: 'Métricas', href: '/metrics', icon: BarChart3 },
-  { name: 'Configuración', href: '/settings', icon: Settings },
-]
-
 export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
   const location = useLocation()
   const { user, profile, signOut } = useAuth()
-  const isMobile = useMobile()
+  const [isMobile, setIsMobile] = useState(false)
+
+  // Detectar si es móvil
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 1024)
+      if (window.innerWidth < 1024) {
+        // En móviles, el estado se maneja desde el componente padre
+      } else {
+        // En desktop, mantener el estado del componente padre
+      }
+    }
+
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
 
   const handleSignOut = async () => {
     try {
@@ -58,7 +76,11 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
           <span className="font-semibold text-lg">TrueBlue</span>
         </Link>
         {isMobile && (
-          <Button variant="ghost" size="icon" onClick={onToggle}>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={() => onToggle()}
+          >
             <X className="h-5 w-5" />
           </Button>
         )}
@@ -79,6 +101,12 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
                   : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                 }
               `}
+              onClick={() => {
+                // Cerrar sidebar móvil al hacer clic en un enlace
+                if (isMobile) {
+                  onToggle()
+                }
+              }}
             >
               <item.icon className="mr-3 h-5 w-5" />
               {item.name}
@@ -98,7 +126,7 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="w-full justify-start p-2 h-auto">
                 <Avatar className="h-8 w-8 mr-3">
-                  <AvatarImage src={profile.avatar_url || undefined} alt={profile.name} />
+                  <AvatarImage src={undefined} alt={profile.name} />
                   <AvatarFallback>
                     {profile.name?.charAt(0).toUpperCase() || 'U'}
                   </AvatarFallback>
@@ -137,6 +165,7 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
     </div>
   )
 
+  // Mobile sidebar
   if (isMobile) {
     return (
       <>
@@ -144,7 +173,7 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
         {isOpen && (
           <div 
             className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-            onClick={onToggle}
+            onClick={() => onToggle()}
           />
         )}
         
@@ -161,7 +190,10 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
 
   // Desktop sidebar
   return (
-    <div className="hidden lg:flex lg:w-64 lg:flex-col lg:fixed lg:inset-y-0">
+    <div className={`
+      hidden lg:flex lg:flex-col lg:fixed lg:inset-y-0 transition-all duration-300 ease-in-out
+      ${isOpen ? 'lg:w-64' : 'lg:w-16'}
+    `}>
       <SidebarContent />
     </div>
   )

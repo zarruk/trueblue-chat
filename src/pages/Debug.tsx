@@ -1,4 +1,5 @@
 import { RealTimeDebug } from '@/components/RealTimeDebug';
+import { N8nWebhookDebug } from '@/components/N8nWebhookDebug';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 
@@ -86,6 +87,9 @@ export default function DebugPage() {
 
       {/* Componente Principal de Debug */}
       <RealTimeDebug />
+
+      {/* Debug del Webhook de N8N */}
+      <N8nWebhookDebug />
 
       {/* Información Adicional */}
       <Card>

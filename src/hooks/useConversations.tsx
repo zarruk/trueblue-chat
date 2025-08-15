@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/integrations/supabase/client'
 import { useAuth } from './useAuth'
 import { toast } from 'sonner'
+import { n8nService } from '@/services/n8nService'
 
 export interface Conversation {
   id: string
@@ -13,6 +14,7 @@ export interface Conversation {
   assigned_agent_email?: string
   assigned_agent_name?: string
   summary?: string
+  channel?: string
   created_at: string
   updated_at: string
 }
@@ -155,6 +157,56 @@ export function useConversations() {
         })
         .eq('id', conversationId)
 
+      // Si el mensaje es enviado por un agente, enviarlo al webhook de n8n
+      if (senderRole === 'agent') {
+        console.log('🔍 senderRole es "agent", procediendo con webhook...')
+        try {
+          // Obtener la información de la conversación para el webhook
+          console.log('🔍 Buscando conversación en BD:', conversationId)
+          const { data: conversationData, error: conversationError } = await supabase
+            .from('tb_conversations')
+            .select('*')
+            .eq('id', conversationId)
+            .single()
+
+          if (conversationError) {
+            console.error('❌ Error buscando conversación:', conversationError)
+            return
+          }
+
+          if (conversationData) {
+            console.log('✅ Conversación encontrada:', conversationData)
+            
+            // Preparar y enviar el payload al webhook de n8n
+            const webhookPayload = n8nService.prepareWebhookPayload(
+              conversationId,
+              conversationData,
+              content,
+              profile.id, // Cambiar de profile.email a profile.id
+              profile.name
+            )
+
+            console.log('📤 Payload preparado para n8n:', webhookPayload)
+            console.log('📤 Enviando mensaje a n8n webhook...')
+            
+            const n8nResponse = await n8nService.sendMessageToWebhook(webhookPayload)
+            
+            if (n8nResponse.success) {
+              console.log('✅ Mensaje enviado exitosamente a n8n')
+            } else {
+              console.warn('⚠️ Advertencia: El mensaje se guardó pero hubo un problema con n8n:', n8nResponse.error)
+            }
+          } else {
+            console.warn('⚠️ No se encontró la conversación para el webhook')
+          }
+        } catch (n8nError) {
+          console.error('❌ Error con n8n webhook:', n8nError)
+          // No bloqueamos el flujo principal si falla n8n
+        }
+      } else {
+        console.log('🔍 senderRole NO es "agent":', senderRole)
+      }
+
       toast.success('Mensaje enviado')
       
       // Refresh messages
@@ -174,24 +226,79 @@ export function useConversations() {
     status: Conversation['status']
   ) => {
     try {
+      console.log('🔄 Actualizando estado de conversación:', { conversationId, status })
+      
+      // Actualizar inmediatamente el estado local para sincronización instantánea
+      setConversations(prevConversations => {
+        const updatedConversations = prevConversations.map(conv => 
+          conv.id === conversationId 
+            ? { 
+                ...conv, 
+                status, 
+                updated_at: new Date().toISOString() 
+              }
+            : conv
+        )
+        console.log('✅ Estado local actualizado inmediatamente')
+        return updatedConversations
+      })
+      
       const { error } = await supabase
         .from('tb_conversations')
-        .update({ status })
+        .update({ 
+          status,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', conversationId)
 
       if (error) {
-        console.error('Error updating conversation status:', error)
+        console.error('❌ Error updating conversation status:', error)
         toast.error('Error al actualizar el estado')
+        
+        // Revertir el cambio local si falla la actualización en BD
+        setConversations(prevConversations => 
+          prevConversations.map(conv => 
+            conv.id === conversationId 
+              ? { ...conv, status: conv.status } // Mantener el estado anterior
+              : conv
+          )
+        )
         return
       }
 
+      console.log('✅ Estado de conversación actualizado exitosamente en BD')
       toast.success('Estado actualizado')
-      await fetchConversations()
+      
+      // Forzar una actualización adicional para asegurar sincronización
+      setTimeout(() => {
+        setConversations(prevConversations => {
+          const currentConv = prevConversations.find(c => c.id === conversationId)
+          if (currentConv && currentConv.status !== status) {
+            console.log('🔄 Forzando sincronización adicional...')
+            return prevConversations.map(conv => 
+              conv.id === conversationId 
+                ? { ...conv, status, updated_at: new Date().toISOString() }
+                : conv
+            )
+          }
+          return prevConversations
+        })
+      }, 100)
+      
     } catch (error) {
-      console.error('Error updating conversation status:', error)
+      console.error('❌ Error updating conversation status:', error)
       toast.error('Error al actualizar el estado')
+      
+      // Revertir el cambio local si falla
+      setConversations(prevConversations => 
+        prevConversations.map(conv => 
+          conv.id === conversationId 
+            ? { ...conv, status: conv.status }
+            : conv
+        )
+      )
     }
-  }, [fetchConversations])
+  }, [])
 
   // Assign agent to conversation
   const assignAgent = useCallback(async (
@@ -212,29 +319,64 @@ export function useConversations() {
         return
       }
 
+      // Actualizar inmediatamente el estado local
+      setConversations(prevConversations => 
+        prevConversations.map(conv => 
+          conv.id === conversationId 
+            ? { 
+                ...conv, 
+                assigned_agent_id: agentId,
+                assigned_agent_email: agentProfile.email,
+                assigned_agent_name: agentProfile.name,
+                status: 'active_human',
+                updated_at: new Date().toISOString()
+              }
+            : conv
+        )
+      )
+
       const { error } = await supabase
         .from('tb_conversations')
         .update({ 
           assigned_agent_id: agentId,
           assigned_agent_email: agentProfile.email,
           assigned_agent_name: agentProfile.name,
-          status: 'active_human'
+          status: 'active_human',
+          updated_at: new Date().toISOString()
         })
         .eq('id', conversationId)
 
       if (error) {
         console.error('Error assigning agent:', error)
         toast.error('Error al asignar el agente')
+        
+        // Revertir el cambio local si falla
+        setConversations(prevConversations => 
+          prevConversations.map(conv => 
+            conv.id === conversationId 
+              ? { ...conv }
+              : conv
+          )
+        )
         return
       }
 
       toast.success('Agente asignado')
-      await fetchConversations()
+      // No necesitamos fetchConversations() aquí
     } catch (error) {
       console.error('Error assigning agent:', error)
       toast.error('Error al asignar el agente')
+      
+      // Revertir el cambio local si falla
+      setConversations(prevConversations => 
+        prevConversations.map(conv => 
+          conv.id === conversationId 
+            ? { ...conv }
+            : conv
+        )
+      )
     }
-  }, [fetchConversations])
+  }, [])
 
   // Select a conversation
   const selectConversation = useCallback(async (conversationId: string) => {
@@ -244,9 +386,19 @@ export function useConversations() {
     await fetchMessages(conversationId)
   }, [fetchMessages])
 
+  // Effect to fetch messages when selectedConversationId changes
+  useEffect(() => {
+    if (selectedConversationId) {
+      console.log('🔄 useEffect: selectedConversationId changed, fetching messages for:', selectedConversationId)
+      fetchMessages(selectedConversationId)
+    }
+  }, [selectedConversationId, fetchMessages])
+
   // Set up real-time subscriptions
   useEffect(() => {
     if (!user) return
+
+    console.log('🔌 Configurando suscripciones de real-time...')
 
     // Subscribe to conversation updates
     const conversationsSubscription = supabase
@@ -258,11 +410,40 @@ export function useConversations() {
           schema: 'public',
           table: 'tb_conversations'
         },
-        () => {
-          fetchConversations()
+        (payload) => {
+          console.log('📡 Real-time conversation update:', payload)
+          
+          if (payload.eventType === 'UPDATE') {
+            const { id, status, assigned_agent_id, assigned_agent_email, assigned_agent_name, updated_at } = payload.new
+            
+            console.log('🔄 Actualizando conversación en tiempo real:', { id, status, updated_at })
+            
+            setConversations(prevConversations => {
+              const updatedConversations = prevConversations.map(conv => 
+                conv.id === id 
+                  ? { 
+                      ...conv, 
+                      status: status || conv.status,
+                      assigned_agent_id: assigned_agent_id || conv.assigned_agent_id,
+                      assigned_agent_email: assigned_agent_email || conv.assigned_agent_email,
+                      assigned_agent_name: assigned_agent_name || conv.assigned_agent_name,
+                      updated_at: updated_at || conv.updated_at
+                    }
+                  : conv
+              )
+              
+              console.log('✅ Conversaciones actualizadas:', updatedConversations.length)
+              return updatedConversations
+            })
+          } else if (payload.eventType === 'INSERT') {
+            console.log('🆕 Nueva conversación detectada, refrescando lista...')
+            fetchConversations()
+          }
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        console.log('📡 Estado de suscripción de conversaciones:', status)
+      })
 
     // Subscribe to message updates
     const messagesSubscription = supabase
@@ -275,18 +456,27 @@ export function useConversations() {
           table: 'tb_messages'
         },
         (payload) => {
+          console.log('📡 Real-time message update:', payload)
+          
           if (payload.eventType === 'INSERT' && selectedConversationId) {
-            fetchMessages(selectedConversationId)
+            const newMessage = payload.new as Message
+            if (newMessage.conversation_id === selectedConversationId) {
+              console.log('📨 Nuevo mensaje agregado en tiempo real')
+              setMessages(prevMessages => [...prevMessages, newMessage])
+            }
           }
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        console.log('📡 Estado de suscripción de mensajes:', status)
+      })
 
     return () => {
+      console.log('🔌 Desconectando suscripciones de real-time...')
       conversationsSubscription.unsubscribe()
       messagesSubscription.unsubscribe()
     }
-  }, [user, selectedConversationId, fetchConversations, fetchMessages])
+  }, [user, selectedConversationId, fetchConversations])
 
   // Initial fetch
   useEffect(() => {
