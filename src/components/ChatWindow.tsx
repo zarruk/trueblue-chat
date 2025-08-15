@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Send, Paperclip, Smile, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -53,6 +53,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   const [updatingStatus, setUpdatingStatus] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
   const { profile } = useAuth()
   const { 
     sendMessage: hookSendMessage, 
@@ -96,13 +97,32 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     }
   }, [messages])
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior })
+    }
+  }, [])
+
+  const scrollToBottomInstant = useCallback(() => {
+    scrollToBottom('auto')
+  }, [scrollToBottom])
 
   useEffect(() => {
-    scrollToBottom()
-  }, [localMessages])
+    // Scroll instantáneo cuando se cargan mensajes inicialmente
+    if (localMessages.length > 0) {
+      scrollToBottomInstant()
+    }
+  }, [localMessages.length, scrollToBottomInstant])
+
+  // Scroll suave cuando se agregan nuevos mensajes
+  useEffect(() => {
+    if (localMessages.length > 0) {
+      const timer = setTimeout(() => {
+        scrollToBottom('smooth')
+      }, 100)
+      return () => clearTimeout(timer)
+    }
+  }, [localMessages, scrollToBottom])
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -292,55 +312,83 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-4">
-        {loading ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-          </div>
-        ) : localMessages.length === 0 ? (
-          <div className="text-center text-muted-foreground">
-            <p>No hay mensajes aún. ¡Sé el primero en escribir!</p>
-          </div>
-        ) : (
-          localMessages.map((msg) => {
-            const senderInfo = getSenderInfo(msg)
-            const alignment = getMessageAlignment(msg)
-            
-            return (
-              <div key={msg.id} className={`flex ${alignment}`}>
-                <div className={`flex items-start space-x-3 max-w-[70%] ${alignment === 'justify-end' ? 'flex-row-reverse space-x-reverse' : ''}`}>
-                  {!senderInfo.isCurrentUser && (
-                    <Avatar className="h-8 w-8 flex-shrink-0">
-                      <AvatarImage src={senderInfo.avatar} />
-                      <AvatarFallback>
-                        {senderInfo.name.charAt(0).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                  )}
-                  
-                  <div className={`rounded-lg px-4 py-2 ${
-                    senderInfo.isCurrentUser 
-                      ? 'bg-primary text-primary-foreground' 
-                      : 'bg-muted'
-                  }`}>
-                    <p className="text-sm">{msg.content}</p>
-                    <p className={`text-xs mt-1 ${
+      <div className="flex-1 flex flex-col min-h-0 relative">
+        {/* Botón temporal para testing del scroll */}
+        <div className="p-2 border-b bg-muted/20">
+          <Button 
+            onClick={() => {
+              const testMessage = {
+                id: `test-${Date.now()}`,
+                content: `Mensaje de prueba ${localMessages.length + 1} - ${new Date().toLocaleTimeString()}`,
+                sender_role: 'user' as const,
+                created_at: new Date().toISOString()
+              }
+              setLocalMessages(prev => [...prev, testMessage])
+            }}
+            size="sm"
+            variant="outline"
+          >
+            Agregar mensaje de prueba
+          </Button>
+        </div>
+        
+        <div 
+          ref={messagesContainerRef} 
+          className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-4 chat-messages-scroll"
+          style={{ 
+            height: '400px',
+            maxHeight: '400px',
+            minHeight: '400px'
+          }}
+        >
+          {loading ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+          ) : localMessages.length === 0 ? (
+            <div className="text-center text-muted-foreground">
+              <p>No hay mensajes aún. ¡Sé el primero en escribir!</p>
+              <p className="text-xs mt-2">Usa el botón de arriba para agregar mensajes de prueba</p>
+            </div>
+          ) : (
+            localMessages.map((msg) => {
+              const senderInfo = getSenderInfo(msg)
+              const alignment = getMessageAlignment(msg)
+              
+              return (
+                <div key={msg.id} className={`flex ${alignment}`}>
+                  <div className={`flex items-start space-x-3 max-w-[70%] ${alignment === 'justify-end' ? 'flex-row-reverse space-x-reverse' : ''}`}>
+                    {!senderInfo.isCurrentUser && (
+                      <Avatar className="h-8 w-8 flex-shrink-0">
+                        <AvatarImage src={senderInfo.avatar} />
+                        <AvatarFallback>
+                          {senderInfo.name.charAt(0).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                    )}
+                    
+                    <div className={`rounded-lg px-4 py-2 ${
                       senderInfo.isCurrentUser 
-                        ? 'text-primary-foreground/70' 
-                        : 'text-muted-foreground'
+                        ? 'bg-primary text-primary-foreground' 
+                        : 'bg-muted'
                     }`}>
-                      {format(new Date(msg.created_at), 'HH:mm', { locale: es })}
-                    </p>
+                      <p className="text-sm">{msg.content}</p>
+                      <p className={`text-xs mt-1 ${
+                        senderInfo.isCurrentUser 
+                          ? 'text-primary-foreground/70' 
+                          : 'text-muted-foreground'
+                      }`}>
+                        {format(new Date(msg.created_at), 'HH:mm', { locale: es })}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )
-          })
-        )}
-        
-        
-        
-        <div ref={messagesEndRef} />
+              )
+            })
+          )}
+          
+          <div ref={messagesEndRef} />
+        </div>
       </div>
 
       {/* Message Input */}

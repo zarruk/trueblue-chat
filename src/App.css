@@ -40,3 +40,47 @@
 .read-the-docs {
   color: #888;
 }
+
+/* Estilos personalizados para el scrollbar del chat */
+.chat-messages-scroll::-webkit-scrollbar {
+  width: 16px;
+}
+
+.chat-messages-scroll::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 8px;
+  margin: 4px;
+  border: 1px solid #e2e8f0;
+}
+
+.chat-messages-scroll::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 8px;
+  border: 2px solid #f1f5f9;
+  transition: background-color 0.2s ease;
+}
+
+.chat-messages-scroll::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+.chat-messages-scroll::-webkit-scrollbar-corner {
+  background: #f1f5f9;
+}
+
+/* Para Firefox */
+.chat-messages-scroll {
+  scrollbar-width: auto;
+  scrollbar-color: #475569 #f1f5f9;
+}
+
+/* Asegurar que el contenedor tenga scroll */
+.chat-messages-scroll {
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Forzar la visibilidad del scrollbar */
+.chat-messages-scroll {
+  overflow-y: scroll !important;
+}
