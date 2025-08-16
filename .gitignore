@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Archivos problemáticos con claves
+VITE_SUPABASE_ANON_KEY=*
