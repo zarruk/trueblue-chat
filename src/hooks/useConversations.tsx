@@ -17,6 +17,7 @@ export interface Conversation {
   summary?: string
   channel?: string
   last_message_sender_role?: 'user' | 'ai' | 'agent'
+  last_message_at?: string
   created_at: string
   updated_at: string
 }
@@ -88,7 +89,7 @@ export function useConversations() {
           try {
             const { data: lastMessage } = await supabase
               .from('tb_messages')
-              .select('sender_role')
+              .select('sender_role, created_at')
               .eq('conversation_id', conversation.id)
               .order('created_at', { ascending: false })
               .limit(1)
@@ -96,13 +97,15 @@ export function useConversations() {
 
             return {
               ...conversation,
-              last_message_sender_role: lastMessage?.sender_role || null
+              last_message_sender_role: lastMessage?.sender_role || null,
+              last_message_at: lastMessage?.created_at || null
             }
           } catch (error) {
             // Si no hay mensajes o hay error, devolver la conversación sin el campo
             return {
               ...conversation,
-              last_message_sender_role: null
+              last_message_sender_role: null,
+              last_message_at: null
             }
           }
         })
@@ -420,7 +423,12 @@ export function useConversations() {
     setConversations(prevConversations => 
       prevConversations.map(conv => 
         conv.id === message.conversation_id 
-          ? { ...conv, last_message_sender_role: message.sender_role, updated_at: message.created_at }
+          ? { 
+              ...conv, 
+              last_message_sender_role: message.sender_role, 
+              last_message_at: message.created_at,
+              updated_at: message.created_at 
+            }
           : conv
       )
     )

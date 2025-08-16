@@ -27,25 +27,42 @@
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 84% 4.9%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 94.1%;
+    /* Fondos principales - Gris oscuro moderno */
+    --background: 220 13% 9%;
+    --foreground: 220 9% 95%;
+    
+    /* Cartas y superficies elevadas - Mayor contraste */
+    --card: 220 13% 12%;
+    --card-foreground: 220 9% 95%;
+    
+    /* Popovers y modales */
+    --popover: 220 13% 12%;
+    --popover-foreground: 220 9% 95%;
+    
+    /* Primario - Azul vibrante pero elegante */
+    --primary: 217 91% 65%;
+    --primary-foreground: 220 13% 9%;
+    
+    /* Secundario - Superficie intermedia */
+    --secondary: 220 13% 16%;
+    --secondary-foreground: 220 9% 90%;
+    
+    /* Muted - Elementos de fondo y texto secundario */
+    --muted: 220 13% 15%;
+    --muted-foreground: 220 9% 65%;
+    
+    /* Accent - Para hovers y estados activos */
+    --accent: 220 13% 18%;
+    --accent-foreground: 220 9% 95%;
+    
+    /* Destructivo - Rojo moderno */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 220 9% 95%;
+    
+    /* Bordes y inputs - Sutiles pero visibles */
+    --border: 220 13% 20%;
+    --input: 220 13% 18%;
+    --ring: 217 91% 65%;
   }
 }
 
@@ -86,23 +103,35 @@
   }
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar - Mejorado para tema oscuro */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: hsl(var(--muted));
+  background: hsl(var(--background));
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted-foreground));
-  border-radius: 3px;
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 4px;
+  border: 1px solid hsl(var(--background));
+  transition: background-color 0.2s ease;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--foreground));
+  background: hsl(var(--muted-foreground) / 0.5);
+}
+
+/* Scrollbar para el tema oscuro específicamente */
+.dark ::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.4);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.6);
 }
 
 /* Custom animations */
@@ -261,6 +290,66 @@
 .hover-lift:hover {
   transform: translateY(-2px);
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+/* Estilos mejorados para tema oscuro */
+.dark {
+  /* Mejores sombras para cartas en tema oscuro */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.3), 0 1px 2px 0 rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.2);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
+}
+
+/* Estados mejorados para elementos urgentes en tema oscuro */
+.dark .urgent-unassigned {
+  background: linear-gradient(135deg, hsl(0 84% 15%) 0%, hsl(220 13% 12%) 100%);
+  border-left: 4px solid hsl(0 84% 55%);
+  box-shadow: 0 0 0 1px hsl(0 84% 25% / 0.2);
+}
+
+.dark .urgent-awaiting {
+  background: linear-gradient(135deg, hsl(35 84% 15%) 0%, hsl(220 13% 12%) 100%);
+  border-left: 4px solid hsl(35 84% 55%);
+  box-shadow: 0 0 0 1px hsl(35 84% 25% / 0.2);
+}
+
+/* Mejores efectos hover para cartas */
+.dark .conversation-card:hover {
+  background: hsl(var(--accent));
+  box-shadow: var(--shadow-md);
+  transition: all 0.2s ease-in-out;
+}
+
+.dark .conversation-card.selected {
+  background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(217 91% 55%) 100%);
+  box-shadow: var(--shadow-lg);
+}
+
+/* Badges mejorados para tema oscuro */
+.dark .badge-ai-active {
+  background: hsl(217 91% 20%);
+  color: hsl(217 91% 75%);
+  border: 1px solid hsl(217 91% 30%);
+}
+
+.dark .badge-human-active {
+  background: hsl(142 76% 20%);
+  color: hsl(142 76% 75%);
+  border: 1px solid hsl(142 76% 30%);
+}
+
+.dark .badge-pending {
+  background: hsl(35 84% 20%);
+  color: hsl(35 84% 75%);
+  border: 1px solid hsl(35 84% 30%);
+}
+
+.dark .badge-closed {
+  background: hsl(220 13% 20%);
+  color: hsl(220 9% 75%);
+  border: 1px solid hsl(220 13% 30%);
 }
 
 /* Responsive utilities */
