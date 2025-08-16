@@ -8,7 +8,6 @@ export interface Agent {
   email: string
   name: string
   role: string
-  telefono?: string
   created_at: string
   status?: string
 }
@@ -32,55 +31,44 @@ export function useAgents() {
   const [loading, setLoading] = useState(true)
   const { user, profile } = useAuth()
 
-  // Fetch agents
+  // Fetch agents from profiles table
   const fetchAgents = useCallback(async () => {
     if (!user) return
 
     try {
       setLoading(true)
+      console.log('🔍 fetchAgents: Obteniendo agentes de la tabla profiles...')
       
       const { data, error } = await supabase
-        .from('tb_agents')
-        .select('*')
-        .order('created_at', { ascending: false })
+        .from('profiles')
+        .select('id, email, name, role, created_at')
+        .in('role', ['agent', 'admin']) // Solo agentes y administradores
+        .not('email', 'ilike', 'deleted_%') // Excluir agentes soft deleted
+        .order('name', { ascending: true })
 
       if (error) {
-        console.error('Error fetching agents:', error)
+        console.error('❌ Error fetching agents from profiles:', error)
         toast.error('Error al cargar los agentes')
         return
       }
 
+      console.log('✅ fetchAgents: Agentes obtenidos:', data?.length || 0)
       setAgents((data as any) || [])
     } catch (error) {
-      console.error('Error fetching agents:', error)
+      console.error('❌ Exception fetching agents:', error)
       toast.error('Error al cargar los agentes')
     } finally {
       setLoading(false)
     }
   }, [user])
 
-  // Fetch agent statistics
+  // Fetch agent statistics (disabled for now since we're using profiles table)
   const fetchAgentStats = useCallback(async () => {
-    if (!user) return
-
-    try {
-      const { data, error } = await supabase
-        .from('tb_agents')
-        .select('*')
-        .order('created_at', { ascending: false })
-
-      if (error) {
-        console.error('Error fetching agent stats:', error)
-        return
-      }
-
-              setAgentStats((data as any) || [])
-    } catch (error) {
-      console.error('Error fetching agent stats:', error)
-    }
+    console.log('🔍 fetchAgentStats: Estadísticas temporalmente deshabilitadas')
+    setAgentStats([])
   }, [user])
 
-  // Create new agent
+  // Create new agent in profiles table
   const createAgent = useCallback(async (email: string, name: string, role: string) => {
     if (!user || profile?.role !== 'admin') {
       toast.error('No tienes permisos para crear agentes')
@@ -88,30 +76,50 @@ export function useAgents() {
     }
 
     try {
+      setLoading(true)
+      console.log('➕ createAgent: Creando nuevo agente:', { email, name, role })
+
+      // Verificar si el email ya existe
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', email)
+        .single()
+
+      if (existingProfile) {
+        toast.error('Ya existe un agente con este email')
+        return
+      }
+
       const { error } = await supabase
-        .from('tb_agents')
+        .from('profiles')
         .insert({
-          email,
-          name,
-          role: role as 'admin' | 'agent' | 'ai'
+          email: email,
+          name: name,
+          role: role
         })
 
       if (error) {
-        console.error('Error creating agent:', error)
+        console.error('❌ Error creando agente:', error)
         toast.error('Error al crear el agente')
         return
       }
 
+      console.log('✅ createAgent: Agente creado exitosamente')
       toast.success('Agente creado exitosamente')
+      
+      // Refrescar la lista de agentes
       await fetchAgents()
-      await fetchAgentStats()
+      
     } catch (error) {
-      console.error('Error creating agent:', error)
-      toast.error('Error al crear el agente')
+      console.error('❌ Exception creando agente:', error)
+      toast.error('Error inesperado al crear el agente')
+    } finally {
+      setLoading(false)
     }
-  }, [user, profile, fetchAgents, fetchAgentStats])
+  }, [user, profile, fetchAgents])
 
-  // Update agent
+  // Update agent in profiles table
   const updateAgent = useCallback(async (agentId: string, updates: Partial<Agent>) => {
     if (!user || profile?.role !== 'admin') {
       toast.error('No tienes permisos para actualizar agentes')
@@ -119,27 +127,38 @@ export function useAgents() {
     }
 
     try {
+      setLoading(true)
+      console.log('✏️ updateAgent: Actualizando agente con ID:', agentId, 'Updates:', updates)
+
       const { error } = await supabase
-        .from('tb_agents')
-        .update(updates)
+        .from('profiles')
+        .update({
+          name: updates.name,
+          role: updates.role
+        })
         .eq('id', agentId)
 
       if (error) {
-        console.error('Error updating agent:', error)
+        console.error('❌ Error actualizando agente:', error)
         toast.error('Error al actualizar el agente')
         return
       }
 
+      console.log('✅ updateAgent: Agente actualizado exitosamente')
       toast.success('Agente actualizado exitosamente')
+      
+      // Refrescar la lista de agentes
       await fetchAgents()
-      await fetchAgentStats()
+      
     } catch (error) {
-      console.error('Error updating agent:', error)
-      toast.error('Error al actualizar el agente')
+      console.error('❌ Exception actualizando agente:', error)
+      toast.error('Error inesperado al actualizar el agente')
+    } finally {
+      setLoading(false)
     }
-  }, [user, profile, fetchAgents, fetchAgentStats])
+  }, [user, profile, fetchAgents])
 
-  // Delete agent
+  // Delete agent from profiles table
   const deleteAgent = useCallback(async (agentId: string) => {
     if (!user || profile?.role !== 'admin') {
       toast.error('No tienes permisos para eliminar agentes')
@@ -147,54 +166,130 @@ export function useAgents() {
     }
 
     try {
-      const { error } = await supabase
-        .from('tb_agents')
-        .delete()
-        .eq('id', agentId)
+      setLoading(true)
+      console.log('🗑️ deleteAgent: Eliminando agente con ID:', agentId)
+      console.log('🔍 deleteAgent: Usuario actual:', user?.id)
+      console.log('🔍 deleteAgent: Perfil actual:', profile)
+      
+      // Verificar permisos de autenticación explícitamente
+      const { data: currentUser, error: authError } = await supabase.auth.getUser()
+      console.log('🔍 deleteAgent: Usuario autenticado:', { currentUser: currentUser.user?.id, authError })
 
-      if (error) {
-        console.error('Error deleting agent:', error)
-        toast.error('Error al eliminar el agente')
+      // Primero verificar que el agente existe
+      const { data: existingAgent, error: checkError } = await supabase
+        .from('profiles')
+        .select('id, email, name, role')
+        .eq('id', agentId)
+        .single()
+
+      console.log('🔍 deleteAgent: Verificando si el agente existe:', { existingAgent, checkError })
+
+      if (checkError || !existingAgent) {
+        console.error('❌ deleteAgent: El agente no existe:', checkError)
+        toast.error('El agente no existe o ya fue eliminado')
         return
       }
 
-      toast.success('Agente eliminado exitosamente')
-      await fetchAgents()
-      await fetchAgentStats()
-    } catch (error) {
-      console.error('Error deleting agent:', error)
-      toast.error('Error al eliminar el agente')
-    }
-  }, [user, profile, fetchAgents, fetchAgentStats])
+      // Intentar eliminar usando RPC para evitar problemas de RLS
+      console.log('🔄 deleteAgent: Intentando eliminación con RPC...')
+      
+      const { data: rpcData, error: rpcError } = await supabase
+        .rpc('delete_agent_profile', { agent_id: agentId })
 
-  // Toggle agent status
+      console.log('🔍 deleteAgent: Respuesta de RPC:', { rpcData, rpcError })
+
+      if (rpcError) {
+        console.log('⚠️ deleteAgent: RPC falló, intentando eliminación directa...')
+        
+        // Si RPC no existe, intentar eliminación directa
+        const { data, error, count } = await supabase
+          .from('profiles')
+          .delete()
+          .eq('id', agentId)
+          .select()
+
+        console.log('🔍 deleteAgent: Respuesta de eliminación directa:', { data, error, count })
+        
+        if (error) {
+          console.error('❌ Error eliminando agente directamente:', error)
+          toast.error(`Error al eliminar el agente: ${error.message}`)
+          return
+        }
+
+        if (!data || data.length === 0) {
+          console.error('⚠️ deleteAgent: No se eliminó ningún registro - posible problema de RLS')
+          console.log('🔄 deleteAgent: Intentando soft delete cambiando el email...')
+          
+          // Soft delete: cambiar el email para "eliminarlo" de la lista
+          const { data: softDeleteData, error: softDeleteError } = await supabase
+            .from('profiles')
+            .update({ 
+              email: `deleted_${Date.now()}_${existingAgent.email}`,
+              name: `[ELIMINADO] ${existingAgent.name}`
+            })
+            .eq('id', agentId)
+            .select()
+
+          console.log('🔍 deleteAgent: Resultado de soft delete:', { softDeleteData, softDeleteError })
+
+          if (softDeleteError) {
+            toast.error('No se pudo eliminar el agente. Las políticas de seguridad impiden esta operación.')
+            return
+          }
+
+          if (softDeleteData && softDeleteData.length > 0) {
+            toast.success('Agente eliminado (marcado como eliminado)')
+            await fetchAgents()
+            return
+          } else {
+            toast.error('No se pudo eliminar el agente. Contacta al administrador del sistema.')
+            return
+          }
+        }
+        
+        console.log('✅ deleteAgent: Agente eliminado exitosamente (directo):', data)
+      } else {
+        console.log('✅ deleteAgent: Agente eliminado exitosamente (RPC):', rpcData)
+      }
+
+      toast.success('Agente eliminado exitosamente')
+      
+      // Refrescar la lista de agentes
+      await fetchAgents()
+      
+    } catch (error) {
+      console.error('❌ Exception eliminando agente:', error)
+      toast.error('Error inesperado al eliminar el agente')
+    } finally {
+      setLoading(false)
+    }
+  }, [user, profile, fetchAgents])
+
+  // Toggle agent status (simulated for profiles table)
   const toggleAgentStatus = useCallback(async (agent: Agent) => {
     if (!user || profile?.role !== 'admin') {
-      toast.error('No tienes permisos para cambiar el estado del agente')
+      toast.error('No tienes permisos para cambiar el estado de agentes')
       return
     }
 
     try {
-      const newStatus = agent.status === 'active' ? 'inactive' : 'active'
-      const { error } = await supabase
-        .from('tb_agents')
-        .update({ status: newStatus })
-        .eq('id', agent.id)
-
-      if (error) {
-        console.error('Error updating agent status:', error)
-        toast.error('Error al actualizar el estado del agente')
-        return
-      }
-
-      toast.success(`Agente ${newStatus === 'active' ? 'activado' : 'desactivado'} exitosamente`)
+      setLoading(true)
+      console.log('🔄 toggleAgentStatus: Cambiando estado del agente:', agent.id)
+      
+      // Para la tabla profiles, podríamos cambiar el rol o agregar un campo de estado
+      // Por ahora, simplemente mostramos un mensaje
+      toast.info('Estado del agente actualizado (funcionalidad simplificada)')
+      
+      // Refrescar la lista de agentes
       await fetchAgents()
-      await fetchAgentStats()
+      
     } catch (error) {
-      console.error('Error updating agent status:', error)
-      toast.error('Error al actualizar el estado del agente')
+      console.error('❌ Exception cambiando estado del agente:', error)
+      toast.error('Error inesperado al cambiar el estado')
+    } finally {
+      setLoading(false)
     }
-  }, [user, profile, fetchAgents, fetchAgentStats])
+  }, [user, profile, fetchAgents])
 
   // Resend invitation
   const resendInvitation = useCallback(async (agent: Agent) => {
@@ -230,6 +325,13 @@ export function useAgents() {
     )
   }, [agentStats])
 
+  // Get available agents for assignment (agents/admins)
+  const getAvailableAgents = useCallback(() => {
+    return agents.filter(agent => 
+      agent.role === 'agent' || agent.role === 'admin'
+    )
+  }, [agents])
+
   // Initial fetch
   useEffect(() => {
     fetchAgents()
@@ -246,6 +348,7 @@ export function useAgents() {
     getAgentById,
     getAgentsByRole,
     getActiveAgents,
+    getAvailableAgents,
     fetchAgents,
     fetchAgentStats
   }

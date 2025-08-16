@@ -15,6 +15,7 @@ export interface Conversation {
   assigned_agent_name?: string
   summary?: string
   channel?: string
+  last_message_sender_role?: 'user' | 'ai' | 'agent'
   created_at: string
   updated_at: string
 }
@@ -37,6 +38,7 @@ export function useConversations() {
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null)
+  const [isInitialized, setIsInitialized] = useState(false)
   const { user, profile } = useAuth()
 
   // Fetch conversations
@@ -76,8 +78,39 @@ export function useConversations() {
         return
       }
 
-      console.log('✅ Conversations fetched successfully:', data)
-      setConversations((data as any) || [])
+      console.log('✅ fetchConversations: Conversations fetched successfully:', data?.length || 0)
+      console.log('🔍 fetchConversations: Obteniendo último mensaje de cada conversación...')
+
+      // Obtener el último mensaje de cada conversación para determinar urgencia
+      const conversationsWithLastMessage = await Promise.all(
+        (data || []).map(async (conversation: any) => {
+          try {
+            const { data: lastMessage } = await supabase
+              .from('tb_messages')
+              .select('sender_role')
+              .eq('conversation_id', conversation.id)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .single()
+
+            return {
+              ...conversation,
+              last_message_sender_role: lastMessage?.sender_role || null
+            }
+          } catch (error) {
+            // Si no hay mensajes o hay error, devolver la conversación sin el campo
+            return {
+              ...conversation,
+              last_message_sender_role: null
+            }
+          }
+        })
+      )
+
+      console.log('✅ fetchConversations: Último mensaje obtenido para cada conversación')
+      console.log('🔍 fetchConversations: Setting conversations in state...')
+      setConversations(conversationsWithLastMessage)
+      setIsInitialized(true)
     } catch (error) {
       console.error('❌ Exception fetching conversations:', error)
       toast.error('Error al cargar las conversaciones')
@@ -212,13 +245,14 @@ export function useConversations() {
       // Refresh messages
       await fetchMessages(conversationId)
       
-      // Refresh conversations to update status
-      await fetchConversations()
+      // No llamamos fetchConversations() aquí porque el real-time subscription
+      // ya maneja las actualizaciones automáticamente y evitamos sobrescribir
+      // el estado local que puede haber sido actualizado por assignAgent u otros procesos
     } catch (error) {
       console.error('Error sending message:', error)
       toast.error('Error al enviar el mensaje')
     }
-  }, [user, profile, fetchMessages, fetchConversations])
+  }, [user, profile, fetchMessages])
 
   // Update conversation status
   const updateConversationStatus = useCallback(async (
@@ -228,27 +262,41 @@ export function useConversations() {
     try {
       console.log('🔄 Actualizando estado de conversación:', { conversationId, status })
       
+      // Preparar datos de actualización
+      const updateData: any = { 
+        status,
+        updated_at: new Date().toISOString()
+      }
+      
+      // Si se regresa a IA, limpiar la asignación del agente
+      if (status === 'active_ai') {
+        updateData.assigned_agent_id = null
+        updateData.assigned_agent_email = null
+        updateData.assigned_agent_name = null
+      }
+      
       // Actualizar inmediatamente el estado local para sincronización instantánea
       setConversations(prevConversations => {
         const updatedConversations = prevConversations.map(conv => 
           conv.id === conversationId 
             ? { 
                 ...conv, 
-                status, 
-                updated_at: new Date().toISOString() 
+                ...updateData,
+                // Asegurar que las propiedades null se apliquen correctamente
+                assigned_agent_id: updateData.assigned_agent_id !== undefined ? updateData.assigned_agent_id : conv.assigned_agent_id,
+                assigned_agent_email: updateData.assigned_agent_email !== undefined ? updateData.assigned_agent_email : conv.assigned_agent_email,
+                assigned_agent_name: updateData.assigned_agent_name !== undefined ? updateData.assigned_agent_name : conv.assigned_agent_name
               }
             : conv
         )
-        console.log('✅ Estado local actualizado inmediatamente')
+        console.log('✅ Estado local actualizado inmediatamente para cambio de status:', { conversationId, status, updateData })
         return updatedConversations
       })
       
+      // Actualizar en base de datos
       const { error } = await supabase
         .from('tb_conversations')
-        .update({ 
-          status,
-          updated_at: new Date().toISOString()
-        })
+        .update(updateData)
         .eq('id', conversationId)
 
       if (error) {
@@ -267,17 +315,24 @@ export function useConversations() {
       }
 
       console.log('✅ Estado de conversación actualizado exitosamente en BD')
-      toast.success('Estado actualizado')
+      toast.success('Estado actualizado exitosamente')
       
       // Forzar una actualización adicional para asegurar sincronización
       setTimeout(() => {
         setConversations(prevConversations => {
           const currentConv = prevConversations.find(c => c.id === conversationId)
-          if (currentConv && currentConv.status !== status) {
-            console.log('🔄 Forzando sincronización adicional...')
+          if (currentConv && (currentConv.status !== status || 
+              (status === 'active_ai' && (currentConv.assigned_agent_id !== null || currentConv.assigned_agent_email !== null || currentConv.assigned_agent_name !== null)))) {
+            console.log('🔄 Forzando sincronización adicional para cambio de status...', { current: currentConv, expected: updateData })
             return prevConversations.map(conv => 
               conv.id === conversationId 
-                ? { ...conv, status, updated_at: new Date().toISOString() }
+                ? { 
+                    ...conv, 
+                    ...updateData,
+                    assigned_agent_id: updateData.assigned_agent_id !== undefined ? updateData.assigned_agent_id : conv.assigned_agent_id,
+                    assigned_agent_email: updateData.assigned_agent_email !== undefined ? updateData.assigned_agent_email : conv.assigned_agent_email,
+                    assigned_agent_name: updateData.assigned_agent_name !== undefined ? updateData.assigned_agent_name : conv.assigned_agent_name
+                  }
                 : conv
             )
           }
@@ -306,6 +361,8 @@ export function useConversations() {
     agentId: string
   ) => {
     try {
+      console.log('🎯 Asignando agente:', { conversationId, agentId })
+      
       // Get agent profile
       const { data: agentProfile, error: profileError } = await supabase
         .from('profiles')
@@ -319,31 +376,36 @@ export function useConversations() {
         return
       }
 
-      // Actualizar inmediatamente el estado local
-      setConversations(prevConversations => 
-        prevConversations.map(conv => 
+      const updateData = {
+        assigned_agent_id: agentId,
+        assigned_agent_email: agentProfile.email,
+        assigned_agent_name: agentProfile.name,
+        status: 'active_human' as const,
+        updated_at: new Date().toISOString()
+      }
+
+      // Actualizar inmediatamente el estado local para sincronización instantánea
+      setConversations(prevConversations => {
+        const conversationBefore = prevConversations.find(c => c.id === conversationId)
+        console.log('🔄 assignAgent: Estado ANTES de la actualización:', conversationBefore)
+        
+        const updatedConversations = prevConversations.map(conv => 
           conv.id === conversationId 
-            ? { 
-                ...conv, 
-                assigned_agent_id: agentId,
-                assigned_agent_email: agentProfile.email,
-                assigned_agent_name: agentProfile.name,
-                status: 'active_human',
-                updated_at: new Date().toISOString()
-              }
+            ? { ...conv, ...updateData }
             : conv
         )
-      )
+        
+        const conversationAfter = updatedConversations.find(c => c.id === conversationId)
+        console.log('✅ assignAgent: Estado DESPUÉS de la actualización local:', conversationAfter)
+        console.log('🔄 assignAgent: Conversaciones totales actualizadas:', updatedConversations.length)
+        
+        return updatedConversations
+      })
 
+      // Actualizar en base de datos
       const { error } = await supabase
         .from('tb_conversations')
-        .update({ 
-          assigned_agent_id: agentId,
-          assigned_agent_email: agentProfile.email,
-          assigned_agent_name: agentProfile.name,
-          status: 'active_human',
-          updated_at: new Date().toISOString()
-        })
+        .update(updateData)
         .eq('id', conversationId)
 
       if (error) {
@@ -361,8 +423,35 @@ export function useConversations() {
         return
       }
 
-      toast.success('Agente asignado')
-      // No necesitamos fetchConversations() aquí
+      console.log('✅ Agente asignado exitosamente en BD')
+      toast.success('Agente asignado exitosamente')
+      
+      // Forzar una actualización adicional para asegurar sincronización
+      setTimeout(() => {
+        console.log('⏰ assignAgent: Timeout ejecutándose para verificar sincronización...')
+        setConversations(prevConversations => {
+          const currentConv = prevConversations.find(c => c.id === conversationId)
+          console.log('🔍 assignAgent: Estado actual en timeout:', currentConv)
+          
+          if (currentConv && (currentConv.status !== 'active_human' || currentConv.assigned_agent_id !== agentId)) {
+            console.log('🔄 assignAgent: Forzando sincronización adicional...', {
+              currentStatus: currentConv.status,
+              expectedStatus: 'active_human',
+              currentAgentId: currentConv.assigned_agent_id,
+              expectedAgentId: agentId
+            })
+            return prevConversations.map(conv => 
+              conv.id === conversationId 
+                ? { ...conv, ...updateData }
+                : conv
+            )
+          } else {
+            console.log('✅ assignAgent: Estado ya sincronizado correctamente')
+          }
+          return prevConversations
+        })
+      }, 200)
+      
     } catch (error) {
       console.error('Error assigning agent:', error)
       toast.error('Error al asignar el agente')
@@ -416,24 +505,57 @@ export function useConversations() {
           if (payload.eventType === 'UPDATE') {
             const { id, status, assigned_agent_id, assigned_agent_email, assigned_agent_name, updated_at } = payload.new
             
-            console.log('🔄 Actualizando conversación en tiempo real:', { id, status, updated_at })
+            console.log('🔄 Real-time: Actualizando conversación:', { 
+              id, 
+              status, 
+              assigned_agent_id, 
+              assigned_agent_email, 
+              assigned_agent_name, 
+              updated_at 
+            })
             
+            // Aplicar actualización remota con merge inteligente
             setConversations(prevConversations => {
-              const updatedConversations = prevConversations.map(conv => 
-                conv.id === id 
-                  ? { 
-                      ...conv, 
-                      status: status || conv.status,
-                      assigned_agent_id: assigned_agent_id || conv.assigned_agent_id,
-                      assigned_agent_email: assigned_agent_email || conv.assigned_agent_email,
-                      assigned_agent_name: assigned_agent_name || conv.assigned_agent_name,
-                      updated_at: updated_at || conv.updated_at
-                    }
-                  : conv
-              )
+              const existingConv = prevConversations.find(conv => conv.id === id)
+              if (existingConv) {
+                const localUpdateTime = new Date(existingConv.updated_at).getTime()
+                const remoteUpdateTime = new Date(updated_at).getTime()
+                
+                // Siempre aplicar cambios de estado importantes, independientemente del timestamp
+                const shouldForceUpdate = existingConv.status !== status || 
+                  existingConv.assigned_agent_id !== assigned_agent_id ||
+                  existingConv.assigned_agent_email !== assigned_agent_email ||
+                  existingConv.assigned_agent_name !== assigned_agent_name
+                
+                // Si la actualización remota es más reciente O contiene cambios importantes, aplicar
+                if (remoteUpdateTime >= localUpdateTime || shouldForceUpdate) {
+                  console.log('✅ Aplicando actualización remota:', { 
+                    remote: remoteUpdateTime, 
+                    local: localUpdateTime, 
+                    forceUpdate: shouldForceUpdate,
+                    changes: { status, assigned_agent_id, assigned_agent_email, assigned_agent_name }
+                  })
+                  const updatedConversations = prevConversations.map(conv => 
+                    conv.id === id 
+                      ? { 
+                          ...conv, 
+                          status: status !== undefined ? status : conv.status,
+                          assigned_agent_id: assigned_agent_id !== undefined ? assigned_agent_id : conv.assigned_agent_id,
+                          assigned_agent_email: assigned_agent_email !== undefined ? assigned_agent_email : conv.assigned_agent_email,
+                          assigned_agent_name: assigned_agent_name !== undefined ? assigned_agent_name : conv.assigned_agent_name,
+                          updated_at: updated_at || conv.updated_at
+                        }
+                      : conv
+                  )
+                  return updatedConversations
+                } else {
+                  console.log('⏭️ Ignorando actualización remota (local es más reciente y sin cambios importantes)')
+                  return prevConversations
+                }
+              }
               
-              console.log('✅ Conversaciones actualizadas:', updatedConversations.length)
-              return updatedConversations
+              // Si no existe la conversación, agregarla
+              return prevConversations
             })
           } else if (payload.eventType === 'INSERT') {
             console.log('🆕 Nueva conversación detectada, refrescando lista...')
@@ -476,20 +598,25 @@ export function useConversations() {
       conversationsSubscription.unsubscribe()
       messagesSubscription.unsubscribe()
     }
-  }, [user, selectedConversationId, fetchConversations])
+  }, [user, selectedConversationId])
 
   // Initial fetch
   useEffect(() => {
     console.log('🚀 useEffect initial fetch triggered')
     console.log('👤 User:', user)
     console.log('👤 Profile:', profile)
-    if (user && profile) {
-      console.log('✅ User and profile available, fetching conversations')
+    console.log('🔄 isInitialized:', isInitialized)
+    
+    if (user && profile && !isInitialized) {
+      console.log('✅ User and profile available, fetching conversations (first time)')
       fetchConversations()
-    } else {
+    } else if (!user || !profile) {
       console.log('❌ User or profile not available yet')
+      setIsInitialized(false)
+    } else if (isInitialized) {
+      console.log('⏭️ Already initialized, skipping fetch')
     }
-  }, [fetchConversations, user, profile])
+  }, [user, profile, isInitialized, fetchConversations])
 
   return {
     conversations,

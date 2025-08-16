@@ -1,6 +1,6 @@
 
 import { useState, useMemo } from 'react'
-import { Search, Filter, MessageSquare, Clock, CheckCircle, AlertCircle } from 'lucide-react'
+import { Search, Filter, MessageSquare, Clock, CheckCircle, AlertCircle, Users } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -26,20 +26,89 @@ const statusConfig = {
 export function ConversationList({ onSelectConversation, selectedConversationId }: ConversationListProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<ConversationStatus | 'all'>('all')
+  const [agentFilter, setAgentFilter] = useState<string>('all')
   const { conversations, loading } = useConversations()
 
+  // Log para debugging de re-renderizado
+  console.log('🔄 ConversationList: Re-renderizando con conversaciones:', conversations.length)
+  console.log('🔍 ConversationList: Array de conversaciones completo:', conversations)
+  if (selectedConversationId) {
+    const selectedConv = conversations.find(c => c.id === selectedConversationId)
+    console.log('🔍 ConversationList: Conversación seleccionada:', selectedConv)
+  }
+
+  // Obtener lista única de agentes asignados
+  const assignedAgents = useMemo(() => {
+    const agents = conversations
+      .filter(conv => conv.assigned_agent_email && conv.assigned_agent_name)
+      .map(conv => ({
+        email: conv.assigned_agent_email!,
+        name: conv.assigned_agent_name!
+      }))
+    
+    // Eliminar duplicados
+    const uniqueAgents = agents.filter((agent, index, self) => 
+      index === self.findIndex(a => a.email === agent.email)
+    )
+    
+    return uniqueAgents.sort((a, b) => a.name.localeCompare(b.name))
+  }, [conversations])
+
+  // Función para determinar si una conversación necesita respuesta urgente
+  const needsUrgentResponse = (conversation: any) => {
+    // Caso 1: Conversación en estado pending_human (esperando asignación)
+    if (conversation.status === 'pending_human') {
+      return true
+    }
+    
+    // Caso 2: Conversación active_human pero el último mensaje es del usuario
+    if (conversation.status === 'active_human' && conversation.last_message_sender_role === 'user') {
+      return true
+    }
+    
+    return false
+  }
+
   const filteredConversations = useMemo(() => {
-    return conversations.filter(conversation => {
+    // Crear un hash de las conversaciones para forzar recálculo cuando cambien
+    const conversationsHash = conversations.map(c => `${c.id}-${c.status}-${c.updated_at}-${c.assigned_agent_id || 'none'}-${c.assigned_agent_name || 'none'}-${c.last_message_sender_role || 'none'}`).join(',')
+    
+    const filtered = conversations.filter(conversation => {
       const matchesSearch = 
         conversation.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         conversation.user_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
         conversation.phone_number?.toLowerCase().includes(searchTerm.toLowerCase())
       
       const matchesStatus = statusFilter === 'all' || conversation.status === statusFilter
+      const matchesAgent = agentFilter === 'all' || conversation.assigned_agent_email === agentFilter
       
-      return matchesSearch && matchesStatus
+      return matchesSearch && matchesStatus && matchesAgent
     })
-  }, [conversations, searchTerm, statusFilter])
+
+    // 🔥 ORDENAMIENTO CON PRIORIDAD PARA CONVERSACIONES PENDIENTES
+    const sorted = filtered.sort((a, b) => {
+      const aUrgent = needsUrgentResponse(a)
+      const bUrgent = needsUrgentResponse(b)
+      
+      // 1. Prioridad: Conversaciones pendientes de respuesta primero
+      if (aUrgent && !bUrgent) return -1
+      if (!aUrgent && bUrgent) return 1
+      
+      // 2. Orden secundario: Más recientes primero
+      const aTime = new Date(a.updated_at).getTime()
+      const bTime = new Date(b.updated_at).getTime()
+      return bTime - aTime
+    })
+    
+    console.log('🔄 ConversationList: Filtrando y ordenando conversaciones:', {
+      total: conversations.length,
+      filtered: filtered.length,
+      urgentCount: sorted.filter(needsUrgentResponse).length,
+      conversationsHash: conversationsHash.substring(0, 100) + '...'
+    })
+    
+    return sorted
+  }, [conversations, searchTerm, statusFilter, agentFilter])
 
   const getStatusConfig = (status: ConversationStatus) => {
     return statusConfig[status] || statusConfig.pending_human
@@ -76,7 +145,7 @@ export function ConversationList({ onSelectConversation, selectedConversationId 
   }
 
   return (
-    <div className="flex flex-col h-full bg-background border-r">
+    <div className="flex flex-col h-full bg-background border-r max-h-screen">
       {/* Header */}
       <div className="p-4 border-b">
         <h2 className="text-lg font-semibold mb-4">Conversaciones</h2>
@@ -93,7 +162,7 @@ export function ConversationList({ onSelectConversation, selectedConversationId 
         </div>
 
         {/* Status Filter */}
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2 mb-3">
           <Filter className="h-4 w-4 text-muted-foreground" />
           <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as ConversationStatus | 'all')}>
             <SelectTrigger className="w-full">
@@ -108,6 +177,24 @@ export function ConversationList({ onSelectConversation, selectedConversationId 
             </SelectContent>
           </Select>
         </div>
+
+        {/* Agent Filter */}
+        <div className="flex items-center space-x-2">
+          <Users className="h-4 w-4 text-muted-foreground" />
+          <Select value={agentFilter} onValueChange={setAgentFilter}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Filtrar por agente" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los agentes</SelectItem>
+              {assignedAgents.map((agent) => (
+                <SelectItem key={agent.email} value={agent.email}>
+                  {agent.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Conversation Count */}
@@ -118,17 +205,17 @@ export function ConversationList({ onSelectConversation, selectedConversationId 
       </div>
 
       {/* Conversations List */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto h-[60vh] max-h-[600px] min-h-[300px] scroll-smooth">
         {filteredConversations.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center p-4">
             <MessageSquare className="h-12 w-12 text-muted-foreground mb-2" />
             <p className="text-muted-foreground">
-              {searchTerm || statusFilter !== 'all' 
+              {searchTerm || statusFilter !== 'all' || agentFilter !== 'all'
                 ? 'No se encontraron conversaciones con los filtros aplicados'
                 : 'No hay conversaciones aún'
               }
             </p>
-            {(searchTerm || statusFilter !== 'all') && (
+            {(searchTerm || statusFilter !== 'all' || agentFilter !== 'all') && (
               <Button 
                 variant="outline" 
                 size="sm" 
@@ -136,6 +223,7 @@ export function ConversationList({ onSelectConversation, selectedConversationId 
                 onClick={() => {
                   setSearchTerm('')
                   setStatusFilter('all')
+                  setAgentFilter('all')
                 }}
               >
                 Limpiar filtros
@@ -147,18 +235,53 @@ export function ConversationList({ onSelectConversation, selectedConversationId 
             {filteredConversations.map((conversation) => {
               const statusConfig = getStatusConfig(conversation.status)
               const isSelected = selectedConversationId === conversation.id
+              const isUrgent = needsUrgentResponse(conversation)
+              
+              // Determinar el tipo de urgencia para estilos diferenciados
+              const urgencyType = conversation.status === 'pending_human' 
+                ? 'unassigned'  // Sin asignar - rojo intenso
+                : conversation.status === 'active_human' && conversation.last_message_sender_role === 'user'
+                ? 'awaiting_response'  // Esperando respuesta - naranja
+                : 'none'
+              
+              // Log específico para debugging de cada tarjeta
+              if (conversation.id === selectedConversationId) {
+                console.log(`🎯 ConversationList: Renderizando tarjeta para conversación ${conversation.id}:`, {
+                  status: conversation.status,
+                  assigned_agent_id: conversation.assigned_agent_id,
+                  assigned_agent_name: conversation.assigned_agent_name,
+                  assigned_agent_email: conversation.assigned_agent_email,
+                  updated_at: conversation.updated_at,
+                  last_message_sender_role: conversation.last_message_sender_role,
+                  isUrgent: isUrgent,
+                  urgencyType: urgencyType,
+                  urgentReason: isUrgent 
+                    ? (conversation.status === 'pending_human' ? 'pending_human' : 'active_human_user_waiting')
+                    : 'not_urgent',
+                  statusConfig: statusConfig
+                })
+              }
               
               return (
                 <div
-                  key={conversation.id}
+                  key={`${conversation.id}-${conversation.status}-${conversation.updated_at}-${conversation.assigned_agent_id || 'none'}-${conversation.assigned_agent_name || 'none'}-${conversation.last_message_sender_role || 'none'}`}
                   className={`
-                    p-3 rounded-lg cursor-pointer transition-colors border
+                    relative p-3 rounded-lg cursor-pointer transition-colors border
                     ${isSelected 
                       ? 'bg-primary text-primary-foreground border-primary' 
                       : 'hover:bg-accent hover:border-accent-foreground/20'
                     }
+                    ${urgencyType === 'unassigned'
+                      ? 'border-l-4 border-l-red-500 bg-red-50 hover:bg-red-100'
+                      : urgencyType === 'awaiting_response'
+                      ? 'border-l-4 border-l-orange-500 bg-orange-50 hover:bg-orange-100'
+                      : ''
+                    }
                   `}
-                  onClick={() => onSelectConversation(conversation.id)}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    onSelectConversation(conversation.id)
+                  }}
                 >
                   <div className="flex items-start space-x-3">
                     <Avatar className="h-10 w-10 flex-shrink-0">
@@ -169,11 +292,29 @@ export function ConversationList({ onSelectConversation, selectedConversationId 
                     
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
-                        <h4 className={`font-medium truncate ${
-                          isSelected ? 'text-primary-foreground' : 'text-foreground'
-                        }`}>
-                          {conversation.username || conversation.user_id}
-                        </h4>
+                        <div className="flex items-center space-x-2 flex-1 min-w-0">
+                          <h4 className={`font-medium truncate ${
+                            isSelected ? 'text-primary-foreground' : 'text-foreground'
+                          }`}>
+                            {conversation.username || conversation.user_id}
+                          </h4>
+                          {isUrgent && (
+                            <div className="flex items-center space-x-1">
+                              <div className={`w-2 h-2 rounded-full animate-pulse ${
+                                urgencyType === 'unassigned' 
+                                  ? 'bg-red-500' 
+                                  : 'bg-orange-500'
+                              }`}></div>
+                              <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${
+                                urgencyType === 'unassigned'
+                                  ? 'text-red-600 bg-red-100'
+                                  : 'text-orange-600 bg-orange-100'
+                              }`}>
+                                {urgencyType === 'unassigned' ? 'URGENTE' : 'RESPONDER'}
+                              </span>
+                            </div>
+                          )}
+                        </div>
                         <span className={`text-xs ${
                           isSelected ? 'text-primary-foreground/70' : 'text-muted-foreground'
                         }`}>

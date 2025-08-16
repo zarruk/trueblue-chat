@@ -19,9 +19,16 @@ export default function Dashboard() {
     updateConversationStatus, 
     selectConversation,
     messages,
-    selectedConversationId 
+    selectedConversationId,
+    fetchConversations
   } = useConversations();
   const { agents } = useAgents();
+
+  // Función para forzar actualización desde Dashboard
+  const handleForceRefresh = async () => {
+    console.log('🔄 Dashboard: Forzando actualización de conversaciones')
+    await fetchConversations()
+  }
 
   // Keep selectedConversation synchronized with conversations updates
   const selectedConversation = selectedConversationId 
@@ -131,6 +138,7 @@ export default function Dashboard() {
                   messages={messages}
                   loading={loading}
                   onSendMessage={(conversationId, content, senderRole) => sendMessage(conversationId, content, senderRole as 'user' | 'ai' | 'agent')}
+                  onForceRefresh={handleForceRefresh}
                 />
               ) : (
                 <div className="flex items-center justify-center h-full text-muted-foreground">

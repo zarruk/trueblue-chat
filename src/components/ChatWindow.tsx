@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Send, Paperclip, Smile, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,14 +14,17 @@ import {
 } from '@/components/ui/select'
 import { useAuth } from '@/hooks/useAuth'
 import { useConversations } from '@/hooks/useConversations'
+import { useAgents } from '@/hooks/useAgents'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { toast } from 'sonner'
 
 interface ChatWindowProps {
   conversationId?: string
   messages?: any[]
   loading?: boolean
   onSendMessage?: (conversationId: string, content: string, role: string) => Promise<void>
+  onForceRefresh?: () => Promise<void>
 }
 
 interface Message {
@@ -46,10 +49,9 @@ interface Conversation {
   updated_at: string
 }
 
-export function ChatWindow({ conversationId, messages: propMessages, loading: propLoading, onSendMessage }: ChatWindowProps) {
+export function ChatWindow({ conversationId, messages: propMessages, loading: propLoading, onSendMessage, onForceRefresh }: ChatWindowProps) {
   const [message, setMessage] = useState('')
   const [localMessages, setLocalMessages] = useState<Message[]>([])
-  const [conversation, setConversation] = useState<Conversation | null>(null)
   const [updatingStatus, setUpdatingStatus] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -60,13 +62,27 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     messages: hookMessages, 
     loading: hookLoading, 
     fetchMessages,
+    fetchConversations,
     updateConversationStatus,
-    conversations
+    conversations,
+    assignAgent
   } = useConversations()
+  const { getAvailableAgents } = useAgents()
 
   // Use prop messages if provided, otherwise use hook messages
   const messages = propMessages || hookMessages
   const loading = propLoading !== undefined ? propLoading : hookLoading
+
+  // Obtener la conversación actual directamente del hook para sincronización inmediata
+  const conversation = useMemo(() => {
+    if (!conversationId || !conversations) return null
+    return conversations.find(conv => conv.id === conversationId) || null
+  }, [conversationId, conversations])
+
+  // Obtener lista de agentes disponibles para asignación
+  const availableAgents = useMemo(() => {
+    return getAvailableAgents()
+  }, [getAvailableAgents])
 
   // Load messages when conversationId changes
   useEffect(() => {
@@ -75,20 +91,6 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       fetchMessages(conversationId)
     }
   }, [conversationId, fetchMessages])
-
-  // Get conversation data when conversationId changes
-  useEffect(() => {
-    if (conversationId && conversations) {
-      const currentConversation = conversations.find(conv => conv.id === conversationId)
-      if (currentConversation) {
-        console.log('🔄 ChatWindow: Actualizando conversación local:', currentConversation)
-        setConversation(currentConversation)
-      }
-    }
-  }, [conversationId, conversations])
-
-  // Remove the complex comparison useEffect that was causing issues
-  // The real-time updates will come directly from the conversations array
 
   // Update local messages when messages change
   useEffect(() => {
@@ -146,15 +148,65 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
 
     try {
       setUpdatingStatus(true)
+      console.log('🔄 ChatWindow: Iniciando cambio de estado:', { conversationId, newStatus })
+      
       await updateConversationStatus(conversationId, newStatus as Conversation['status'])
       
-      // No necesitamos actualizar el estado local aquí porque el hook ya lo hace
-      // y se sincroniza automáticamente con el array de conversaciones
-      console.log('✅ Status actualizado, sincronización automática en progreso...')
+      console.log('✅ ChatWindow: Status actualizado')
+      
+      // 🚀 FORZAR ACTUALIZACIÓN INMEDIATA DE CONVERSACIONES
+      console.log('🔄 ChatWindow: Forzando re-fetch de conversaciones para sincronización inmediata')
+      await fetchConversations()
+      
+      // 🚀 FORZAR TAMBIÉN DESDE DASHBOARD (TRIPLE GARANTÍA)
+      if (onForceRefresh) {
+        console.log('🔄 ChatWindow: Forzando refresh desde Dashboard también')
+        await onForceRefresh()
+      }
+      
     } catch (error) {
-      console.error('Error updating conversation status:', error)
+      console.error('❌ ChatWindow: Error updating conversation status:', error)
+      toast.error('Error al actualizar el estado de la conversación')
     } finally {
       setUpdatingStatus(false)
+    }
+  }
+
+  const handleAssignAgent = async (agentId: string) => {
+    if (!conversationId) return
+
+    console.log('🎯 ChatWindow: handleAssignAgent iniciado:', { conversationId, agentId })
+
+    try {
+      if (agentId === "none") {
+        // Desasignar conversación - cambiar a IA
+        console.log('🤖 ChatWindow: Desasignando conversación (cambiar a IA):', conversationId)
+        await updateConversationStatus(conversationId, 'active_ai')
+        console.log('✅ ChatWindow: Conversación desasignada exitosamente')
+        toast.success('Conversación desasignada y regresada a IA')
+      } else {
+        // Asignar a agente específico
+        console.log('👤 ChatWindow: Asignando agente:', { conversationId, agentId })
+        const agent = availableAgents.find(a => a.id === agentId)
+        console.log('🔍 ChatWindow: Agente encontrado:', agent)
+        await assignAgent(conversationId, agentId)
+        console.log('✅ ChatWindow: Agente asignado exitosamente')
+        toast.success('Agente asignado exitosamente')
+      }
+      
+      // 🚀 FORZAR ACTUALIZACIÓN INMEDIATA DE CONVERSACIONES
+      console.log('🔄 ChatWindow: Forzando re-fetch de conversaciones para sincronización inmediata')
+      await fetchConversations()
+      
+      // 🚀 FORZAR TAMBIÉN DESDE DASHBOARD (TRIPLE GARANTÍA)
+      if (onForceRefresh) {
+        console.log('🔄 ChatWindow: Forzando refresh desde Dashboard también')
+        await onForceRefresh()
+      }
+      
+    } catch (error) {
+      console.error('❌ ChatWindow: Error al asignar/desasignar agente:', error)
+      toast.error('Error al modificar la asignación')
     }
   }
 
@@ -219,8 +271,8 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   }
 
   const getMessageAlignment = (msg: Message) => {
-    const senderInfo = getSenderInfo(msg)
-    return senderInfo.isCurrentUser ? 'justify-end' : 'justify-start'
+    // Los mensajes de 'user' van a la izquierda, 'ai' y 'agent' van a la derecha
+    return msg.sender_role === 'user' ? 'justify-start' : 'justify-end'
   }
 
   if (!conversationId) {
@@ -296,6 +348,31 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
               </div>
             </div>
             
+            {/* Agent Assignment Selector */}
+            <div className="flex flex-col items-end space-y-1">
+              <label className="text-xs text-muted-foreground font-medium">
+                Asignar agente
+              </label>
+              <div className="flex items-center space-x-2">
+                <Select 
+                  onValueChange={handleAssignAgent} 
+                  value={conversation?.assigned_agent_id || "none"}
+                >
+                  <SelectTrigger className="h-8 w-[160px]">
+                    <SelectValue placeholder="Seleccionar agente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sin asignar</SelectItem>
+                    {availableAgents.map((agent) => (
+                      <SelectItem key={agent.id} value={agent.id}>
+                        👤 {agent.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
             <div className="flex flex-col items-end space-y-1">
               <label className="text-xs text-muted-foreground font-medium">
                 Última actividad
@@ -313,24 +390,74 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
 
       {/* Messages */}
       <div className="flex-1 flex flex-col min-h-0 relative">
-        {/* Botón temporal para testing del scroll */}
-        <div className="p-2 border-b bg-muted/20">
-          <Button 
-            onClick={() => {
-              const testMessage = {
-                id: `test-${Date.now()}`,
-                content: `Mensaje de prueba ${localMessages.length + 1} - ${new Date().toLocaleTimeString()}`,
-                sender_role: 'user' as const,
-                created_at: new Date().toISOString()
-              }
-              setLocalMessages(prev => [...prev, testMessage])
-            }}
-            size="sm"
-            variant="outline"
-          >
-            Agregar mensaje de prueba
-          </Button>
-        </div>
+        {/* Botón para tomar conversación */}
+        {conversation && conversation.status !== 'active_human' && conversation.status !== 'pending_human' && (
+          <div className="p-2 border-b bg-muted/20">
+            <Button 
+              onClick={async () => {
+                if (!profile?.id || !conversationId) return
+                
+                try {
+                  console.log('🎯 ChatWindow: Botón "Tomar conversación" presionado')
+                  console.log('🎯 ChatWindow: conversationId:', conversationId)
+                  console.log('🎯 ChatWindow: profile.id:', profile.id)
+                  console.log('🎯 ChatWindow: Estado actual de la conversación ANTES:', conversation)
+                  
+                  // Asignar la conversación al agente actual
+                  await assignAgent(conversationId, profile.id)
+                  
+                  console.log('🎯 ChatWindow: assignAgent completado exitosamente')
+                  
+                  // Verificar el estado después de un breve delay
+                  setTimeout(() => {
+                    console.log('🎯 ChatWindow: Verificando estado DESPUÉS de tomar conversación:', conversation)
+                  }, 200)
+                  
+                  toast.success('Conversación tomada exitosamente')
+                } catch (error) {
+                  console.error('❌ ChatWindow: Error al tomar la conversación:', error)
+                  toast.error('Error al tomar la conversación')
+                }
+              }}
+              size="sm"
+              variant="default"
+              className="w-full"
+              disabled={!profile?.id}
+            >
+              🎯 Tomar conversación
+            </Button>
+          </div>
+        )}
+
+        {/* Botón para regresar a IA */}
+        {conversation && (conversation.status === 'active_human' || conversation.status === 'pending_human') && conversation.assigned_agent_id === profile?.id && (
+          <div className="p-2 border-b bg-muted/20">
+            <Button 
+              onClick={async () => {
+                if (!conversationId) return
+                
+                try {
+                  console.log('🤖 ChatWindow: Botón "Regresar a IA" presionado para conversación:', conversationId)
+                  console.log('🤖 ChatWindow: Estado actual de la conversación antes del cambio:', conversation)
+                  
+                  // Regresar la conversación a IA
+                  await updateConversationStatus(conversationId, 'active_ai')
+                  
+                  console.log('🤖 ChatWindow: Cambio a "active_ai" completado')
+                  toast.success('Conversación regresada a IA')
+                } catch (error) {
+                  console.error('❌ ChatWindow: Error al regresar la conversación:', error)
+                  toast.error('Error al regresar la conversación')
+                }
+              }}
+              size="sm"
+              variant="outline"
+              className="w-full"
+            >
+              🤖 Regresar a IA
+            </Button>
+          </div>
+        )}
         
         <div 
           ref={messagesContainerRef} 
@@ -348,7 +475,6 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
           ) : localMessages.length === 0 ? (
             <div className="text-center text-muted-foreground">
               <p>No hay mensajes aún. ¡Sé el primero en escribir!</p>
-              <p className="text-xs mt-2">Usa el botón de arriba para agregar mensajes de prueba</p>
             </div>
           ) : (
             localMessages.map((msg) => {
@@ -358,7 +484,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
               return (
                 <div key={msg.id} className={`flex ${alignment}`}>
                   <div className={`flex items-start space-x-3 max-w-[70%] ${alignment === 'justify-end' ? 'flex-row-reverse space-x-reverse' : ''}`}>
-                    {!senderInfo.isCurrentUser && (
+                    {msg.sender_role === 'user' && (
                       <Avatar className="h-8 w-8 flex-shrink-0">
                         <AvatarImage src={senderInfo.avatar} />
                         <AvatarFallback>
@@ -368,15 +494,15 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                     )}
                     
                     <div className={`rounded-lg px-4 py-2 ${
-                      senderInfo.isCurrentUser 
-                        ? 'bg-primary text-primary-foreground' 
-                        : 'bg-muted'
+                      msg.sender_role === 'user'
+                        ? 'bg-muted' 
+                        : 'bg-primary text-primary-foreground'
                     }`}>
                       <p className="text-sm">{msg.content}</p>
                       <p className={`text-xs mt-1 ${
-                        senderInfo.isCurrentUser 
-                          ? 'text-primary-foreground/70' 
-                          : 'text-muted-foreground'
+                        msg.sender_role === 'user'
+                          ? 'text-muted-foreground'
+                          : 'text-primary-foreground/70'
                       }`}>
                         {format(new Date(msg.created_at), 'HH:mm', { locale: es })}
                       </p>

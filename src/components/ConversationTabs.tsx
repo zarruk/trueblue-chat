@@ -8,7 +8,7 @@ interface ConversationTabsProps {
 
 export function ConversationTabs({ onSelectConversation, selectedConversationId }: ConversationTabsProps) {
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col overflow-hidden">
       <ConversationList
         onSelectConversation={onSelectConversation}
         selectedConversationId={selectedConversationId}
