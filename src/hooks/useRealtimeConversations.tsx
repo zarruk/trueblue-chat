@@ -199,10 +199,14 @@ export function useRealtimeConversations({
       messagesChannel.subscribe((status) => {
         console.log('📡 [REALTIME] Estado de suscripción de mensajes:', status)
         if (status === 'SUBSCRIBED') {
-          console.log('✅ [REALTIME] Suscripción a mensajes activa')
+          console.log('✅ [REALTIME] Suscripción a mensajes activa - ESPERANDO MENSAJES')
         } else if (status === 'CHANNEL_ERROR') {
           console.error('❌ [REALTIME] Error en la suscripción de mensajes')
           toast.error('Error de conexión en tiempo real para mensajes')
+        } else if (status === 'CLOSED') {
+          console.warn('⚠️ [REALTIME] Canal de mensajes cerrado')
+        } else {
+          console.log('📡 [REALTIME] Estado de mensajes:', status)
         }
       })
 
