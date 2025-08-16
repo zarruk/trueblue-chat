@@ -60,9 +60,9 @@ export default function Dashboard() {
   const stats = getConversationStats();
 
   return (
-    <div className="p-6">
+    <div className="h-full flex flex-col overflow-hidden">
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 p-6 pb-0 flex-shrink-0">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">IA Activa</CardTitle>
@@ -115,9 +115,9 @@ export default function Dashboard() {
       </div>
 
       {/* Main Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-280px)]">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0 p-6 pt-6 overflow-hidden">
         {/* Conversations List */}
-        <div className="lg:col-span-1">
+        <div className="lg:col-span-1 flex flex-col h-full min-h-0">
           <ConversationTabs
             selectedConversationId={selectedConversationId || undefined}
             onSelectConversation={handleSelectConversation}
@@ -127,9 +127,9 @@ export default function Dashboard() {
         </div>
 
         {/* Chat Window */}
-        <div className="lg:col-span-2">
-          <Card className="h-full">
-            <CardContent className="p-0 h-full">
+        <div className="lg:col-span-2 flex flex-col h-full min-h-0 overflow-hidden">
+          <Card className="h-full flex flex-col">
+            <CardContent className="p-0 h-full flex-1 overflow-hidden">
               {selectedConversation ? (
                 <ChatWindow
                   conversationId={selectedConversationId || undefined}

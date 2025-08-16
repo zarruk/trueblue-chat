@@ -282,9 +282,9 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-background">
+    <div className="h-full flex flex-col bg-background overflow-hidden">
       {/* Chat Header */}
-      <div className="border-b px-6 py-4">
+      <div className="border-b px-6 py-4 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <Avatar className="h-10 w-10">
@@ -451,7 +451,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
         
         <div 
           ref={messagesContainerRef} 
-          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-6 space-y-4 chat-messages-scroll"
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain p-6 space-y-4 chat-messages-scroll"
         >
           {loading ? (
             <div className="flex items-center justify-center h-full">
@@ -503,7 +503,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       </div>
 
       {/* Message Input */}
-      <div className="border-t p-4">
+      <div className="border-t p-4 flex-shrink-0">
         <form onSubmit={handleSendMessage} className="flex items-end space-x-2">
           <Button type="button" variant="ghost" size="icon" className="flex-shrink-0">
             <Paperclip className="h-4 w-4" />
