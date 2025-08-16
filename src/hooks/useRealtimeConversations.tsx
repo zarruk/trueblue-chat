@@ -59,6 +59,10 @@ export function useRealtimeConversations({
       userId: userId
     })
     
+    // Log adicional para debugging en staging
+    console.log('🔍 [REALTIME] Entorno:', import.meta.env.MODE)
+    console.log('🔍 [REALTIME] Supabase URL:', import.meta.env.VITE_SUPABASE_URL?.substring(0, 30) + '...')
+    
     let messagesChannel: RealtimeChannel | null = null
     let conversationsChannel: RealtimeChannel | null = null
 
@@ -194,32 +198,77 @@ export function useRealtimeConversations({
           }
         )
 
-      // Suscribirse a los canales
+      // Suscribirse a los canales con reintentos
       console.log('📡 [REALTIME] Suscribiendo a canal de mensajes...')
-      messagesChannel.subscribe((status) => {
-        console.log('📡 [REALTIME] Estado de suscripción de mensajes:', status)
-        if (status === 'SUBSCRIBED') {
-          console.log('✅ [REALTIME] Suscripción a mensajes activa - ESPERANDO MENSAJES')
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error('❌ [REALTIME] Error en la suscripción de mensajes')
-          toast.error('Error de conexión en tiempo real para mensajes')
-        } else if (status === 'CLOSED') {
-          console.warn('⚠️ [REALTIME] Canal de mensajes cerrado')
-        } else {
-          console.log('📡 [REALTIME] Estado de mensajes:', status)
-        }
-      })
+      let messagesRetryCount = 0
+      const maxRetries = 3
+      
+      const subscribeMessages = () => {
+        messagesChannel.subscribe((status) => {
+          console.log('📡 [REALTIME] Estado de suscripción de mensajes:', status)
+          if (status === 'SUBSCRIBED') {
+            console.log('✅ [REALTIME] Suscripción a mensajes activa - ESPERANDO MENSAJES')
+            messagesRetryCount = 0
+          } else if (status === 'CHANNEL_ERROR') {
+            console.error('❌ [REALTIME] Error en la suscripción de mensajes')
+            console.error('❌ [REALTIME] Detalles del error:', {
+              channel: messagesChannel.topic,
+              params: messagesChannel.params,
+              socket: messagesChannel.socket.isConnected()
+            })
+            
+            if (messagesRetryCount < maxRetries) {
+              messagesRetryCount++
+              console.log(`🔄 [REALTIME] Reintentando suscripción de mensajes (${messagesRetryCount}/${maxRetries})...`)
+              setTimeout(() => {
+                messagesChannel.unsubscribe()
+                subscribeMessages()
+              }, 2000 * messagesRetryCount)
+            } else {
+              toast.error('Error persistente de conexión en tiempo real para mensajes')
+            }
+          } else if (status === 'CLOSED') {
+            console.warn('⚠️ [REALTIME] Canal de mensajes cerrado')
+          } else {
+            console.log('📡 [REALTIME] Estado de mensajes:', status)
+          }
+        })
+      }
+      
+      subscribeMessages()
 
       console.log('📡 [REALTIME] Suscribiendo a canal de conversaciones...')
-      conversationsChannel.subscribe((status) => {
-        console.log('📡 [REALTIME] Estado de suscripción de conversaciones:', status)
-        if (status === 'SUBSCRIBED') {
-          console.log('✅ [REALTIME] Suscripción a conversaciones activa')
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error('❌ [REALTIME] Error en la suscripción de conversaciones')
-          toast.error('Error de conexión en tiempo real para conversaciones')
-        }
-      })
+      let conversationsRetryCount = 0
+      
+      const subscribeConversations = () => {
+        conversationsChannel.subscribe((status) => {
+          console.log('📡 [REALTIME] Estado de suscripción de conversaciones:', status)
+          if (status === 'SUBSCRIBED') {
+            console.log('✅ [REALTIME] Suscripción a conversaciones activa')
+            conversationsRetryCount = 0
+          } else if (status === 'CHANNEL_ERROR') {
+            console.error('❌ [REALTIME] Error en la suscripción de conversaciones')
+            console.error('❌ [REALTIME] Detalles del error:', {
+              channel: conversationsChannel.topic,
+              params: conversationsChannel.params,
+              socket: conversationsChannel.socket.isConnected()
+            })
+            
+            if (conversationsRetryCount < maxRetries) {
+              conversationsRetryCount++
+              console.log(`🔄 [REALTIME] Reintentando suscripción de conversaciones (${conversationsRetryCount}/${maxRetries})...`)
+              setTimeout(() => {
+                conversationsChannel.unsubscribe()
+                subscribeConversations()
+              }, 2000 * conversationsRetryCount)
+            } else {
+              toast.error('Error persistente de conexión en tiempo real para conversaciones')
+            }
+          }
+        })
+      }
+      
+      subscribeConversations()
 
     } catch (error) {
       console.error('❌ [REALTIME] Error configurando suscripciones de tiempo real:', error)

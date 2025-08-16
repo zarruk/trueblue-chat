@@ -8,7 +8,8 @@ import { ChatWindow } from '@/components/ChatWindow';
 import { ConversationWithMessages } from '@/types/database';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MessageSquare, Users, Clock, CheckCircle, AlertCircle } from 'lucide-react';
-// import { RealtimeDebugPanel } from '@/components/RealtimeDebugPanel';
+import { RealtimeDebugPanel } from '@/components/RealtimeDebugPanel';
+import { useRealtimeFallback } from '@/hooks/useRealtimeFallback';
 
 
 export default function Dashboard() {
@@ -23,6 +24,10 @@ export default function Dashboard() {
     selectedConversationId
   } = useConversations();
   const { agents } = useAgents();
+  
+  // Activar fallback de polling en staging si Realtime falla
+  const enableFallback = import.meta.env.MODE === 'staging' || import.meta.env.VITE_ENABLE_POLLING === 'true';
+  useRealtimeFallback(enableFallback);
 
   // Las conversaciones se actualizan automáticamente vía tiempo real
 
@@ -151,8 +156,10 @@ export default function Dashboard() {
         </div>
       </div>
       
-      {/* Panel de Debug para Realtime (deshabilitado en producción) */}
-      {/* <RealtimeDebugPanel /> */}
+      {/* Panel de Debug para Realtime - Solo en staging/dev */}
+      {(import.meta.env.MODE !== 'production' || import.meta.env.VITE_ENABLE_DEBUG === 'true') && (
+        <RealtimeDebugPanel />
+      )}
     </div>
   );
 }

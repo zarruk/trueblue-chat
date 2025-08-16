@@ -2,9 +2,37 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-// Usar variables de entorno si están disponibles, sino usar las credenciales hardcodeadas
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://avkpygwhymnxotwqzknz.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF2a3B5Z3doeW1ueG90d3F6a256Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMzMjEyMDcsImV4cCI6MjA2ODg5NzIwN30.p97K1S3WYNAeYb-ExRpRp3J_pqFegFJ11VOe5th_xHk";
+// En prod/staging es OBLIGATORIO usar variables de entorno. En dev se permite fallback.
+const isProd = import.meta.env.PROD === true;
+const envUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const envAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+
+let SUPABASE_URL: string;
+let SUPABASE_PUBLISHABLE_KEY: string;
+
+if (isProd) {
+  if (!envUrl || !envAnonKey) {
+    // Fallar explícitamente para detectar configuración incorrecta en staging/producción
+    // Nota: No exponer claves en logs
+    throw new Error(
+      "Configuración de Supabase ausente en entorno de producción/staging. Debes definir VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en las variables de entorno del despliegue."
+    );
+  }
+  SUPABASE_URL = envUrl;
+  SUPABASE_PUBLISHABLE_KEY = envAnonKey;
+} else {
+  // Desarrollo local: permitir fallback para conveniencia
+  SUPABASE_URL = envUrl || "https://avkpygwhymnxotwqzknz.supabase.co";
+  SUPABASE_PUBLISHABLE_KEY = envAnonKey || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF2a3B5Z3doeW1ueG90d3F6a256Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMzMjEyMDcsImV4cCI6MjA2ODg5NzIwN30.p97K1S3WYNAeYb-ExRpRp3J_pqFegFJ11VOe5th_xHk";
+  if (!envUrl || !envAnonKey) {
+    // Aviso en consola para que el dev configure su .env
+    // Intentamos ocultar información sensible
+    const maskedHost = SUPABASE_URL.replace(/^https?:\/\//, '').split('.')[0];
+    console.warn(
+      `⚠️  Usando credenciales por defecto de desarrollo para Supabase (host: ${maskedHost}). Configura VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en tu .env.`
+    );
+  }
+}
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
