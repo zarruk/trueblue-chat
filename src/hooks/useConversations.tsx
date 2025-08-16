@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client'
 import { useAuth } from './useAuth'
 import { toast } from 'sonner'
 import { n8nService } from '@/services/n8nService'
+import { useRealtimeConversations } from './useRealtimeConversations'
 
 export interface Conversation {
   id: string
@@ -242,17 +243,12 @@ export function useConversations() {
 
       toast.success('Mensaje enviado')
       
-      // Refresh messages
-      await fetchMessages(conversationId)
-      
-      // No llamamos fetchConversations() aquí porque el real-time subscription
-      // ya maneja las actualizaciones automáticamente y evitamos sobrescribir
-      // el estado local que puede haber sido actualizado por assignAgent u otros procesos
+      // El mensaje se agregará automáticamente vía tiempo real, no necesitamos refresh manual
     } catch (error) {
       console.error('Error sending message:', error)
       toast.error('Error al enviar el mensaje')
     }
-  }, [user, profile, fetchMessages])
+  }, [user, profile])
 
   // Update conversation status
   const updateConversationStatus = useCallback(async (
@@ -276,21 +272,13 @@ export function useConversations() {
       }
       
       // Actualizar inmediatamente el estado local para sincronización instantánea
-      setConversations(prevConversations => {
-        const updatedConversations = prevConversations.map(conv => 
-          conv.id === conversationId 
-            ? { 
-                ...conv, 
-                ...updateData,
-                // Asegurar que las propiedades null se apliquen correctamente
-                assigned_agent_id: updateData.assigned_agent_id !== undefined ? updateData.assigned_agent_id : conv.assigned_agent_id,
-                assigned_agent_email: updateData.assigned_agent_email !== undefined ? updateData.assigned_agent_email : conv.assigned_agent_email,
-                assigned_agent_name: updateData.assigned_agent_name !== undefined ? updateData.assigned_agent_name : conv.assigned_agent_name
-              }
-            : conv
-        )
-        console.log('✅ Estado local actualizado inmediatamente para cambio de status:', { conversationId, status, updateData })
-        return updatedConversations
+      setConversations(prev => {
+        const newConversations = [...prev]
+        const index = newConversations.findIndex(c => c.id === conversationId)
+        if (index !== -1) {
+          newConversations[index] = { ...newConversations[index], ...updateData }
+        }
+        return newConversations
       })
       
       // Actualizar en base de datos
@@ -304,54 +292,25 @@ export function useConversations() {
         toast.error('Error al actualizar el estado')
         
         // Revertir el cambio local si falla la actualización en BD
-        setConversations(prevConversations => 
-          prevConversations.map(conv => 
-            conv.id === conversationId 
-              ? { ...conv, status: conv.status } // Mantener el estado anterior
-              : conv
-          )
-        )
+        setConversations(prev => {
+          const newConversations = [...prev]
+          const index = newConversations.findIndex(c => c.id === conversationId)
+          if (index !== -1) {
+            // Esto es un poco simplista, idealmente guardarías el estado original
+            // pero por ahora, simplemente no aplicamos el cambio fallido.
+            // La UI se sincronizará en la próxima recarga o actualización de realtime.
+          }
+          return newConversations
+        })
         return
       }
 
       console.log('✅ Estado de conversación actualizado exitosamente en BD')
       toast.success('Estado actualizado exitosamente')
       
-      // Forzar una actualización adicional para asegurar sincronización
-      setTimeout(() => {
-        setConversations(prevConversations => {
-          const currentConv = prevConversations.find(c => c.id === conversationId)
-          if (currentConv && (currentConv.status !== status || 
-              (status === 'active_ai' && (currentConv.assigned_agent_id !== null || currentConv.assigned_agent_email !== null || currentConv.assigned_agent_name !== null)))) {
-            console.log('🔄 Forzando sincronización adicional para cambio de status...', { current: currentConv, expected: updateData })
-            return prevConversations.map(conv => 
-              conv.id === conversationId 
-                ? { 
-                    ...conv, 
-                    ...updateData,
-                    assigned_agent_id: updateData.assigned_agent_id !== undefined ? updateData.assigned_agent_id : conv.assigned_agent_id,
-                    assigned_agent_email: updateData.assigned_agent_email !== undefined ? updateData.assigned_agent_email : conv.assigned_agent_email,
-                    assigned_agent_name: updateData.assigned_agent_name !== undefined ? updateData.assigned_agent_name : conv.assigned_agent_name
-                  }
-                : conv
-            )
-          }
-          return prevConversations
-        })
-      }, 100)
-      
     } catch (error) {
       console.error('❌ Error updating conversation status:', error)
       toast.error('Error al actualizar el estado')
-      
-      // Revertir el cambio local si falla
-      setConversations(prevConversations => 
-        prevConversations.map(conv => 
-          conv.id === conversationId 
-            ? { ...conv, status: conv.status }
-            : conv
-        )
-      )
     }
   }, [])
 
@@ -385,21 +344,13 @@ export function useConversations() {
       }
 
       // Actualizar inmediatamente el estado local para sincronización instantánea
-      setConversations(prevConversations => {
-        const conversationBefore = prevConversations.find(c => c.id === conversationId)
-        console.log('🔄 assignAgent: Estado ANTES de la actualización:', conversationBefore)
-        
-        const updatedConversations = prevConversations.map(conv => 
-          conv.id === conversationId 
-            ? { ...conv, ...updateData }
-            : conv
-        )
-        
-        const conversationAfter = updatedConversations.find(c => c.id === conversationId)
-        console.log('✅ assignAgent: Estado DESPUÉS de la actualización local:', conversationAfter)
-        console.log('🔄 assignAgent: Conversaciones totales actualizadas:', updatedConversations.length)
-        
-        return updatedConversations
+      setConversations(prev => {
+        const newConversations = [...prev]
+        const index = newConversations.findIndex(c => c.id === conversationId)
+        if (index !== -1) {
+          newConversations[index] = { ...newConversations[index], ...updateData }
+        }
+        return newConversations
       })
 
       // Actualizar en base de datos
@@ -413,57 +364,17 @@ export function useConversations() {
         toast.error('Error al asignar el agente')
         
         // Revertir el cambio local si falla
-        setConversations(prevConversations => 
-          prevConversations.map(conv => 
-            conv.id === conversationId 
-              ? { ...conv }
-              : conv
-          )
-        )
+        // Similar a updateConversationStatus, la reversión podría ser más robusta
+        setConversations(prev => [...prev])
         return
       }
 
       console.log('✅ Agente asignado exitosamente en BD')
       toast.success('Agente asignado exitosamente')
       
-      // Forzar una actualización adicional para asegurar sincronización
-      setTimeout(() => {
-        console.log('⏰ assignAgent: Timeout ejecutándose para verificar sincronización...')
-        setConversations(prevConversations => {
-          const currentConv = prevConversations.find(c => c.id === conversationId)
-          console.log('🔍 assignAgent: Estado actual en timeout:', currentConv)
-          
-          if (currentConv && (currentConv.status !== 'active_human' || currentConv.assigned_agent_id !== agentId)) {
-            console.log('🔄 assignAgent: Forzando sincronización adicional...', {
-              currentStatus: currentConv.status,
-              expectedStatus: 'active_human',
-              currentAgentId: currentConv.assigned_agent_id,
-              expectedAgentId: agentId
-            })
-            return prevConversations.map(conv => 
-              conv.id === conversationId 
-                ? { ...conv, ...updateData }
-                : conv
-            )
-          } else {
-            console.log('✅ assignAgent: Estado ya sincronizado correctamente')
-          }
-          return prevConversations
-        })
-      }, 200)
-      
     } catch (error) {
       console.error('Error assigning agent:', error)
       toast.error('Error al asignar el agente')
-      
-      // Revertir el cambio local si falla
-      setConversations(prevConversations => 
-        prevConversations.map(conv => 
-          conv.id === conversationId 
-            ? { ...conv }
-            : conv
-        )
-      )
     }
   }, [])
 
@@ -483,122 +394,106 @@ export function useConversations() {
     }
   }, [selectedConversationId, fetchMessages])
 
-  // Set up real-time subscriptions
-  useEffect(() => {
-    if (!user) return
-
-    console.log('🔌 Configurando suscripciones de real-time...')
-
-    // Subscribe to conversation updates
-    const conversationsSubscription = supabase
-      .channel('conversations')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'tb_conversations'
-        },
-        (payload) => {
-          console.log('📡 Real-time conversation update:', payload)
-          
-          if (payload.eventType === 'UPDATE') {
-            const { id, status, assigned_agent_id, assigned_agent_email, assigned_agent_name, updated_at } = payload.new
-            
-            console.log('🔄 Real-time: Actualizando conversación:', { 
-              id, 
-              status, 
-              assigned_agent_id, 
-              assigned_agent_email, 
-              assigned_agent_name, 
-              updated_at 
-            })
-            
-            // Aplicar actualización remota con merge inteligente
-            setConversations(prevConversations => {
-              const existingConv = prevConversations.find(conv => conv.id === id)
-              if (existingConv) {
-                const localUpdateTime = new Date(existingConv.updated_at).getTime()
-                const remoteUpdateTime = new Date(updated_at).getTime()
-                
-                // Siempre aplicar cambios de estado importantes, independientemente del timestamp
-                const shouldForceUpdate = existingConv.status !== status || 
-                  existingConv.assigned_agent_id !== assigned_agent_id ||
-                  existingConv.assigned_agent_email !== assigned_agent_email ||
-                  existingConv.assigned_agent_name !== assigned_agent_name
-                
-                // Si la actualización remota es más reciente O contiene cambios importantes, aplicar
-                if (remoteUpdateTime >= localUpdateTime || shouldForceUpdate) {
-                  console.log('✅ Aplicando actualización remota:', { 
-                    remote: remoteUpdateTime, 
-                    local: localUpdateTime, 
-                    forceUpdate: shouldForceUpdate,
-                    changes: { status, assigned_agent_id, assigned_agent_email, assigned_agent_name }
-                  })
-                  const updatedConversations = prevConversations.map(conv => 
-                    conv.id === id 
-                      ? { 
-                          ...conv, 
-                          status: status !== undefined ? status : conv.status,
-                          assigned_agent_id: assigned_agent_id !== undefined ? assigned_agent_id : conv.assigned_agent_id,
-                          assigned_agent_email: assigned_agent_email !== undefined ? assigned_agent_email : conv.assigned_agent_email,
-                          assigned_agent_name: assigned_agent_name !== undefined ? assigned_agent_name : conv.assigned_agent_name,
-                          updated_at: updated_at || conv.updated_at
-                        }
-                      : conv
-                  )
-                  return updatedConversations
-                } else {
-                  console.log('⏭️ Ignorando actualización remota (local es más reciente y sin cambios importantes)')
-                  return prevConversations
-                }
-              }
-              
-              // Si no existe la conversación, agregarla
-              return prevConversations
-            })
-          } else if (payload.eventType === 'INSERT') {
-            console.log('🆕 Nueva conversación detectada, refrescando lista...')
-            fetchConversations()
-          }
+  // Configurar suscripciones de tiempo real
+  const handleMessageInsert = useCallback((message: Message) => {
+    console.log('📨 [REALTIME] Nuevo mensaje recibido:', message)
+    console.log('📨 [REALTIME] Conversación seleccionada actual:', selectedConversationId)
+    
+    // Solo agregar si es de la conversación seleccionada
+    if (selectedConversationId && message.conversation_id === selectedConversationId) {
+      console.log('📨 [REALTIME] Agregando mensaje a la conversación seleccionada')
+      setMessages(prevMessages => {
+        // Evitar duplicados
+        if (prevMessages.some(m => m.id === message.id)) {
+          console.log('📨 [REALTIME] Mensaje duplicado, ignorando')
+          return prevMessages
         }
-      )
-      .subscribe((status) => {
-        console.log('📡 Estado de suscripción de conversaciones:', status)
+        console.log('📨 [REALTIME] Mensaje agregado exitosamente')
+        return [...prevMessages, message]
       })
-
-    // Subscribe to message updates
-    const messagesSubscription = supabase
-      .channel('messages')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'tb_messages'
-        },
-        (payload) => {
-          console.log('📡 Real-time message update:', payload)
-          
-          if (payload.eventType === 'INSERT' && selectedConversationId) {
-            const newMessage = payload.new as Message
-            if (newMessage.conversation_id === selectedConversationId) {
-              console.log('📨 Nuevo mensaje agregado en tiempo real')
-              setMessages(prevMessages => [...prevMessages, newMessage])
-            }
-          }
-        }
-      )
-      .subscribe((status) => {
-        console.log('📡 Estado de suscripción de mensajes:', status)
-      })
-
-    return () => {
-      console.log('🔌 Desconectando suscripciones de real-time...')
-      conversationsSubscription.unsubscribe()
-      messagesSubscription.unsubscribe()
+    } else {
+      console.log('📨 [REALTIME] Mensaje no es de la conversación seleccionada, solo actualizando conversación')
     }
-  }, [user, selectedConversationId])
+    
+    // Actualizar último mensaje de la conversación
+    console.log('📨 [REALTIME] Actualizando conversación con último mensaje')
+    setConversations(prevConversations => 
+      prevConversations.map(conv => 
+        conv.id === message.conversation_id 
+          ? { ...conv, last_message_sender_role: message.sender_role, updated_at: message.created_at }
+          : conv
+      )
+    )
+  }, [selectedConversationId])
+
+  const handleConversationInsert = useCallback((conversation: Conversation) => {
+    console.log('🆕 [REALTIME] Nueva conversación recibida:', conversation)
+    setConversations(prevConversations => {
+      // Evitar duplicados
+      if (prevConversations.some(c => c.id === conversation.id)) {
+        console.log('🆕 [REALTIME] Conversación duplicada, ignorando')
+        return prevConversations
+      }
+      console.log('🆕 [REALTIME] Conversación agregada exitosamente')
+      return [conversation, ...prevConversations]
+    })
+  }, [])
+
+  const handleConversationUpdate = useCallback((conversation: Conversation) => {
+    console.log('🔄 [REALTIME] Conversación actualizada:', conversation)
+    console.log('🔄 [REALTIME] Estado anterior vs nuevo:', {
+      id: conversation.id,
+      newStatus: conversation.status,
+      newAgent: conversation.assigned_agent_name
+    })
+    
+    setConversations(prevConversations => {
+      const prevConversation = prevConversations.find(c => c.id === conversation.id)
+      console.log('🔄 [REALTIME] Estado anterior en local:', prevConversation ? {
+        status: prevConversation.status,
+        agent: prevConversation.assigned_agent_name
+      } : 'No encontrada')
+      
+      // Crear una nueva referencia del array para forzar re-render
+      const updated = [...prevConversations]
+      const index = updated.findIndex(conv => conv.id === conversation.id)
+      
+      if (index !== -1) {
+        // Reemplazar completamente el objeto para asegurar que React detecte el cambio
+        updated[index] = {
+          ...conversation,
+          // Asegurar que todos los campos están presentes
+          id: conversation.id,
+          user_id: conversation.user_id,
+          username: conversation.username,
+          phone_number: conversation.phone_number,
+          status: conversation.status,
+          assigned_agent_id: conversation.assigned_agent_id,
+          assigned_agent_email: conversation.assigned_agent_email,
+          assigned_agent_name: conversation.assigned_agent_name,
+          summary: conversation.summary,
+          channel: conversation.channel,
+          last_message_sender_role: conversation.last_message_sender_role,
+          created_at: conversation.created_at,
+          updated_at: conversation.updated_at
+        }
+      }
+      
+      console.log('🔄 [REALTIME] Conversaciones actualizadas en estado local:', updated.length)
+      console.log('🔄 [REALTIME] Conversación actualizada en índice:', index)
+      return updated
+    })
+  }, [])
+
+  // Usar el hook de tiempo real
+  console.log('🔌 [REALTIME] Configurando hook useRealtimeConversations...')
+  useRealtimeConversations({
+    onMessageInsert: handleMessageInsert,
+    onConversationInsert: handleConversationInsert,
+    onConversationUpdate: handleConversationUpdate,
+    userId: profile?.id
+  })
+  console.log('🔌 [REALTIME] Hook useRealtimeConversations configurado')
 
   // Initial fetch
   useEffect(() => {

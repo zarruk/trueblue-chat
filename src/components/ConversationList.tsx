@@ -6,12 +6,13 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { useConversations } from '@/hooks/useConversations'
-
+import { Conversation } from '@/hooks/useConversations'
 
 interface ConversationListProps {
   onSelectConversation: (conversationId: string) => void
   selectedConversationId?: string
+  conversations: Conversation[]
+  loading: boolean
 }
 
 type ConversationStatus = 'active_ai' | 'active_human' | 'closed' | 'pending_human'
@@ -23,11 +24,10 @@ const statusConfig = {
   closed: { label: 'Cerrado', icon: CheckCircle, variant: 'outline' as const, color: 'text-gray-600' }
 }
 
-export function ConversationList({ onSelectConversation, selectedConversationId }: ConversationListProps) {
+export function ConversationList({ onSelectConversation, selectedConversationId, conversations, loading }: ConversationListProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<ConversationStatus | 'all'>('all')
   const [agentFilter, setAgentFilter] = useState<string>('all')
-  const { conversations, loading } = useConversations()
 
   // Log para debugging de re-renderizado
   console.log('🔄 ConversationList: Re-renderizando con conversaciones:', conversations.length)
@@ -70,9 +70,6 @@ export function ConversationList({ onSelectConversation, selectedConversationId 
   }
 
   const filteredConversations = useMemo(() => {
-    // Crear un hash de las conversaciones para forzar recálculo cuando cambien
-    const conversationsHash = conversations.map(c => `${c.id}-${c.status}-${c.updated_at}-${c.assigned_agent_id || 'none'}-${c.assigned_agent_name || 'none'}-${c.last_message_sender_role || 'none'}`).join(',')
-    
     const filtered = conversations.filter(conversation => {
       const matchesSearch = 
         conversation.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -103,8 +100,7 @@ export function ConversationList({ onSelectConversation, selectedConversationId 
     console.log('🔄 ConversationList: Filtrando y ordenando conversaciones:', {
       total: conversations.length,
       filtered: filtered.length,
-      urgentCount: sorted.filter(needsUrgentResponse).length,
-      conversationsHash: conversationsHash.substring(0, 100) + '...'
+      urgentCount: sorted.filter(needsUrgentResponse).length
     })
     
     return sorted
@@ -264,7 +260,7 @@ export function ConversationList({ onSelectConversation, selectedConversationId 
               
               return (
                 <div
-                  key={`${conversation.id}-${conversation.status}-${conversation.updated_at}-${conversation.assigned_agent_id || 'none'}-${conversation.assigned_agent_name || 'none'}-${conversation.last_message_sender_role || 'none'}`}
+                  key={conversation.id}
                   className={`
                     relative p-3 rounded-lg cursor-pointer transition-colors border
                     ${isSelected 

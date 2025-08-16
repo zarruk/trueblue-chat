@@ -24,7 +24,6 @@ interface ChatWindowProps {
   messages?: any[]
   loading?: boolean
   onSendMessage?: (conversationId: string, content: string, role: string) => Promise<void>
-  onForceRefresh?: () => Promise<void>
 }
 
 interface Message {
@@ -49,7 +48,7 @@ interface Conversation {
   updated_at: string
 }
 
-export function ChatWindow({ conversationId, messages: propMessages, loading: propLoading, onSendMessage, onForceRefresh }: ChatWindowProps) {
+export function ChatWindow({ conversationId, messages: propMessages, loading: propLoading, onSendMessage }: ChatWindowProps) {
   const [message, setMessage] = useState('')
   const [localMessages, setLocalMessages] = useState<Message[]>([])
   const [updatingStatus, setUpdatingStatus] = useState(false)
@@ -155,14 +154,9 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       console.log('✅ ChatWindow: Status actualizado')
       
       // 🚀 FORZAR ACTUALIZACIÓN INMEDIATA DE CONVERSACIONES
-      console.log('🔄 ChatWindow: Forzando re-fetch de conversaciones para sincronización inmediata')
-      await fetchConversations()
+      // Las conversaciones se actualizan automáticamente vía tiempo real
       
-      // 🚀 FORZAR TAMBIÉN DESDE DASHBOARD (TRIPLE GARANTÍA)
-      if (onForceRefresh) {
-        console.log('🔄 ChatWindow: Forzando refresh desde Dashboard también')
-        await onForceRefresh()
-      }
+      // Los cambios se reflejan automáticamente vía tiempo real
       
     } catch (error) {
       console.error('❌ ChatWindow: Error updating conversation status:', error)
@@ -195,14 +189,9 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       }
       
       // 🚀 FORZAR ACTUALIZACIÓN INMEDIATA DE CONVERSACIONES
-      console.log('🔄 ChatWindow: Forzando re-fetch de conversaciones para sincronización inmediata')
-      await fetchConversations()
+      // Las conversaciones se actualizan automáticamente vía tiempo real
       
-      // 🚀 FORZAR TAMBIÉN DESDE DASHBOARD (TRIPLE GARANTÍA)
-      if (onForceRefresh) {
-        console.log('🔄 ChatWindow: Forzando refresh desde Dashboard también')
-        await onForceRefresh()
-      }
+      // Los cambios se reflejan automáticamente vía tiempo real
       
     } catch (error) {
       console.error('❌ ChatWindow: Error al asignar/desasignar agente:', error)

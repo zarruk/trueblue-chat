@@ -8,6 +8,7 @@ import { ChatWindow } from '@/components/ChatWindow';
 import { ConversationWithMessages } from '@/types/database';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MessageSquare, Users, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { RealtimeDebugPanel } from '@/components/RealtimeDebugPanel';
 
 
 export default function Dashboard() {
@@ -19,16 +20,11 @@ export default function Dashboard() {
     updateConversationStatus, 
     selectConversation,
     messages,
-    selectedConversationId,
-    fetchConversations
+    selectedConversationId
   } = useConversations();
   const { agents } = useAgents();
 
-  // Función para forzar actualización desde Dashboard
-  const handleForceRefresh = async () => {
-    console.log('🔄 Dashboard: Forzando actualización de conversaciones')
-    await fetchConversations()
-  }
+  // Las conversaciones se actualizan automáticamente vía tiempo real
 
   // Keep selectedConversation synchronized with conversations updates
   const selectedConversation = selectedConversationId 
@@ -125,6 +121,8 @@ export default function Dashboard() {
           <ConversationTabs
             selectedConversationId={selectedConversationId || undefined}
             onSelectConversation={handleSelectConversation}
+            conversations={conversations}
+            loading={loading}
           />
         </div>
 
@@ -138,7 +136,7 @@ export default function Dashboard() {
                   messages={messages}
                   loading={loading}
                   onSendMessage={(conversationId, content, senderRole) => sendMessage(conversationId, content, senderRole as 'user' | 'ai' | 'agent')}
-                  onForceRefresh={handleForceRefresh}
+
                 />
               ) : (
                 <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -152,6 +150,9 @@ export default function Dashboard() {
           </Card>
         </div>
       </div>
+      
+      {/* Panel de Debug para Realtime (temporal) */}
+      <RealtimeDebugPanel />
     </div>
   );
 }
