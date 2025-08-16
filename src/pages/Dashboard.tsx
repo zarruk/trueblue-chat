@@ -8,7 +8,7 @@ import { ChatWindow } from '@/components/ChatWindow';
 import { ConversationWithMessages } from '@/types/database';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MessageSquare, Users, Clock, CheckCircle, AlertCircle } from 'lucide-react';
-import { RealtimeDebugPanel } from '@/components/RealtimeDebugPanel';
+// import { RealtimeDebugPanel } from '@/components/RealtimeDebugPanel';
 
 
 export default function Dashboard() {
@@ -151,8 +151,8 @@ export default function Dashboard() {
         </div>
       </div>
       
-      {/* Panel de Debug para Realtime (temporal) */}
-      <RealtimeDebugPanel />
+      {/* Panel de Debug para Realtime (deshabilitado en producción) */}
+      {/* <RealtimeDebugPanel /> */}
     </div>
   );
 }

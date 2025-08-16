@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Send, Paperclip, Smile, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { 
@@ -450,12 +451,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
         
         <div 
           ref={messagesContainerRef} 
-          className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-4 chat-messages-scroll"
-          style={{ 
-            height: '400px',
-            maxHeight: '400px',
-            minHeight: '400px'
-          }}
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-6 space-y-4 chat-messages-scroll"
         >
           {loading ? (
             <div className="flex items-center justify-center h-full">
@@ -508,19 +504,35 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
 
       {/* Message Input */}
       <div className="border-t p-4">
-        <form onSubmit={handleSendMessage} className="flex items-center space-x-2">
+        <form onSubmit={handleSendMessage} className="flex items-end space-x-2">
           <Button type="button" variant="ghost" size="icon" className="flex-shrink-0">
             <Paperclip className="h-4 w-4" />
           </Button>
           <Button type="button" variant="ghost" size="icon" className="flex-shrink-0">
             <Smile className="h-4 w-4" />
           </Button>
-          <Input
+          <Textarea
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             placeholder="Escribe un mensaje..."
-            className="flex-1"
+            className="flex-1 min-h-[40px] max-h-[120px] resize-none"
             disabled={!conversationId}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                handleSendMessage(e as any)
+              }
+            }}
+            rows={1}
+            style={{
+              height: 'auto',
+              minHeight: '40px'
+            }}
+            onInput={(e) => {
+              const target = e.target as HTMLTextAreaElement
+              target.style.height = 'auto'
+              target.style.height = Math.min(target.scrollHeight, 120) + 'px'
+            }}
           />
           <Button type="submit" size="icon" disabled={!message.trim() || !conversationId}>
             <Send className="h-4 w-4" />

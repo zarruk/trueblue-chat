@@ -193,10 +193,10 @@ export function RealtimeDebugPanel() {
 
   return (
     <>
-      {/* Botón flotante para mostrar/ocultar el panel */}
+      {/* Botón flotante para mostrar/ocultar el panel - OCULTO */}
       <Button
         onClick={() => setIsVisible(!isVisible)}
-        className="fixed bottom-4 right-4 z-50"
+        className="fixed bottom-4 right-4 z-50 hidden"
         variant="outline"
         size="sm"
       >
