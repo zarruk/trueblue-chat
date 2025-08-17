@@ -122,7 +122,7 @@ export function useConversations() {
     } finally {
       setLoading(false)
     }
-  }, [user, profile, selectedConversationId])
+  }, [user, profile])
 
   // Fetch messages for a conversation
   const fetchMessages = useCallback(async (conversationId: string) => {
@@ -278,7 +278,7 @@ export function useConversations() {
       console.error('Error sending message:', error)
       toast.error('Error al enviar el mensaje')
     }
-  }, [user, profile])
+  }, [user, profile, selectedConversationId])
 
   // Update conversation status
   const updateConversationStatus = useCallback(async (
