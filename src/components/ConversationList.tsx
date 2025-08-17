@@ -26,7 +26,7 @@ const statusConfig = {
 
 export function ConversationList({ onSelectConversation, selectedConversationId, conversations, loading }: ConversationListProps) {
   const [searchTerm, setSearchTerm] = useState('')
-  const [statusFilter, setStatusFilter] = useState<ConversationStatus | 'all'>('all')
+  const [statusFilter, setStatusFilter] = useState<ConversationStatus | 'all' | 'abierta'>('all')
   const [agentFilter, setAgentFilter] = useState<string>('all')
 
   // Log para debugging de re-renderizado
@@ -76,7 +76,12 @@ export function ConversationList({ onSelectConversation, selectedConversationId,
         conversation.user_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
         conversation.phone_number?.toLowerCase().includes(searchTerm.toLowerCase())
       
-      const matchesStatus = statusFilter === 'all' || conversation.status === statusFilter
+      const matchesStatus =
+        statusFilter === 'all'
+          ? true
+          : statusFilter === 'abierta'
+            ? conversation.status !== 'closed'
+            : conversation.status === statusFilter
       const matchesAgent = agentFilter === 'all' || conversation.assigned_agent_email === agentFilter
       
       return matchesSearch && matchesStatus && matchesAgent
@@ -166,6 +171,7 @@ export function ConversationList({ onSelectConversation, selectedConversationId,
               <SelectItem value="active_ai">AI Activo</SelectItem>
               <SelectItem value="active_human">Humano Activo</SelectItem>
               <SelectItem value="pending_human">Pendiente</SelectItem>
+              <SelectItem value="abierta">Abierta</SelectItem>
               <SelectItem value="closed">Cerrado</SelectItem>
             </SelectContent>
           </Select>
