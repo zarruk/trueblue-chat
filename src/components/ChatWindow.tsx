@@ -65,7 +65,8 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     fetchConversations,
     updateConversationStatus,
     conversations,
-    assignAgent
+    assignAgent,
+    selectConversation
   } = useConversations()
   const { getAvailableAgents } = useAgents()
 
@@ -84,13 +85,13 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     return getAvailableAgents()
   }, [getAvailableAgents])
 
-  // Load messages when conversationId changes
+  // Sincronizar conversación seleccionada y cargar mensajes cuando cambia conversationId
   useEffect(() => {
-    if (conversationId && fetchMessages) {
-      console.log('🔄 ChatWindow: Loading messages for conversation:', conversationId)
-      fetchMessages(conversationId)
+    if (conversationId && selectConversation) {
+      console.log('🔄 ChatWindow: Selecting conversation for realtime + loading messages:', conversationId)
+      selectConversation(conversationId)
     }
-  }, [conversationId, fetchMessages])
+  }, [conversationId, selectConversation])
 
   // Update local messages when messages change
   useEffect(() => {

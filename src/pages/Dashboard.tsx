@@ -20,7 +20,6 @@ export default function Dashboard() {
     sendMessage, 
     updateConversationStatus, 
     selectConversation,
-    messages,
     selectedConversationId
   } = useConversations();
   const { agents } = useAgents();
@@ -138,10 +137,6 @@ export default function Dashboard() {
               {selectedConversation ? (
                 <ChatWindow
                   conversationId={selectedConversationId || undefined}
-                  messages={messages}
-                  loading={loading}
-                  onSendMessage={(conversationId, content, senderRole) => sendMessage(conversationId, content, senderRole as 'user' | 'ai' | 'agent')}
-
                 />
               ) : (
                 <div className="flex items-center justify-center h-full text-muted-foreground">
