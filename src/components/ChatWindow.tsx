@@ -89,12 +89,10 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     }
   }, [conversationId, onSelectConversation])
 
-  // Update local messages when messages change
+  // Update local messages when propMessages change (evitar deps inestables)
   useEffect(() => {
-    if (messages) {
-      setLocalMessages(messages)
-    }
-  }, [messages])
+    setLocalMessages(propMessages || [])
+  }, [propMessages])
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
     if (messagesEndRef.current) {

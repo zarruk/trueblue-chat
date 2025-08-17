@@ -122,7 +122,7 @@ export function useConversations() {
     } finally {
       setLoading(false)
     }
-  }, [user, profile])
+  }, [user, profile, selectedConversationId])
 
   // Fetch messages for a conversation
   const fetchMessages = useCallback(async (conversationId: string) => {
