@@ -19,6 +19,7 @@ export interface Conversation {
   channel?: string
   last_message_sender_role?: 'user' | 'ai' | 'agent'
   last_message_at?: string
+  last_message_content?: string
   created_at: string
   updated_at: string
 }
@@ -84,13 +85,13 @@ export function useConversations() {
       console.log('✅ fetchConversations: Conversations fetched successfully:', data?.length || 0)
       console.log('🔍 fetchConversations: Obteniendo último mensaje de cada conversación...')
 
-      // Obtener el último mensaje de cada conversación para determinar urgencia
+      // Obtener el último mensaje de cada conversación para determinar urgencia y previsualización
       const conversationsWithLastMessage = await Promise.all(
         (data || []).map(async (conversation: any) => {
           try {
             const { data: lastMessage } = await supabase
               .from('tb_messages')
-              .select('sender_role, created_at')
+              .select('sender_role, content, created_at')
               .eq('conversation_id', conversation.id)
               .order('created_at', { ascending: false })
               .limit(1)
@@ -99,14 +100,16 @@ export function useConversations() {
             return {
               ...conversation,
               last_message_sender_role: lastMessage?.sender_role || null,
-              last_message_at: lastMessage?.created_at || null
+              last_message_at: lastMessage?.created_at || null,
+              last_message_content: lastMessage?.content || null
             }
           } catch (error) {
             // Si no hay mensajes o hay error, devolver la conversación sin el campo
             return {
               ...conversation,
               last_message_sender_role: null,
-              last_message_at: null
+              last_message_at: null,
+              last_message_content: null
             }
           }
         })
@@ -216,6 +219,7 @@ export function useConversations() {
               assigned_agent_name: profile.name,
               last_message_sender_role: senderRole,
               last_message_at: insertedMessage?.created_at || new Date().toISOString(),
+              last_message_content: content,
               updated_at: insertedMessage?.created_at || new Date().toISOString()
             }
           : conv
@@ -431,7 +435,7 @@ export function useConversations() {
     console.log('📨 [REALTIME] Conversación seleccionada actual:', selectedConversationId)
     
     // Solo agregar si es de la conversación seleccionada
-    if (selectedConversationId && message.conversation_id === selectedConversationId) {
+    if (message.conversation_id === selectedConversationId) {
       console.log('📨 [REALTIME] Agregando mensaje a la conversación seleccionada')
       setMessages(prevMessages => {
         // Evitar duplicados
@@ -448,14 +452,15 @@ export function useConversations() {
     
     // Actualizar último mensaje de la conversación
     console.log('📨 [REALTIME] Actualizando conversación con último mensaje')
-    setConversations(prevConversations => 
-      prevConversations.map(conv => 
-        conv.id === message.conversation_id 
-          ? { 
-              ...conv, 
-              last_message_sender_role: message.sender_role, 
+    setConversations(prevConversations =>
+      prevConversations.map(conv =>
+        conv.id === message.conversation_id
+          ? {
+              ...conv,
+              last_message_sender_role: message.sender_role,
               last_message_at: message.created_at,
-              updated_at: message.created_at 
+              last_message_content: message.content,
+              updated_at: message.created_at,
             }
           : conv
       )
