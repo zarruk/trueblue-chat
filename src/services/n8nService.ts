@@ -15,7 +15,11 @@ export interface N8nWebhookResponse {
 }
 
 class N8nService {
-  private webhookUrl = import.meta.env.VITE_N8N_WEBHOOK_URL || 'https://aztec.app.n8n.cloud/webhook/webhook_tb_local'
+  private webhookUrl = (() => {
+    // Siempre usar la función API para evitar problemas de CORS
+    // La función API se encargará de rutear al webhook correcto basándose en las variables de entorno
+    return '/api/n8n-webhook'
+  })()
 
   /**
    * Envía un mensaje al webhook de n8n para que sea procesado y enrutado
@@ -117,7 +121,7 @@ class N8nService {
     agentId: string, // Cambiar de agentEmail a agentId
     agentName: string
   ): N8nWebhookPayload {
-    const channel = this.detectChannel(conversation)
+    const channel = this.detectChannel(conversation).toLowerCase()
     
     // El chatId debe ser el user_id de la conversación (identificador del usuario en el canal de origen)
     const chatId = conversation.user_id

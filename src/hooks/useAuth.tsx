@@ -103,9 +103,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
+  const resolveRedirectUrl = (): string => {
+    // Preferir siempre el dominio actual para evitar envs desactualizados
+    if (typeof window !== 'undefined' && window.location?.origin) {
+      return `${window.location.origin}/`;
+    }
+    // Fallback a variable de entorno si por alguna razón no hay window (SSR no aplica aquí)
+    return (import.meta.env.VITE_APP_URL as string) || '/';
+  };
+
   const signInWithMagicLink = async (email: string) => {
-    // Use environment variable for redirect URL, fallback to current origin
-    const redirectUrl = import.meta.env.VITE_APP_URL || `${window.location.origin}/`;
+    const redirectUrl = resolveRedirectUrl();
     
     const { error } = await supabase.auth.signInWithOtp({
       email,
@@ -126,8 +134,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = async (email: string, password: string, name: string) => {
     try {
-      // Use environment variable for redirect URL, fallback to current origin
-      const redirectUrl = import.meta.env.VITE_APP_URL || `${window.location.origin}/`;
+      const redirectUrl = resolveRedirectUrl();
       
       const { error } = await supabase.auth.signUp({
         email,
