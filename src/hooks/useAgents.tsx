@@ -66,7 +66,7 @@ export function useAgents() {
   const fetchAgentStats = useCallback(async () => {
     console.log('🔍 fetchAgentStats: Estadísticas temporalmente deshabilitadas')
     setAgentStats([])
-  }, [user])
+  }, [])
 
   // Create new agent in profiles table
   const createAgent = useCallback(async (email: string, name: string, role: string) => {
