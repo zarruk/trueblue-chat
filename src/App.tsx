@@ -63,7 +63,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="h-screen flex w-full overflow-hidden">
       <AppSidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
-      <main className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ease-in-out ${
+      <main className={`flex-1 flex flex-col min-h-0 overflow-hidden transition-all duration-300 ease-in-out ${
         sidebarOpen ? 'lg:ml-64' : 'lg:ml-16'
       }`}>
         <header className="h-12 flex items-center justify-between border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex-shrink-0">
@@ -82,7 +82,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
             <ThemeToggle />
           </div>
         </header>
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-y-auto">
           {children}
         </div>
       </main>
