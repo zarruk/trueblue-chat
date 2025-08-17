@@ -92,33 +92,60 @@ async function executeChannelMigration() {
 export async function checkDatabaseStructure() {
   try {
     console.log('🔍 Verificando estructura de la base de datos...')
-    
-    // Verificar si existe la columna channel
-    const { data: conversations, error: convError } = await supabase
-      .from('tb_conversations')
-      .select('id, user_id, username, phone_number, channel')
-      .limit(5)
-    
-    if (convError) {
-      console.error('❌ Error consultando conversaciones:', convError)
-      return
+
+    // Comprobaciones básicas de accesibilidad de tablas
+    const [convRes, msgRes, profRes] = await Promise.all([
+      supabase.from('tb_conversations').select('id, channel').limit(1),
+      supabase.from('tb_messages').select('id').limit(1),
+      supabase.from('profiles').select('id').limit(1)
+    ])
+
+    const convOk = !('error' in convRes) || !convRes.error
+    const msgOk = !('error' in msgRes) || !msgRes.error
+    const profOk = !('error' in profRes) || !profRes.error
+
+    const tableChecks = {
+      tb_conversations: convOk,
+      tb_messages: msgOk,
+      profiles: profOk
     }
-    
-    console.log('📊 Estructura actual de conversaciones:', conversations)
-    
-    // Verificar si existe la columna channel
-    if (conversations && conversations.length > 0) {
-      const hasChannel = 'channel' in conversations[0]
-      console.log(`🔍 Columna channel existe: ${hasChannel}`)
-      
-      if (hasChannel) {
-        console.log('📊 Valores de channel encontrados:', 
-          [...new Set(conversations.map(c => c.channel))])
+
+    const totalTables = Object.values(tableChecks).filter(Boolean).length
+
+    // Extra: si pudimos leer conversaciones, revisamos si existe la columna channel
+    let channelInfo: { hasChannel: boolean; sampleValues?: string[] } | undefined
+    if (convOk && convRes.data && convRes.data.length >= 0) {
+      // Hacemos otra consulta con más campos para inspeccionar 'channel'
+      const { data: sample } = await supabase
+        .from('tb_conversations')
+        .select('channel')
+        .limit(5)
+
+      const hasChannel = Array.isArray(sample) && sample.length > 0 ? 'channel' in sample[0] : true
+      channelInfo = {
+        hasChannel,
+        sampleValues: Array.isArray(sample)
+          ? Array.from(new Set(sample.map((r: any) => r?.channel).filter(Boolean)))
+          : []
       }
     }
-    
+
+    const result = {
+      success: true,
+      tableChecks,
+      totalTables,
+      permissions: { ...tableChecks },
+      channelInfo
+    }
+
+    console.log('✅ Verificación de estructura:', result)
+    return result
   } catch (error) {
     console.error('❌ Error verificando estructura:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }
   }
 }
 
@@ -157,3 +184,4 @@ export async function checkRealTimeSimple() {
     return { success: false, error };
   }
 }
+
