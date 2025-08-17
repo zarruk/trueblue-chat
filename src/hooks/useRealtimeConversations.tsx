@@ -209,6 +209,15 @@ export function useRealtimeConversations({
           if (status === 'SUBSCRIBED') {
             console.log('✅ [REALTIME] Suscripción a mensajes activa - ESPERANDO MENSAJES')
             messagesRetryCount = 0
+          } else if (status === 'TIMED_OUT') {
+            console.warn('⏰ [REALTIME] Timeout en mensajes, reintentando...')
+            if (messagesRetryCount < maxRetries) {
+              messagesRetryCount++
+              setTimeout(() => {
+                messagesChannel.unsubscribe()
+                subscribeMessages()
+              }, 1000 * messagesRetryCount)
+            }
           } else if (status === 'CHANNEL_ERROR') {
             console.error('❌ [REALTIME] Error en la suscripción de mensajes')
             console.error('❌ [REALTIME] Detalles del error:', {
@@ -246,6 +255,15 @@ export function useRealtimeConversations({
           if (status === 'SUBSCRIBED') {
             console.log('✅ [REALTIME] Suscripción a conversaciones activa')
             conversationsRetryCount = 0
+          } else if (status === 'TIMED_OUT') {
+            console.warn('⏰ [REALTIME] Timeout en conversaciones, reintentando...')
+            if (conversationsRetryCount < maxRetries) {
+              conversationsRetryCount++
+              setTimeout(() => {
+                conversationsChannel.unsubscribe()
+                subscribeConversations()
+              }, 1000 * conversationsRetryCount)
+            }
           } else if (status === 'CHANNEL_ERROR') {
             console.error('❌ [REALTIME] Error en la suscripción de conversaciones')
             console.error('❌ [REALTIME] Detalles del error:', {

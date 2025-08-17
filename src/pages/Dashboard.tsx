@@ -25,8 +25,8 @@ export default function Dashboard() {
   } = useConversations();
   const { agents } = useAgents();
   
-  // Activar fallback de polling en staging si Realtime falla
-  const enableFallback = import.meta.env.MODE === 'staging' || import.meta.env.VITE_ENABLE_POLLING === 'true';
+  // Activar fallback de polling en staging y production (no en dev local)
+  const enableFallback = import.meta.env.MODE === 'production' || import.meta.env.VITE_ENABLE_POLLING === 'true';
   useRealtimeFallback(enableFallback);
 
   // Las conversaciones se actualizan automáticamente vía tiempo real
