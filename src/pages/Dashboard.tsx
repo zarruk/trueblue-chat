@@ -21,6 +21,7 @@ export default function Dashboard() {
     updateConversationStatus, 
     selectConversation,
     messages,
+    assignAgent,
     selectedConversationId
   } = useConversations();
   const { agents } = useAgents();
@@ -141,7 +142,10 @@ export default function Dashboard() {
                   messages={messages}
                   loading={loading}
                   onSendMessage={(conversationId, content, senderRole) => sendMessage(conversationId, content, senderRole as 'user' | 'ai' | 'agent')}
-
+                  onSelectConversation={selectConversation}
+                  onUpdateConversationStatus={updateConversationStatus}
+                  onAssignAgent={(conversationId, agentId) => assignAgent(conversationId, agentId)}
+                  conversations={conversations}
                 />
               ) : (
                 <div className="flex items-center justify-center h-full text-muted-foreground">
