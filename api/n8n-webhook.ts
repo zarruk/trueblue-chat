@@ -23,7 +23,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     // Resolver la URL del webhook de n8n desde variables de entorno
     // Preferir N8N_WEBHOOK_URL; como alternativa, aceptar VITE_N8N_WEBHOOK_URL si está definida en Vercel
-    let webhookUrl = process.env.N8N_WEBHOOK_URL || process.env.VITE_N8N_WEBHOOK_URL
+    const webhookUrl = process.env.N8N_WEBHOOK_URL || process.env.VITE_N8N_WEBHOOK_URL
 
     // Si no está configurada, retornar error explícito (evitar endpoints genéricos que no existen)
     if (!webhookUrl) {
