@@ -22,10 +22,20 @@ export function AuthForm({ mode }: AuthFormProps) {
 
     try {
       if (mode === 'login') {
-        await signInWithMagicLink(email)
-        toast.success('¡Enlace mágico enviado! Revisa tu email.')
+        const { error, message } = await signInWithMagicLink(email)
+        if (error) {
+          console.error('Auth error (magic link):', error)
+          toast.error(error?.message || 'No se pudo enviar el enlace mágico. Verifica tu correo y vuelve a intentar.')
+          return
+        }
+        toast.success(message || '¡Enlace mágico enviado! Revisa tu email.')
       } else {
-        await signUp(email, password, name)
+        const { error } = await signUp(email, password, name)
+        if (error) {
+          console.error('Auth error (sign up):', error)
+          toast.error(error?.message || 'No se pudo completar el registro. Intenta de nuevo.')
+          return
+        }
         toast.success('¡Registro exitoso! Revisa tu email para activar tu cuenta.')
       }
     } catch (error) {
