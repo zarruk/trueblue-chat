@@ -36,11 +36,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             console.log('🔍 Buscando perfil para usuario:', session.user.email);
             
             // Find profile by email (new system without user_id dependency)
-            let { data: profile, error: profileError } = await supabase
+            const { data: initialProfile, error: profileError } = await supabase
               .from('profiles')
               .select('*')
               .eq('email', session.user.email || '')
               .single();
+            let profile = initialProfile;
 
             if (profileError) {
               console.error('❌ Error buscando perfil por email:', profileError);
