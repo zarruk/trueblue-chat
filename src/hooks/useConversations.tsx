@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/integrations/supabase/client'
 import { useAuth } from './useAuth'
-import { toast } from 'sonner'
+// Notificaciones deshabilitadas
+const toast = { success: (..._args: any[]) => {}, error: (..._args: any[]) => {}, info: (..._args: any[]) => {} } as const
 import { n8nService } from '@/services/n8nService'
 import { useRealtimeConversations } from './useRealtimeConversations'
 
@@ -173,14 +174,24 @@ export function useConversations() {
         responded_by_agent_id: profile.id
       }
 
-      const { error } = await supabase
+      const { data: insertedMessage, error } = await supabase
         .from('tb_messages')
         .insert(newMessage)
+        .select('*')
+        .single()
 
       if (error) {
         console.error('Error sending message:', error)
         toast.error('Error al enviar el mensaje')
         return
+      }
+
+      // Optimistic: agregar inmediatamente el mensaje al estado si es la conversación activa
+      if (insertedMessage && conversationId === selectedConversationId) {
+        setMessages(prev => {
+          if (prev.some(m => m.id === insertedMessage.id)) return prev
+          return [...prev, insertedMessage as unknown as Message]
+        })
       }
 
       // Update conversation status to active_human if it was pending
@@ -193,6 +204,22 @@ export function useConversations() {
           assigned_agent_name: profile.name
         })
         .eq('id', conversationId)
+
+      // Actualizar inmediatamente la conversación en lista
+      setConversations(prevConversations => prevConversations.map(conv =>
+        conv.id === conversationId
+          ? { 
+              ...conv,
+              status: 'active_human',
+              assigned_agent_id: profile.id,
+              assigned_agent_email: profile.email,
+              assigned_agent_name: profile.name,
+              last_message_sender_role: senderRole,
+              last_message_at: insertedMessage?.created_at || new Date().toISOString(),
+              updated_at: insertedMessage?.created_at || new Date().toISOString()
+            }
+          : conv
+      ))
 
       // Si el mensaje es enviado por un agente, enviarlo al webhook de n8n
       if (senderRole === 'agent') {
@@ -251,7 +278,7 @@ export function useConversations() {
       console.error('Error sending message:', error)
       toast.error('Error al enviar el mensaje')
     }
-  }, [user, profile])
+  }, [user, profile, selectedConversationId])
 
   // Update conversation status
   const updateConversationStatus = useCallback(async (
@@ -309,6 +336,7 @@ export function useConversations() {
       }
 
       console.log('✅ Estado de conversación actualizado exitosamente en BD')
+      // Mostrar una sola notificación centralizada; ChatWindow no duplicará el toast
       toast.success('Estado actualizado exitosamente')
       
     } catch (error) {
