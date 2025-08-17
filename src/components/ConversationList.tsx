@@ -105,10 +105,13 @@ export function ConversationList({ onSelectConversation, selectedConversationId,
   }
 
   const getConversationPreview = (conversation: any) => {
+    if (conversation.last_message_content) {
+      return conversation.last_message_content
+    }
     if (conversation.summary) {
       return conversation.summary
     }
-    return conversation.username || conversation.user_id || 'Sin nombre'
+    return 'Sin mensajes'
   }
 
   const getTimeAgo = (dateString: string) => {
@@ -288,6 +291,12 @@ export function ConversationList({ onSelectConversation, selectedConversationId,
                           }`}>
                             {conversation.username || conversation.user_id}
                           </h4>
+                          {/* Mostrar canal si existe */}
+                          {conversation.channel && (
+                            <Badge variant="outline" className="text-[10px] py-0 px-1">
+                              {conversation.channel}
+                            </Badge>
+                          )}
                           {isUrgent && (
                             <div className="flex items-center space-x-1">
                               <div className={`w-2 h-2 rounded-full animate-pulse ${
