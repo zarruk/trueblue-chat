@@ -104,7 +104,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signInWithMagicLink = async (email: string) => {
-    const redirectUrl = `${window.location.origin}/`;
+    // Use environment variable for redirect URL, fallback to current origin
+    const redirectUrl = import.meta.env.VITE_APP_URL || `${window.location.origin}/`;
     
     const { error } = await supabase.auth.signInWithOtp({
       email,
@@ -125,7 +126,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = async (email: string, password: string, name: string) => {
     try {
-      const redirectUrl = `${window.location.origin}/`;
+      // Use environment variable for redirect URL, fallback to current origin
+      const redirectUrl = import.meta.env.VITE_APP_URL || `${window.location.origin}/`;
       
       const { error } = await supabase.auth.signUp({
         email,
