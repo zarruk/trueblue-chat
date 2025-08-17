@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { Send, Paperclip, Smile, ChevronDown } from 'lucide-react'
+import { Send, Paperclip, Smile, ChevronDown, PanelRightOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -17,6 +17,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useAgents } from '@/hooks/useAgents'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { supabase } from '@/integrations/supabase/client'
 // Notificaciones deshabilitadas
 const toast = { success: (..._args: any[]) => {}, error: (..._args: any[]) => {}, info: (..._args: any[]) => {} } as const
 
@@ -29,6 +30,8 @@ interface ChatWindowProps {
   onUpdateConversationStatus?: (conversationId: string, status: Conversation['status']) => Promise<void>
   onAssignAgent?: (conversationId: string, agentId: string) => Promise<void>
   conversations?: Conversation[]
+  showContextToggle?: boolean
+  onToggleContext?: () => void
 }
 
 interface Message {
@@ -53,7 +56,7 @@ interface Conversation {
   updated_at: string
 }
 
-export function ChatWindow({ conversationId, messages: propMessages, loading: propLoading, onSendMessage, onSelectConversation, onUpdateConversationStatus, onAssignAgent, conversations: propConversations }: ChatWindowProps) {
+export function ChatWindow({ conversationId, messages: propMessages, loading: propLoading, onSendMessage, onSelectConversation, onUpdateConversationStatus, onAssignAgent, conversations: propConversations, showContextToggle, onToggleContext }: ChatWindowProps) {
   const [message, setMessage] = useState('')
   const [localMessages, setLocalMessages] = useState<Message[]>([])
   const [updatingStatus, setUpdatingStatus] = useState(false)
@@ -93,6 +96,83 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   useEffect(() => {
     setLocalMessages(propMessages || [])
   }, [propMessages])
+
+  // Realtime subscription scoped to this conversation as a fail-safe
+  useEffect(() => {
+    if (!conversationId) return
+
+    const channel = supabase
+      .channel(`chat-window-messages-${conversationId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'tb_messages', filter: `conversation_id=eq.${conversationId}` },
+        (payload) => {
+          const newMessage = payload.new as unknown as Message
+          setLocalMessages(prev => {
+            if (prev.some(m => m.id === newMessage.id)) return prev
+            return [...prev, newMessage]
+          })
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'tb_messages', filter: `conversation_id=eq.${conversationId}` },
+        (payload) => {
+          const updatedMessage = payload.new as unknown as Message
+          setLocalMessages(prev => prev.map(m => m.id === updatedMessage.id ? updatedMessage : m))
+        }
+      )
+
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        console.log('✅ [ChatWindow] Suscripción en tiempo real activa para conversación', conversationId)
+      }
+    })
+
+    return () => {
+      channel.unsubscribe()
+    }
+  }, [conversationId])
+
+  // Polling de respaldo cada 2.5s para garantizar mensajes en tiempo real si falla la suscripción
+  useEffect(() => {
+    if (!conversationId) return
+
+    let isCancelled = false
+    const interval = setInterval(async () => {
+      try {
+        const { data, error } = await supabase
+          .from('tb_messages')
+          .select('*')
+          .eq('conversation_id', conversationId)
+          .order('created_at', { ascending: true })
+
+        if (error) {
+          console.error('❌ [ChatWindow] Polling mensajes error:', error)
+          return
+        }
+
+        if (!isCancelled && Array.isArray(data)) {
+          setLocalMessages(prev => {
+            if (prev.length === data.length) return prev
+            // Merge simple por id
+            const byId = new Map(prev.map(m => [m.id, m]))
+            for (const m of data as any[]) {
+              byId.set(m.id, m as any)
+            }
+            return Array.from(byId.values()).sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+          })
+        }
+      } catch (e) {
+        console.error('❌ [ChatWindow] Polling mensajes excepción:', e)
+      }
+    }, 2500)
+
+    return () => {
+      isCancelled = true
+      clearInterval(interval)
+    }
+  }, [conversationId])
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
     if (messagesEndRef.current) {
@@ -248,7 +328,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       }
     }
     return {
-      name: msg.sender_role === 'user' ? 'Usuario' : 'AI',
+      name: msg.sender_role === 'user' ? 'Usuario' : 'IA',
       avatar: undefined,
       isCurrentUser: false
     }
@@ -304,8 +384,20 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
             </div>
           </div>
           
-          {/* Status Selector */}
+          {/* Status Selector and Context Toggle */}
           <div className="flex items-center space-x-4">
+            {showContextToggle && onToggleContext && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onToggleContext}
+                className="hidden xl:flex items-center gap-2"
+              >
+                <PanelRightOpen className="h-4 w-4" />
+                Contexto
+              </Button>
+            )}
+            
             <div className="flex flex-col items-end space-y-1">
               <label className="text-xs text-muted-foreground font-medium">
                 Estado de la conversación
@@ -474,15 +566,20 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                     
                     <div className={`rounded-lg px-4 py-2 ${
                       msg.sender_role === 'user'
-                        ? 'bg-muted' 
-                        : 'bg-primary text-primary-foreground'
+                        ? 'bg-muted'
+                        : 'bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 text-white dark:from-indigo-500 dark:via-violet-500 dark:to-fuchsia-500'
                     }`}>
                       <p className="text-sm">{msg.content}</p>
                       <p className={`text-xs mt-1 ${
                         msg.sender_role === 'user'
                           ? 'text-muted-foreground'
-                          : 'text-primary-foreground/70'
+                          : 'text-white/80'
                       }`}>
+                        {msg.sender_role !== 'user' && (
+                          <>
+                            {(msg.agent_name && msg.agent_name.trim()) || (msg.sender_role === 'agent' ? 'Agente' : 'IA')} ·{' '}
+                          </>
+                        )}
                         {format(new Date(msg.created_at), 'HH:mm', { locale: es })}
                       </p>
                     </div>

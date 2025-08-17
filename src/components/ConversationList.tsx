@@ -265,9 +265,9 @@ export function ConversationList({ onSelectConversation, selectedConversationId,
                 <div
                   key={conversation.id}
                   className={`
-                    conversation-card relative p-3 rounded-lg cursor-pointer transition-all duration-200 border
+                    conversation-card relative p-3 rounded-lg cursor-pointer transition-all duration-200 border overflow-hidden
                     ${isSelected 
-                      ? 'selected bg-primary text-primary-foreground border-primary shadow-lg' 
+                      ? 'selected text-primary-foreground border-transparent shadow-lg bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 dark:from-indigo-500 dark:via-violet-500 dark:to-fuchsia-500' 
                       : 'hover:bg-accent hover:border-accent-foreground/20 hover:shadow-md'
                     }
                     ${urgencyType === 'unassigned'

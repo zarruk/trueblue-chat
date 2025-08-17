@@ -53,7 +53,7 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AppLayout({ children }: { children: React.ReactNode }) {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   
   useEffect(() => {
     // Verificar y agregar la columna channel si es necesario
@@ -64,7 +64,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="h-screen flex w-full overflow-hidden">
       <AppSidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
       <main className={`flex-1 flex flex-col min-h-0 overflow-hidden transition-all duration-300 ease-in-out ${
-        sidebarOpen ? 'lg:ml-64' : 'lg:ml-16'
+        sidebarOpen ? 'ml-64' : 'ml-0'
       }`}>
         <header className="h-12 flex items-center justify-between border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex-shrink-0">
           <div className="flex items-center">
@@ -72,7 +72,8 @@ function AppLayout({ children }: { children: React.ReactNode }) {
               variant="ghost" 
               size="icon" 
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="lg:hidden mr-2"
+              className="mr-2"
+              title={sidebarOpen ? "Ocultar sidebar" : "Mostrar sidebar"}
             >
               <Menu className="h-5 w-5" />
             </Button>

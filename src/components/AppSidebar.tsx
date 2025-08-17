@@ -191,8 +191,8 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
   // Desktop sidebar
   return (
     <div className={`
-      hidden lg:flex lg:flex-col lg:fixed lg:inset-y-0 transition-all duration-300 ease-in-out
-      ${isOpen ? 'lg:w-64' : 'lg:w-16'}
+      hidden lg:flex lg:flex-col lg:fixed lg:inset-y-0 transition-all duration-300 ease-in-out z-30
+      ${isOpen ? 'lg:w-64' : 'lg:w-0 lg:overflow-hidden'}
     `}>
       <SidebarContent />
     </div>
