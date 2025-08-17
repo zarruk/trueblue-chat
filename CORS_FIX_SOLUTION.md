@@ -56,3 +56,32 @@ Los cambios se despliegan automáticamente cuando se hace push a las ramas corre
 - `main` → Despliega a producción
 
 No se requiere configuración adicional en Vercel, las funciones API se detectan y despliegan automáticamente.
+
+## Solución de Problemas
+
+### Error "Invalid route destination segment" en Vercel
+
+Si encuentras este error al desplegar, asegúrate de que:
+
+1. La función API usa el módulo `https` nativo en lugar de `fetch` global
+2. El archivo `vercel.json` incluye la configuración de funciones:
+   ```json
+   "functions": {
+     "api/n8n-webhook.ts": {
+       "maxDuration": 10
+     }
+   }
+   ```
+3. Las rutas están configuradas correctamente en `vercel.json`:
+   ```json
+   "rewrites": [
+     {
+       "source": "/api/(.*)",
+       "destination": "/api/$1"
+     },
+     {
+       "source": "/(.*)",
+       "destination": "/index.html"
+     }
+   ]
+   ```
