@@ -22,12 +22,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     // Obtener la URL del webhook de n8n desde las variables de entorno
-    const webhookUrl = process.env.VITE_N8N_WEBHOOK_URL || 'https://aztec.app.n8n.cloud/webhook/tb_local'
+    // En Vercel Functions, las variables VITE_ no están disponibles, usar N8N_WEBHOOK_URL
+    // IMPORTANTE: Debes configurar N8N_WEBHOOK_URL en las variables de entorno de Vercel
+    let webhookUrl = process.env.N8N_WEBHOOK_URL
+    
+    // Si no está configurada la variable, usar la URL correcta según el entorno
+    if (!webhookUrl) {
+      // Detectar el entorno basándose en VERCEL_ENV o la URL
+      const isProduction = process.env.VERCEL_ENV === 'production' || 
+                          (req.headers.host && req.headers.host.includes('trueblue.azteclab.co') && !req.headers.host.includes('staging'))
+      
+      webhookUrl = isProduction 
+        ? 'https://aztec.app.n8n.cloud/webhook/production'
+        : 'https://aztec.app.n8n.cloud/webhook/staging'
+    }
     
     console.log('🔄 Proxy n8n webhook:', {
       url: webhookUrl,
       body: req.body,
-      method: req.method
+      method: req.method,
+      env: {
+        N8N_WEBHOOK_URL: process.env.N8N_WEBHOOK_URL ? 'SET' : 'NOT SET',
+        VITE_N8N_WEBHOOK_URL: process.env.VITE_N8N_WEBHOOK_URL ? 'SET' : 'NOT SET'
+      }
     })
 
     // Usar el módulo https nativo para evitar problemas con fetch
