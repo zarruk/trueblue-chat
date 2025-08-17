@@ -1,6 +1,20 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // Habilitar CORS
+  res.setHeader('Access-Control-Allow-Credentials', 'true')
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT')
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
+  )
+
+  // Manejar OPTIONS para CORS preflight
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end()
+  }
+
   // Solo permitir POST
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
@@ -16,37 +30,53 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       method: req.method
     })
 
-    // Hacer la petición a n8n
-    const response = await fetch(webhookUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(req.body),
-    })
-
-    const responseText = await response.text()
+    // Usar el módulo https nativo para evitar problemas con fetch
+    const https = await import('https')
+    const url = new URL(webhookUrl)
     
-    console.log('📡 Respuesta de n8n:', {
-      status: response.status,
-      statusText: response.statusText,
-      body: responseText
+    const responseData = await new Promise<string>((resolve, reject) => {
+      const postData = JSON.stringify(req.body)
+      
+      const options = {
+        hostname: url.hostname,
+        port: 443,
+        path: url.pathname,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData)
+        }
+      }
+      
+      const request = https.request(options, (response) => {
+        let data = ''
+        
+        response.on('data', (chunk) => {
+          data += chunk
+        })
+        
+        response.on('end', () => {
+          if (response.statusCode && response.statusCode >= 200 && response.statusCode < 300) {
+            resolve(data)
+          } else {
+            reject(new Error(`HTTP ${response.statusCode}: ${data}`))
+          }
+        })
+      })
+      
+      request.on('error', reject)
+      request.write(postData)
+      request.end()
     })
 
-    // Si la respuesta no es OK, devolver el error
-    if (!response.ok) {
-      return res.status(response.status).json({
-        error: `n8n webhook error: ${response.statusText}`,
-        details: responseText
-      })
-    }
+    console.log('📡 Respuesta de n8n:', responseData)
 
     // Intentar parsear como JSON, si falla devolver el texto
     try {
-      const data = JSON.parse(responseText)
+      const data = JSON.parse(responseData)
       return res.status(200).json(data)
     } catch {
-      return res.status(200).send(responseText)
+      return res.status(200).send(responseData)
     }
     
   } catch (error) {

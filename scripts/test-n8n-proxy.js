@@ -1,5 +1,4 @@
 // Script para probar el proxy de n8n
-import fetch from 'node-fetch'
 
 const TEST_URL = 'http://localhost:3000/api/n8n-webhook'
 

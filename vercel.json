@@ -3,10 +3,15 @@
   "buildCommand": "npm run type-check && if [ \"$VERCEL_ENV\" = \"production\" ]; then npm run build:production; else npm run build:staging; fi",
   "outputDirectory": "dist",
   "framework": "vite",
+  "functions": {
+    "api/n8n-webhook.ts": {
+      "maxDuration": 10
+    }
+  },
   "rewrites": [
     {
-      "source": "/api/n8n-webhook",
-      "destination": "https://aztec.app.n8n.cloud/webhook/:env"
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
     },
     {
       "source": "/(.*)",
