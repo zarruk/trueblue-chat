@@ -15,7 +15,7 @@ export interface N8nWebhookResponse {
 }
 
 class N8nService {
-  private webhookUrl = 'https://aztec.app.n8n.cloud/webhook/feb40c09-7947-4523-a263-9647125a03ec'
+  private webhookUrl = import.meta.env.VITE_N8N_WEBHOOK_URL || 'https://aztec.app.n8n.cloud/webhook/webhook_tb_local'
 
   /**
    * Envía un mensaje al webhook de n8n para que sea procesado y enrutado

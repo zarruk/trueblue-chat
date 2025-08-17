@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Send, Paperclip, Smile, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { 
@@ -24,7 +25,6 @@ interface ChatWindowProps {
   messages?: any[]
   loading?: boolean
   onSendMessage?: (conversationId: string, content: string, role: string) => Promise<void>
-  onForceRefresh?: () => Promise<void>
 }
 
 interface Message {
@@ -49,7 +49,7 @@ interface Conversation {
   updated_at: string
 }
 
-export function ChatWindow({ conversationId, messages: propMessages, loading: propLoading, onSendMessage, onForceRefresh }: ChatWindowProps) {
+export function ChatWindow({ conversationId, messages: propMessages, loading: propLoading, onSendMessage }: ChatWindowProps) {
   const [message, setMessage] = useState('')
   const [localMessages, setLocalMessages] = useState<Message[]>([])
   const [updatingStatus, setUpdatingStatus] = useState(false)
@@ -155,14 +155,9 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       console.log('✅ ChatWindow: Status actualizado')
       
       // 🚀 FORZAR ACTUALIZACIÓN INMEDIATA DE CONVERSACIONES
-      console.log('🔄 ChatWindow: Forzando re-fetch de conversaciones para sincronización inmediata')
-      await fetchConversations()
+      // Las conversaciones se actualizan automáticamente vía tiempo real
       
-      // 🚀 FORZAR TAMBIÉN DESDE DASHBOARD (TRIPLE GARANTÍA)
-      if (onForceRefresh) {
-        console.log('🔄 ChatWindow: Forzando refresh desde Dashboard también')
-        await onForceRefresh()
-      }
+      // Los cambios se reflejan automáticamente vía tiempo real
       
     } catch (error) {
       console.error('❌ ChatWindow: Error updating conversation status:', error)
@@ -195,14 +190,9 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       }
       
       // 🚀 FORZAR ACTUALIZACIÓN INMEDIATA DE CONVERSACIONES
-      console.log('🔄 ChatWindow: Forzando re-fetch de conversaciones para sincronización inmediata')
-      await fetchConversations()
+      // Las conversaciones se actualizan automáticamente vía tiempo real
       
-      // 🚀 FORZAR TAMBIÉN DESDE DASHBOARD (TRIPLE GARANTÍA)
-      if (onForceRefresh) {
-        console.log('🔄 ChatWindow: Forzando refresh desde Dashboard también')
-        await onForceRefresh()
-      }
+      // Los cambios se reflejan automáticamente vía tiempo real
       
     } catch (error) {
       console.error('❌ ChatWindow: Error al asignar/desasignar agente:', error)
@@ -292,9 +282,9 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-background">
+    <div className="h-full flex flex-col bg-background overflow-hidden">
       {/* Chat Header */}
-      <div className="border-b px-6 py-4">
+      <div className="border-b px-6 py-4 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <Avatar className="h-10 w-10">
@@ -461,12 +451,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
         
         <div 
           ref={messagesContainerRef} 
-          className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-4 chat-messages-scroll"
-          style={{ 
-            height: '400px',
-            maxHeight: '400px',
-            minHeight: '400px'
-          }}
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain p-6 space-y-4 chat-messages-scroll"
         >
           {loading ? (
             <div className="flex items-center justify-center h-full">
@@ -518,20 +503,36 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       </div>
 
       {/* Message Input */}
-      <div className="border-t p-4">
-        <form onSubmit={handleSendMessage} className="flex items-center space-x-2">
+      <div className="border-t p-4 flex-shrink-0">
+        <form onSubmit={handleSendMessage} className="flex items-end space-x-2">
           <Button type="button" variant="ghost" size="icon" className="flex-shrink-0">
             <Paperclip className="h-4 w-4" />
           </Button>
           <Button type="button" variant="ghost" size="icon" className="flex-shrink-0">
             <Smile className="h-4 w-4" />
           </Button>
-          <Input
+          <Textarea
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             placeholder="Escribe un mensaje..."
-            className="flex-1"
+            className="flex-1 min-h-[40px] max-h-[120px] resize-none"
             disabled={!conversationId}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                handleSendMessage(e as any)
+              }
+            }}
+            rows={1}
+            style={{
+              height: 'auto',
+              minHeight: '40px'
+            }}
+            onInput={(e) => {
+              const target = e.target as HTMLTextAreaElement
+              target.style.height = 'auto'
+              target.style.height = Math.min(target.scrollHeight, 120) + 'px'
+            }}
           />
           <Button type="submit" size="icon" disabled={!message.trim() || !conversationId}>
             <Send className="h-4 w-4" />

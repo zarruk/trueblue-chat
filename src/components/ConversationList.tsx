@@ -6,28 +6,28 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { useConversations } from '@/hooks/useConversations'
-
+import { Conversation } from '@/hooks/useConversations'
 
 interface ConversationListProps {
   onSelectConversation: (conversationId: string) => void
   selectedConversationId?: string
+  conversations: Conversation[]
+  loading: boolean
 }
 
 type ConversationStatus = 'active_ai' | 'active_human' | 'closed' | 'pending_human'
 
 const statusConfig = {
-  active_ai: { label: 'AI Activo', icon: Clock, variant: 'secondary' as const, color: 'text-blue-600' },
-  active_human: { label: 'Humano Activo', icon: MessageSquare, variant: 'default' as const, color: 'text-green-600' },
-  pending_human: { label: 'Pendiente', icon: AlertCircle, variant: 'destructive' as const, color: 'text-orange-600' },
-  closed: { label: 'Cerrado', icon: CheckCircle, variant: 'outline' as const, color: 'text-gray-600' }
+  active_ai: { label: 'AI Activo', icon: Clock, variant: 'secondary' as const, color: 'text-blue-500 dark:text-blue-400' },
+  active_human: { label: 'Humano Activo', icon: MessageSquare, variant: 'default' as const, color: 'text-green-500 dark:text-green-400' },
+  pending_human: { label: 'Pendiente', icon: AlertCircle, variant: 'destructive' as const, color: 'text-orange-500 dark:text-orange-400' },
+  closed: { label: 'Cerrado', icon: CheckCircle, variant: 'outline' as const, color: 'text-gray-500 dark:text-gray-400' }
 }
 
-export function ConversationList({ onSelectConversation, selectedConversationId }: ConversationListProps) {
+export function ConversationList({ onSelectConversation, selectedConversationId, conversations, loading }: ConversationListProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<ConversationStatus | 'all'>('all')
   const [agentFilter, setAgentFilter] = useState<string>('all')
-  const { conversations, loading } = useConversations()
 
   // Log para debugging de re-renderizado
   console.log('🔄 ConversationList: Re-renderizando con conversaciones:', conversations.length)
@@ -70,9 +70,6 @@ export function ConversationList({ onSelectConversation, selectedConversationId 
   }
 
   const filteredConversations = useMemo(() => {
-    // Crear un hash de las conversaciones para forzar recálculo cuando cambien
-    const conversationsHash = conversations.map(c => `${c.id}-${c.status}-${c.updated_at}-${c.assigned_agent_id || 'none'}-${c.assigned_agent_name || 'none'}-${c.last_message_sender_role || 'none'}`).join(',')
-    
     const filtered = conversations.filter(conversation => {
       const matchesSearch = 
         conversation.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -85,26 +82,19 @@ export function ConversationList({ onSelectConversation, selectedConversationId 
       return matchesSearch && matchesStatus && matchesAgent
     })
 
-    // 🔥 ORDENAMIENTO CON PRIORIDAD PARA CONVERSACIONES PENDIENTES
+    // Orden estricto: más recientes por último mensaje primero
     const sorted = filtered.sort((a, b) => {
-      const aUrgent = needsUrgentResponse(a)
-      const bUrgent = needsUrgentResponse(b)
-      
-      // 1. Prioridad: Conversaciones pendientes de respuesta primero
-      if (aUrgent && !bUrgent) return -1
-      if (!aUrgent && bUrgent) return 1
-      
-      // 2. Orden secundario: Más recientes primero
-      const aTime = new Date(a.updated_at).getTime()
-      const bTime = new Date(b.updated_at).getTime()
+      const aRef = a.last_message_at || a.updated_at
+      const bRef = b.last_message_at || b.updated_at
+      const aTime = new Date(aRef).getTime()
+      const bTime = new Date(bRef).getTime()
       return bTime - aTime
     })
     
     console.log('🔄 ConversationList: Filtrando y ordenando conversaciones:', {
       total: conversations.length,
       filtered: filtered.length,
-      urgentCount: sorted.filter(needsUrgentResponse).length,
-      conversationsHash: conversationsHash.substring(0, 100) + '...'
+      urgentCount: sorted.filter(needsUrgentResponse).length
     })
     
     return sorted
@@ -264,17 +254,17 @@ export function ConversationList({ onSelectConversation, selectedConversationId 
               
               return (
                 <div
-                  key={`${conversation.id}-${conversation.status}-${conversation.updated_at}-${conversation.assigned_agent_id || 'none'}-${conversation.assigned_agent_name || 'none'}-${conversation.last_message_sender_role || 'none'}`}
+                  key={conversation.id}
                   className={`
-                    relative p-3 rounded-lg cursor-pointer transition-colors border
+                    conversation-card relative p-3 rounded-lg cursor-pointer transition-all duration-200 border
                     ${isSelected 
-                      ? 'bg-primary text-primary-foreground border-primary' 
-                      : 'hover:bg-accent hover:border-accent-foreground/20'
+                      ? 'selected bg-primary text-primary-foreground border-primary shadow-lg' 
+                      : 'hover:bg-accent hover:border-accent-foreground/20 hover:shadow-md'
                     }
                     ${urgencyType === 'unassigned'
-                      ? 'border-l-4 border-l-red-500 bg-red-50 hover:bg-red-100'
+                      ? 'urgent-unassigned border-l-4 border-l-red-500 bg-red-50 dark:bg-gradient-to-r dark:from-red-950/20 dark:to-card hover:bg-red-100 dark:hover:from-red-950/30'
                       : urgencyType === 'awaiting_response'
-                      ? 'border-l-4 border-l-orange-500 bg-orange-50 hover:bg-orange-100'
+                      ? 'urgent-awaiting border-l-4 border-l-orange-500 bg-orange-50 dark:bg-gradient-to-r dark:from-orange-950/20 dark:to-card hover:bg-orange-100 dark:hover:from-orange-950/30'
                       : ''
                     }
                   `}
@@ -318,7 +308,7 @@ export function ConversationList({ onSelectConversation, selectedConversationId 
                         <span className={`text-xs ${
                           isSelected ? 'text-primary-foreground/70' : 'text-muted-foreground'
                         }`}>
-                          {getTimeAgo(conversation.updated_at)}
+                          {getTimeAgo(conversation.last_message_at || conversation.updated_at)}
                         </span>
                       </div>
                       
@@ -329,7 +319,15 @@ export function ConversationList({ onSelectConversation, selectedConversationId 
                       </p>
                       
                       <div className="flex items-center justify-between">
-                        <Badge variant={statusConfig.variant} className="text-xs">
+                        <Badge 
+                          variant={statusConfig.variant} 
+                          className={`text-xs ${
+                            conversation.status === 'active_ai' ? 'badge-ai-active' :
+                            conversation.status === 'active_human' ? 'badge-human-active' :
+                            conversation.status === 'pending_human' ? 'badge-pending' :
+                            'badge-closed'
+                          }`}
+                        >
                           <statusConfig.icon className="h-3 w-3 mr-1" />
                           {statusConfig.label}
                         </Badge>

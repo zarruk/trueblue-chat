@@ -109,6 +109,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Habilitar Realtime para las tablas necesarias
+ALTER PUBLICATION supabase_realtime ADD TABLE tb_conversations;
+ALTER PUBLICATION supabase_realtime ADD TABLE tb_messages;
+ALTER PUBLICATION supabase_realtime ADD TABLE profiles;
+
 -- Función para obtener el rol del usuario actual
 CREATE OR REPLACE FUNCTION get_current_user_role()
 RETURNS app_role AS $$
