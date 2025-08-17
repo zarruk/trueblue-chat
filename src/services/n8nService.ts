@@ -121,7 +121,7 @@ class N8nService {
     agentId: string, // Cambiar de agentEmail a agentId
     agentName: string
   ): N8nWebhookPayload {
-    const channel = this.detectChannel(conversation)
+    const channel = this.detectChannel(conversation).toLowerCase()
     
     // El chatId debe ser el user_id de la conversación (identificador del usuario en el canal de origen)
     const chatId = conversation.user_id

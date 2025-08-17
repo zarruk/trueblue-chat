@@ -21,20 +21,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // Obtener la URL del webhook de n8n desde las variables de entorno
-    // En Vercel Functions, las variables VITE_ no están disponibles, usar N8N_WEBHOOK_URL
-    // IMPORTANTE: Debes configurar N8N_WEBHOOK_URL en las variables de entorno de Vercel
-    let webhookUrl = process.env.N8N_WEBHOOK_URL
-    
-    // Si no está configurada la variable, usar la URL correcta según el entorno
+    // Resolver la URL del webhook de n8n desde variables de entorno
+    // Preferir N8N_WEBHOOK_URL; como alternativa, aceptar VITE_N8N_WEBHOOK_URL si está definida en Vercel
+    let webhookUrl = process.env.N8N_WEBHOOK_URL || process.env.VITE_N8N_WEBHOOK_URL
+
+    // Si no está configurada, retornar error explícito (evitar endpoints genéricos que no existen)
     if (!webhookUrl) {
-      // Detectar el entorno basándose en VERCEL_ENV o la URL
-      const isProduction = process.env.VERCEL_ENV === 'production' || 
-                          (req.headers.host && req.headers.host.includes('trueblue.azteclab.co') && !req.headers.host.includes('staging'))
-      
-      webhookUrl = isProduction 
-        ? 'https://aztec.app.n8n.cloud/webhook/production'
-        : 'https://aztec.app.n8n.cloud/webhook/staging'
+      console.error('❌ N8N_WEBHOOK_URL no está configurada. Configura N8N_WEBHOOK_URL (o VITE_N8N_WEBHOOK_URL) en Vercel con la Production URL del workflow activo.')
+      return res.status(500).json({
+        error: 'Missing configuration',
+        message: 'N8N_WEBHOOK_URL no está configurada. Define la Production URL del workflow activo en las variables de entorno.'
+      })
     }
     
     console.log('🔄 Proxy n8n webhook:', {
