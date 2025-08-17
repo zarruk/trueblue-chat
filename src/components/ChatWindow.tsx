@@ -14,7 +14,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useAuth } from '@/hooks/useAuth'
-import { useConversations } from '@/hooks/useConversations'
 import { useAgents } from '@/hooks/useAgents'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -25,6 +24,10 @@ interface ChatWindowProps {
   messages?: any[]
   loading?: boolean
   onSendMessage?: (conversationId: string, content: string, role: string) => Promise<void>
+  onSelectConversation?: (conversationId: string) => void
+  onUpdateConversationStatus?: (conversationId: string, status: Conversation['status']) => Promise<void>
+  onAssignAgent?: (conversationId: string, agentId: string) => Promise<void>
+  conversations?: Conversation[]
 }
 
 interface Message {
@@ -49,7 +52,7 @@ interface Conversation {
   updated_at: string
 }
 
-export function ChatWindow({ conversationId, messages: propMessages, loading: propLoading, onSendMessage }: ChatWindowProps) {
+export function ChatWindow({ conversationId, messages: propMessages, loading: propLoading, onSendMessage, onSelectConversation, onUpdateConversationStatus, onAssignAgent, conversations: propConversations }: ChatWindowProps) {
   const [message, setMessage] = useState('')
   const [localMessages, setLocalMessages] = useState<Message[]>([])
   const [updatingStatus, setUpdatingStatus] = useState(false)
@@ -57,28 +60,18 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const { profile } = useAuth()
-  const { 
-    sendMessage: hookSendMessage, 
-    messages: hookMessages, 
-    loading: hookLoading, 
-    fetchMessages,
-    fetchConversations,
-    updateConversationStatus,
-    conversations,
-    assignAgent,
-    selectConversation
-  } = useConversations()
   const { getAvailableAgents } = useAgents()
 
-  // Use prop messages if provided, otherwise use hook messages
-  const messages = propMessages || hookMessages
-  const loading = propLoading !== undefined ? propLoading : hookLoading
+  // Usar props como fuente de verdad
+  const messages = propMessages || []
+  const loading = propLoading !== undefined ? propLoading : false
 
   // Obtener la conversación actual directamente del hook para sincronización inmediata
   const conversation = useMemo(() => {
-    if (!conversationId || !conversations) return null
-    return conversations.find(conv => conv.id === conversationId) || null
-  }, [conversationId, conversations])
+    const source = propConversations
+    if (!conversationId || !source) return null
+    return source.find(conv => conv.id === conversationId) || null
+  }, [conversationId, propConversations])
 
   // Obtener lista de agentes disponibles para asignación
   const availableAgents = useMemo(() => {
@@ -87,11 +80,13 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
 
   // Sincronizar conversación seleccionada y cargar mensajes cuando cambia conversationId
   useEffect(() => {
-    if (conversationId && selectConversation) {
+    if (!conversationId) return
+    const selectFn = onSelectConversation
+    if (selectFn) {
       console.log('🔄 ChatWindow: Selecting conversation for realtime + loading messages:', conversationId)
-      selectConversation(conversationId)
+      selectFn(conversationId)
     }
-  }, [conversationId, selectConversation])
+  }, [conversationId, onSelectConversation])
 
   // Update local messages when messages change
   useEffect(() => {
@@ -132,12 +127,8 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     if (!message.trim() || !conversationId) return
 
     try {
-      // Use prop onSendMessage if provided, otherwise use hook
-      if (onSendMessage) {
-        await onSendMessage(conversationId, message, 'agent')
-      } else {
-        await hookSendMessage(conversationId, message, 'agent')
-      }
+      if (!onSendMessage) throw new Error('onSendMessage no definido')
+      await onSendMessage(conversationId, message, 'agent')
       setMessage('')
     } catch (error) {
       console.error('Error sending message:', error)
@@ -145,13 +136,14 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   }
 
   const handleStatusChange = async (newStatus: string) => {
-    if (!conversationId || !updateConversationStatus) return
+    if (!conversationId) return
 
     try {
       setUpdatingStatus(true)
       console.log('🔄 ChatWindow: Iniciando cambio de estado:', { conversationId, newStatus })
       
-      await updateConversationStatus(conversationId, newStatus as Conversation['status'])
+      if (!onUpdateConversationStatus) throw new Error('onUpdateConversationStatus no definido')
+      await onUpdateConversationStatus(conversationId, newStatus as Conversation['status'])
       
       console.log('✅ ChatWindow: Status actualizado')
       
@@ -177,7 +169,8 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       if (agentId === "none") {
         // Desasignar conversación - cambiar a IA
         console.log('🤖 ChatWindow: Desasignando conversación (cambiar a IA):', conversationId)
-        await updateConversationStatus(conversationId, 'active_ai')
+        if (!onUpdateConversationStatus) throw new Error('onUpdateConversationStatus no definido')
+        await onUpdateConversationStatus(conversationId, 'active_ai')
         console.log('✅ ChatWindow: Conversación desasignada exitosamente')
         toast.success('Conversación desasignada y regresada a IA')
       } else {
@@ -185,7 +178,8 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
         console.log('👤 ChatWindow: Asignando agente:', { conversationId, agentId })
         const agent = availableAgents.find(a => a.id === agentId)
         console.log('🔍 ChatWindow: Agente encontrado:', agent)
-        await assignAgent(conversationId, agentId)
+        if (!onAssignAgent) throw new Error('onAssignAgent no definido')
+        await onAssignAgent(conversationId, agentId)
         console.log('✅ ChatWindow: Agente asignado exitosamente')
         toast.success('Agente asignado exitosamente')
       }
@@ -394,10 +388,10 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                   console.log('🎯 ChatWindow: profile.id:', profile.id)
                   console.log('🎯 ChatWindow: Estado actual de la conversación ANTES:', conversation)
                   
-                  // Asignar la conversación al agente actual
-                  await assignAgent(conversationId, profile.id)
+                  // Asignar la conversación al agente actual usando el flujo unificado
+                  await handleAssignAgent(profile.id)
                   
-                  console.log('🎯 ChatWindow: assignAgent completado exitosamente')
+                  console.log('🎯 ChatWindow: handleAssignAgent completado exitosamente')
                   
                   // Verificar el estado después de un breve delay
                   setTimeout(() => {
@@ -431,8 +425,8 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                   console.log('🤖 ChatWindow: Botón "Regresar a IA" presionado para conversación:', conversationId)
                   console.log('🤖 ChatWindow: Estado actual de la conversación antes del cambio:', conversation)
                   
-                  // Regresar la conversación a IA
-                  await updateConversationStatus(conversationId, 'active_ai')
+                  // Regresar la conversación a IA usando el flujo unificado
+                  await handleStatusChange('active_ai')
                   
                   console.log('🤖 ChatWindow: Cambio a "active_ai" completado')
                   toast.success('Conversación regresada a IA')
