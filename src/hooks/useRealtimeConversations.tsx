@@ -1,7 +1,8 @@
 import { useEffect, useCallback } from 'react'
 import { supabase } from '@/integrations/supabase/client'
 import { RealtimeChannel } from '@supabase/supabase-js'
-import { toast } from 'sonner'
+// Notificaciones deshabilitadas
+const toast = { success: (..._args: any[]) => {}, error: (..._args: any[]) => {}, info: (..._args: any[]) => {} } as const
 
 interface Message {
   id: string

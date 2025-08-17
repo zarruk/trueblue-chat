@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/integrations/supabase/client'
 import { useAuth } from './useAuth'
-import { toast } from 'sonner'
+// Notificaciones deshabilitadas
+const toast = { success: (..._args: any[]) => {}, error: (..._args: any[]) => {}, info: (..._args: any[]) => {} } as const
 import { n8nService } from '@/services/n8nService'
 import { useRealtimeConversations } from './useRealtimeConversations'
 
@@ -309,6 +310,7 @@ export function useConversations() {
       }
 
       console.log('✅ Estado de conversación actualizado exitosamente en BD')
+      // Mostrar una sola notificación centralizada; ChatWindow no duplicará el toast
       toast.success('Estado actualizado exitosamente')
       
     } catch (error) {

@@ -17,7 +17,8 @@ import { useAuth } from '@/hooks/useAuth'
 import { useAgents } from '@/hooks/useAgents'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { toast } from 'sonner'
+// Notificaciones deshabilitadas
+const toast = { success: (..._args: any[]) => {}, error: (..._args: any[]) => {}, info: (..._args: any[]) => {} } as const
 
 interface ChatWindowProps {
   conversationId?: string
@@ -181,7 +182,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
         if (!onAssignAgent) throw new Error('onAssignAgent no definido')
         await onAssignAgent(conversationId, agentId)
         console.log('✅ ChatWindow: Agente asignado exitosamente')
-        toast.success('Agente asignado exitosamente')
+        // Aviso centralizado en hook superior (evitar duplicados)
       }
       
       // 🚀 FORZAR ACTUALIZACIÓN INMEDIATA DE CONVERSACIONES
@@ -398,7 +399,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                     console.log('🎯 ChatWindow: Verificando estado DESPUÉS de tomar conversación:', conversation)
                   }, 200)
                   
-                  toast.success('Conversación tomada exitosamente')
+                  // Éxito gestionado por hooks superiores (evitar toasts duplicados)
                 } catch (error) {
                   console.error('❌ ChatWindow: Error al tomar la conversación:', error)
                   toast.error('Error al tomar la conversación')
@@ -429,7 +430,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                   await handleStatusChange('active_ai')
                   
                   console.log('🤖 ChatWindow: Cambio a "active_ai" completado')
-                  toast.success('Conversación regresada a IA')
+                  // Éxito gestionado por hooks superiores (evitar toasts duplicados)
                 } catch (error) {
                   console.error('❌ ChatWindow: Error al regresar la conversación:', error)
                   toast.error('Error al regresar la conversación')

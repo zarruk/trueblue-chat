@@ -5,7 +5,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { n8nService } from '@/services/n8nService'
-import { toast } from 'sonner'
+// Notificaciones deshabilitadas en toda la app
+const toast = { success: (..._args: any[]) => {}, error: (..._args: any[]) => {}, info: (..._args: any[]) => {} } as const
 
 export function N8nWebhookDebug() {
   const [testData, setTestData] = useState({

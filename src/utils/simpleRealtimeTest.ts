@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client'
-import { toast } from 'sonner'
+// Notificaciones deshabilitadas en toda la app
+const toast = { success: (..._args: any[]) => {}, error: (..._args: any[]) => {}, info: (..._args: any[]) => {} } as const
 
 export async function testRealtimeSimple() {
   console.log('🔄 SIMPLE TEST: Iniciando prueba básica de Realtime...')
