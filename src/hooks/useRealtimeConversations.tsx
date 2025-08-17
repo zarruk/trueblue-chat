@@ -71,7 +71,11 @@ export function useRealtimeConversations({
       // Suscripción para mensajes
       console.log('📡 [REALTIME] Creando canal de mensajes...')
       messagesChannel = supabase
-        .channel('messages-changes')
+        .channel('messages-changes', {
+          config: {
+            broadcast: { self: true }
+          }
+        })
         .on(
           'postgres_changes',
           {
@@ -138,7 +142,11 @@ export function useRealtimeConversations({
       // Suscripción para conversaciones
       console.log('📡 [REALTIME] Creando canal de conversaciones...')
       conversationsChannel = supabase
-        .channel('conversations-changes')
+        .channel('conversations-changes', {
+          config: {
+            broadcast: { self: true }
+          }
+        })
         .on(
           'postgres_changes',
           {
