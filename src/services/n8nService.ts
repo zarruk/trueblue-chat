@@ -16,21 +16,9 @@ export interface N8nWebhookResponse {
 
 class N8nService {
   private webhookUrl = (() => {
-    const envUrl = import.meta.env.VITE_N8N_WEBHOOK_URL
-    const isLocalhost = typeof window !== 'undefined' && /^(https?:\/\/)(localhost|127\.0\.0\.1)/.test(window.location.origin)
-
-    // En local, forzar siempre el proxy para evitar CORS desde el navegador
-    if (isLocalhost) {
-      return '/n8n-webhook'
-    }
-
-    // En desarrollo, si no hay variable, usar el proxy local
-    if (import.meta.env.DEV && !envUrl) {
-      return '/n8n-webhook'
-    }
-
-    // En otros casos, usar la URL de entorno o el fallback de pruebas correcto
-    return envUrl || 'https://aztec.app.n8n.cloud/webhook/tb_local'
+    // Siempre usar la función API para evitar problemas de CORS
+    // La función API se encargará de rutear al webhook correcto basándose en las variables de entorno
+    return '/api/n8n-webhook'
   })()
 
   /**

@@ -5,6 +5,10 @@
   "framework": "vite",
   "rewrites": [
     {
+      "source": "/api/n8n-webhook",
+      "destination": "https://aztec.app.n8n.cloud/webhook/:env"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
