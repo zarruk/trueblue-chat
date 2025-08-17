@@ -155,7 +155,9 @@ export function N8nWebhookDebug() {
           <CardTitle>🔍 Información del Webhook</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
-          <div><strong>URL del Webhook:</strong> https://aztec.app.n8n.cloud/webhook/feb40c09-7947-4523-a263-9647125a03ec</div>
+          <div><strong>Endpoint (frontend → proxy):</strong> /api/n8n-webhook</div>
+          <div><strong>VITE_N8N_WEBHOOK_URL (cliente):</strong> {import.meta.env.VITE_N8N_WEBHOOK_URL || 'No definida'}</div>
+          <div><strong>N8N_WEBHOOK_URL (server):</strong> Definida en Vercel (no visible en el navegador)</div>
           <div><strong>Método:</strong> POST</div>
           <div><strong>Content-Type:</strong> application/json</div>
           <div><strong>Estructura del Payload:</strong></div>
