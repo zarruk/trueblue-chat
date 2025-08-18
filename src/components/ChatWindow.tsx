@@ -22,18 +22,6 @@ import { supabase } from '@/integrations/supabase/client'
 // Notificaciones deshabilitadas
 const toast = { success: (..._args: any[]) => {}, error: (..._args: any[]) => {}, info: (..._args: any[]) => {} } as const
 
-// Token para descargar imágenes de mensajes
-const DEFAULT_DEV_IMAGE_TOKEN = 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJhM2FiNWI2NS1hNDVmLTQ3YjYtYjMxYy1jZDFjYWRkMjA4MDciLCJ1bmlxdWVfbmFtZSI6InNhbG9tb25AYXp0ZWNsYWIuY28iLCJuYW1laWQiOiJzYWxvbW9uQGF6dGVjbGFiLmNvIiwiZW1haWwiOiJzYWxvbW9uQGF6dGVjbGFiLmNvIiwiYXV0aF90aW1lIjoiMDgvMTcvMjAyNSAxNToxNzoyNyIsImRiX25hbWUiOiJ3YXRpX2FwcF90cmlhbCIsImh0dHA6Ly9zY2hlbWFzLm1pY3Jvc29mdC5jb20vd3MvMjAwOC8wNi9pZGVudGl0eS9jbGFpbXMvcm9sZSI6WyJUUklBTCIsIlRSSUFMUEFJRCJdLCJleHAiOjI1MzQwMjMwMDgwMCwiaXNzIjoiQ2xhcmVfQUkiLCJhdWQiOiJDbGFyZV9BSSJ9.uUnPZPDWIi8goZuRT9MFGl_S5V9LRS5CBNrAgIBBBLg'
-const DEFAULT_PROD_IMAGE_TOKEN = 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJiZTdhZWQ5OC0yMzdmLTQ3NGUtYjVlMy0wNDU1OTEzNWJiNTQiLCJ1bmlxdWVfbmFtZSI6InNhbG9tb24rdHJ1ZWJsdWVAYXp0ZWNsYWIuY28iLCJuYW1laWQiOiJzYWxvbW9uK3RydWVibHVlQGF6dGVjbGFiLmNvIiwiZW1haWwiOiJzYWxvbW9uK3RydWVibHVlQGF6dGVjbGFiLmNvIiwiYXV0aF90aW1lIjoiMDgvMTcvMjAyNSAxMzoyODo1MyIsInRlbmFudF9pZCI6IjQ4MzU3MCIsImRiX25hbWUiOiJtdC1wcm9kLVRlbmFudHMiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJBRE1JTklTVFJBVE9SIiwiZXhwIjoyNTM0MDIzMDA4MDAsImlzcyI6IkNsYXJlX0FJIiwiYXVkIjoiQ2xhcmVfQUkifQ.dHQrUW2fFUD69mqiQfRd_nWnGZv6ClwujrRzkCRVd7E'
-
-const IMAGE_AUTH_TOKEN: string =
-  (import.meta.env.VITE_IMAGE_AUTH_TOKEN as string) ||
-  (import.meta.env.MODE === 'development' ? DEFAULT_DEV_IMAGE_TOKEN : DEFAULT_PROD_IMAGE_TOKEN)
-
-if (!import.meta.env.VITE_IMAGE_AUTH_TOKEN) {
-  console.warn('[ChatWindow] VITE_IMAGE_AUTH_TOKEN no configurado; usando fallback por entorno')
-}
-
 interface ChatWindowProps {
   conversationId?: string
   messages?: any[]
@@ -76,16 +64,10 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   const [updatingStatus, setUpdatingStatus] = useState(false)
 
   const [historicalConversations, setHistoricalConversations] = useState<Array<{ id: string; created_at: string; updated_at: string; messages: Message[] }>>([])
-  const [imageUrls, setImageUrls] = useState<Record<string, string>>({})
-  const [imageLoading, setImageLoading] = useState<Record<string, boolean>>({})
-  const [imageError, setImageError] = useState<Record<string, string>>({})
   const [viewerOpen, setViewerOpen] = useState(false)
   const [viewerSrc, setViewerSrc] = useState<string | undefined>(undefined)
   const [viewerError, setViewerError] = useState(false)
-  const [viewerLoading, setViewerLoading] = useState(false)
-  const viewerObjectUrlRef = useRef<string | null>(null)
-  const imageObjectUrlsRef = useRef<string[]>([])
-  const imageFetchAttemptedRef = useRef<Set<string>>(new Set())
+  const [imageVariantIndex, setImageVariantIndex] = useState<Record<string, number>>({})
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
@@ -108,94 +90,58 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     return getAvailableAgents()
   }, [getAvailableAgents])
 
-  // Helper para extraer image_endpoint de metadata que puede venir como objeto o string JSON
-  function getImageEndpointFromMetadata(metadata: any): string | undefined {
+  // Utilidades Drive
+  function extractDriveFileId(url: string): string | undefined {
     try {
-      if (!metadata) return undefined
-      if (typeof metadata === 'string') {
-        const parsed = JSON.parse(metadata)
-        return parsed?.image_endpoint || parsed?.imageEndpoint
-      }
-      if (typeof metadata === 'object') {
-        return metadata?.image_endpoint || (metadata as any)?.imageEndpoint
-      }
-      return undefined
-    } catch (e) {
-      console.warn('⚠️ [ChatWindow] No se pudo parsear metadata de mensaje:', e)
+      const u = new URL(url)
+      if (!u.hostname.includes('drive.google.com')) return undefined
+      const m = u.pathname.match(/\/file\/d\/([^/]+)\//)
+      if (m && m[1]) return m[1]
+      const q = u.searchParams.get('id')
+      return q || undefined
+    } catch {
       return undefined
     }
   }
 
-  // Descarga de imágenes para mensajes con metadata.image_endpoint
-  const fetchImageForMessage = useCallback(async (msg: Message) => {
+  function buildDriveCandidates(url: string): string[] {
+    const id = extractDriveFileId(url)
+    if (!id) return [url]
+    return [
+      `https://drive.google.com/uc?export=view&id=${id}`,
+      `https://drive.google.com/uc?export=download&id=${id}`,
+      `https://drive.google.com/thumbnail?id=${id}&sz=w2000`,
+      `https://lh3.googleusercontent.com/d/${id}=s1200`
+    ]
+  }
+
+  // Helper: extrae img-url e incorpora fallbacks de Drive si aplica
+  function getImageCandidatesFromMetadata(metadata: any): string[] {
     try {
-      const endpoint = getImageEndpointFromMetadata(msg?.metadata)
-      if (!endpoint) return
-      if (imageUrls[msg.id] || imageLoading[msg.id] || imageError[msg.id]) return
-      if (imageFetchAttemptedRef.current.has(msg.id)) return
-
-      // Validación básica del endpoint
-      const isHttp = /^https?:\/\//i.test(endpoint)
-      const hasBraces = /[{}]/.test(endpoint)
-      if (!isHttp || hasBraces) {
-        console.warn('⚠️ [ChatWindow] image_endpoint inválido para mensaje:', { id: msg.id, endpoint })
-        setImageError(prev => ({ ...prev, [msg.id]: 'endpoint inválido' }))
-        return
+      if (!metadata) return []
+      let raw: string | undefined
+      if (typeof metadata === 'string') {
+        const parsed = JSON.parse(metadata)
+        raw = parsed?.['img-url'] || parsed?.imgUrl
+      } else if (typeof metadata === 'object') {
+        raw = metadata?.['img-url'] || (metadata as any)?.imgUrl
       }
+      if (!raw) return []
 
-      imageFetchAttemptedRef.current.add(msg.id)
-      setImageLoading(prev => ({ ...prev, [msg.id]: true }))
-      console.log('🖼️ [ChatWindow] Descargando imagen de mensaje:', { id: msg.id, endpoint })
-      const res = await fetch(`/api/fetch-image?url=${encodeURIComponent(endpoint)}`, { 
-        method: 'GET',
-        headers: { 
-          Authorization: IMAGE_AUTH_TOKEN,
-          Accept: 'image/*'
-        },
-        mode: 'cors',
-        cache: 'no-store'
-      })
-      console.log('🖼️ [ChatWindow] Respuesta imagen:', res.status, res.statusText)
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const blob = await res.blob()
-      const contentType = blob.type
-      if (!contentType.startsWith('image/')) {
-        throw new Error(`Tipo no imagen: ${contentType || 'desconocido'}`)
+      try {
+        const u = new URL(raw)
+        if (u.hostname.includes('drive.google.com')) {
+          return buildDriveCandidates(raw)
+        }
+      } catch {
+        // raw no es URL válida; no candidates
       }
-      const url = URL.createObjectURL(blob)
-      imageObjectUrlsRef.current.push(url)
-      setImageUrls(prev => ({ ...prev, [msg.id]: url }))
-    } catch (err: any) {
-      console.error('❌ [ChatWindow] Error descargando imagen del mensaje:', err?.message || err)
-      setImageError(prev => ({ ...prev, [msg.id]: err?.message || 'error' }))
-    } finally {
-      setImageLoading(prev => ({ ...prev, [msg.id]: false }))
+      return [raw]
+    } catch (e) {
+      console.warn('⚠️ [ChatWindow] No se pudo parsear metadata de mensaje:', e)
+      return []
     }
-  }, [imageUrls, imageLoading, imageError])
-
-  useEffect(() => {
-    // Limpiar URLs creadas al desmontar
-    return () => {
-      imageObjectUrlsRef.current.forEach(u => URL.revokeObjectURL(u))
-      imageObjectUrlsRef.current = []
-    }
-  }, [])
-
-  useEffect(() => {
-    for (const m of localMessages) {
-      const ep = getImageEndpointFromMetadata(m?.metadata)
-      if (ep) fetchImageForMessage(m)
-    }
-  }, [localMessages, fetchImageForMessage])
-
-  useEffect(() => {
-    for (const conv of historicalConversations) {
-      for (const m of conv.messages) {
-        const ep = getImageEndpointFromMetadata(m?.metadata)
-        if (ep) fetchImageForMessage(m)
-      }
-    }
-  }, [historicalConversations, fetchImageForMessage])
+  }
 
   // Sincronizar conversación seleccionada y cargar mensajes cuando cambia conversationId
   useEffect(() => {
@@ -502,11 +448,10 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   const renderMessageBubble = (msg: Message, muted = false) => {
     const senderInfo = getSenderInfo(msg)
     const alignment = getMessageAlignment(msg)
-    const endpoint = getImageEndpointFromMetadata(msg?.metadata)
-    const hasImage = Boolean(endpoint)
-    const url = hasImage ? imageUrls[msg.id] : undefined
-    const isLoading = hasImage ? imageLoading[msg.id] : false
-    const errText = hasImage ? imageError[msg.id] : undefined
+    const candidates = getImageCandidatesFromMetadata(msg?.metadata)
+    const idx = imageVariantIndex[msg.id] || 0
+    const imageUrl = candidates[idx]
+    const hasImage = Boolean(imageUrl)
 
     return (
       <div key={msg.id} className={`flex ${alignment}`}>
@@ -526,42 +471,26 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
           } ${muted ? 'opacity-85 dark:opacity-95' : ''}`}>
             {hasImage && (
               <div className="mb-2">
-                {isLoading && (
-                  <div className="h-40 w-56 bg-muted-foreground/10 animate-pulse rounded-md" />
-                )}
-                {!isLoading && url && (
-                  <img 
-                    src={url} 
-                    alt="imagen adjunta" 
-                    className="rounded-md cursor-zoom-in max-w-full h-auto max-h-72 object-contain w-auto"
-                    loading="lazy"
-                    onClick={async () => { 
-                      const ep = endpoint!
-                      setViewerOpen(true)
-                      setViewerError(false)
-                      setViewerLoading(true)
-                      try {
-                        const res = await fetch(`/api/fetch-image?url=${encodeURIComponent(ep)}`, { method: 'GET', headers: { Authorization: IMAGE_AUTH_TOKEN, Accept: 'image/*' }, mode: 'cors', cache: 'no-store' })
-                        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-                        const blob = await res.blob()
-                        if (!blob.type.startsWith('image/')) throw new Error('Tipo no imagen')
-                        const u = URL.createObjectURL(blob)
-                        if (viewerObjectUrlRef.current) URL.revokeObjectURL(viewerObjectUrlRef.current)
-                        viewerObjectUrlRef.current = u
-                        setViewerSrc(u)
-                      } catch (e) {
-                        console.error('❌ [ChatWindow] Error cargando imagen para visor:', e)
-                        setViewerError(true)
-                        setViewerSrc(undefined)
-                      } finally {
-                        setViewerLoading(false)
-                      }
-                    }}
-                  />
-                )}
-                {!isLoading && !url && (
-                  <div className="text-xs text-destructive">No se pudo cargar la imagen{errText ? `: ${errText}` : ''}</div>
-                )}
+                <img 
+                  src={imageUrl} 
+                  alt="imagen adjunta" 
+                  className="rounded-md cursor-zoom-in max-w-full h-auto max-h-72 object-contain w-auto"
+                  loading="lazy"
+                  onClick={() => { setViewerSrc(imageUrl); setViewerError(false); setViewerOpen(true) }}
+                  onError={(e) => { 
+                    const next = (imageVariantIndex[msg.id] || 0) + 1
+                    if (next < candidates.length) {
+                      setImageVariantIndex(prev => ({ ...prev, [msg.id]: next }))
+                    } else {
+                      const target = e.target as HTMLImageElement
+                      target.style.display = 'none'
+                      const errorDiv = document.createElement('div')
+                      errorDiv.className = 'text-xs text-destructive'
+                      errorDiv.innerText = 'Error al cargar la imagen.'
+                      target.parentElement?.appendChild(errorDiv)
+                    }
+                  }}
+                />
               </div>
             )}
             {msg.content && (
@@ -864,14 +793,11 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       {/* Visor de imagen ampliada */}
       <Dialog open={viewerOpen} onOpenChange={(o)=>{ 
         setViewerOpen(o); 
-        if(!o){ setViewerError(false); setViewerLoading(false); setViewerSrc(undefined); if (viewerObjectUrlRef.current) { URL.revokeObjectURL(viewerObjectUrlRef.current); viewerObjectUrlRef.current = null } }
+        if(!o){ setViewerError(false); setViewerSrc(undefined); }
       }}>
         <DialogContent className="sm:max-w-[92vw] p-0 border bg-background/90 backdrop-blur">
           <div className="max-w-[92vw] max-h-[85vh] w-[92vw] flex items-center justify-center p-2">
-            {viewerLoading && (
-              <div className="h-40 w-56 bg-muted-foreground/10 animate-pulse rounded-md" />
-            )}
-            {!viewerLoading && viewerSrc && (
+            {!viewerError && viewerSrc && (
               <img 
                 src={viewerSrc} 
                 alt="imagen"
@@ -879,9 +805,9 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                 onError={() => setViewerError(true)}
               />
             )}
-            {!viewerLoading && viewerError && (
+            {!viewerSrc || viewerError ? (
               <div className="text-sm text-destructive">No se pudo cargar la imagen</div>
-            )}
+            ) : null}
           </div>
         </DialogContent>
       </Dialog>
