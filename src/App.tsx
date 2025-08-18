@@ -11,6 +11,7 @@ import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import Debug from "./pages/Debug";
 import Metrics from "./pages/Metrics";
+import Embudo from "./pages/Embudo";
 import { BarChart3, Bug, Menu } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { checkAndAddChannelColumn } from "@/utils/databaseStructureCheck";
@@ -129,6 +130,13 @@ const App = () => (
               <ProtectedRoute>
                 <AppLayout>
                   <Metrics />
+                </AppLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/embudo" element={
+              <ProtectedRoute>
+                <AppLayout>
+                  <Embudo />
                 </AppLayout>
               </ProtectedRoute>
             } />

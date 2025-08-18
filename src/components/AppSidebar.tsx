@@ -8,7 +8,8 @@ import {
   LogOut,
   Bug,
   Menu,
-  X
+  X,
+  Kanban
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -25,6 +26,7 @@ import { useState, useEffect } from 'react'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: MessageSquare },
+  { name: 'Embudo', href: '/embudo', icon: Kanban },
   { name: 'Agentes', href: '/agents', icon: Users },
   { name: 'Métricas', href: '/metrics', icon: BarChart3 },
   // { name: 'Debug', href: '/debug', icon: Bug }, // oculto
