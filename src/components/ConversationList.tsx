@@ -60,7 +60,7 @@ const getPriority = (c: Conversation) => {
 
 export function ConversationList({ onSelectConversation, selectedConversationId, conversations, loading }: ConversationListProps) {
   const [searchTerm, setSearchTerm] = useState('')
-  const [statusFilter, setStatusFilter] = useState<ConversationStatus | 'all' | 'abierta'>('all')
+  const [statusFilter, setStatusFilter] = useState<ConversationStatus | 'all' | 'abierta'>('abierta')
   const [agentFilter, setAgentFilter] = useState<string>('all')
 
   // Log para debugging de re-renderizado
@@ -282,7 +282,7 @@ export function ConversationList({ onSelectConversation, selectedConversationId,
                           </h4>
                           {conversation.channel && (
                             <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium shadow-sm ring-1 ${
-                              isSelected ? 'bg-white/15 text-white ring-white/30' : `${ch.className} ring-black/0`
+                              isSelected ? 'bg-white/15 text:white ring-white/30' : `${ch.className} ring-black/0`
                             }`}>
                               <ChannelIcon className="h-3 w-3" />
                               {ch.label}
