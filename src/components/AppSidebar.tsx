@@ -27,7 +27,7 @@ const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: MessageSquare },
   { name: 'Agentes', href: '/agents', icon: Users },
   { name: 'Métricas', href: '/metrics', icon: BarChart3 },
-  { name: 'Debug', href: '/debug', icon: Bug },
+  // { name: 'Debug', href: '/debug', icon: Bug }, // oculto
   { name: 'Configuración', href: '/settings', icon: Settings },
 ]
 

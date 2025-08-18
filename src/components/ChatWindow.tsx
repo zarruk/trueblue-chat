@@ -22,8 +22,17 @@ import { supabase } from '@/integrations/supabase/client'
 // Notificaciones deshabilitadas
 const toast = { success: (..._args: any[]) => {}, error: (..._args: any[]) => {}, info: (..._args: any[]) => {} } as const
 
-// Token proporcionado por el usuario para descargar imágenes de mensajes
-const IMAGE_AUTH_TOKEN = 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJiZTdhZWQ5OC0yMzdmLTQ3NGUtYjVlMy0wNDU1OTEzNWJiNTQiLCJ1bmlxdWVfbmFtZSI6InNhbG9tb24rdHJ1ZWJsdWVAYXp0ZWNsYWIuY28iLCJuYW1laWQiOiJzYWxvbW9uK3RydWVibHVlQGF6dGVjbGFiLmNvIiwiZW1haWwiOiJzYWxvbW9uK3RydWVibHVlQGF6dGVjbGFiLmNvIiwiYXV0aF90aW1lIjoiMDgvMTcvMjAyNSAxMzoyODo1MyIsInRlbmFudF9pZCI6IjQ4MzU3MCIsImRiX25hbWUiOiJtdC1wcm9kLVRlbmFudHMiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJBRE1JTklTVFJBVE9SIiwiZXhwIjoyNTM0MDIzMDA4MDAsImlzcyI6IkNsYXJlX0FJIiwiYXVkIjoiQ2xhcmVfQUkifQ.dHQrUW2fFUD69mqiQfRd_nWnGZv6ClwujrRzkCRVd7E'
+// Token para descargar imágenes de mensajes
+const DEFAULT_DEV_IMAGE_TOKEN = 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJhM2FiNWI2NS1hNDVmLTQ3YjYtYjMxYy1jZDFjYWRkMjA4MDciLCJ1bmlxdWVfbmFtZSI6InNhbG9tb25AYXp0ZWNsYWIuY28iLCJuYW1laWQiOiJzYWxvbW9uQGF6dGVjbGFiLmNvIiwiZW1haWwiOiJzYWxvbW9uQGF6dGVjbGFiLmNvIiwiYXV0aF90aW1lIjoiMDgvMTcvMjAyNSAxNToxNzoyNyIsImRiX25hbWUiOiJ3YXRpX2FwcF90cmlhbCIsImh0dHA6Ly9zY2hlbWFzLm1pY3Jvc29mdC5jb20vd3MvMjAwOC8wNi9pZGVudGl0eS9jbGFpbXMvcm9sZSI6WyJUUklBTCIsIlRSSUFMUEFJRCJdLCJleHAiOjI1MzQwMjMwMDgwMCwiaXNzIjoiQ2xhcmVfQUkiLCJhdWQiOiJDbGFyZV9BSSJ9.uUnPZPDWIi8goZuRT9MFGl_S5V9LRS5CBNrAgIBBBLg'
+const DEFAULT_PROD_IMAGE_TOKEN = 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJiZTdhZWQ5OC0yMzdmLTQ3NGUtYjVlMy0wNDU1OTEzNWJiNTQiLCJ1bmlxdWVfbmFtZSI6InNhbG9tb24rdHJ1ZWJsdWVAYXp0ZWNsYWIuY28iLCJuYW1laWQiOiJzYWxvbW9uK3RydWVibHVlQGF6dGVjbGFiLmNvIiwiZW1haWwiOiJzYWxvbW9uK3RydWVibHVlQGF6dGVjbGFiLmNvIiwiYXV0aF90aW1lIjoiMDgvMTcvMjAyNSAxMzoyODo1MyIsInRlbmFudF9pZCI6IjQ4MzU3MCIsImRiX25hbWUiOiJtdC1wcm9kLVRlbmFudHMiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJBRE1JTklTVFJBVE9SIiwiZXhwIjoyNTM0MDIzMDA4MDAsImlzcyI6IkNsYXJlX0FJIiwiYXVkIjoiQ2xhcmVfQUkifQ.dHQrUW2fFUD69mqiQfRd_nWnGZv6ClwujrRzkCRVd7E'
+
+const IMAGE_AUTH_TOKEN: string =
+  (import.meta.env.VITE_IMAGE_AUTH_TOKEN as string) ||
+  (import.meta.env.MODE === 'development' ? DEFAULT_DEV_IMAGE_TOKEN : DEFAULT_PROD_IMAGE_TOKEN)
+
+if (!import.meta.env.VITE_IMAGE_AUTH_TOKEN) {
+  console.warn('[ChatWindow] VITE_IMAGE_AUTH_TOKEN no configurado; usando fallback por entorno')
+}
 
 interface ChatWindowProps {
   conversationId?: string
@@ -174,14 +183,16 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
 
   useEffect(() => {
     for (const m of localMessages) {
-      if (m?.metadata?.image_endpoint || (typeof m?.metadata === 'string' && m.metadata.includes('image_endpoint'))) fetchImageForMessage(m)
+      const ep = getImageEndpointFromMetadata(m?.metadata)
+      if (ep) fetchImageForMessage(m)
     }
   }, [localMessages, fetchImageForMessage])
 
   useEffect(() => {
     for (const conv of historicalConversations) {
       for (const m of conv.messages) {
-        if (m?.metadata?.image_endpoint || (typeof m?.metadata === 'string' && m.metadata.includes('image_endpoint'))) fetchImageForMessage(m)
+        const ep = getImageEndpointFromMetadata(m?.metadata)
+        if (ep) fetchImageForMessage(m)
       }
     }
   }, [historicalConversations, fetchImageForMessage])
