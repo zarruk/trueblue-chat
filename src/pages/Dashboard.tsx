@@ -7,8 +7,8 @@ import { ConversationTabs } from '@/components/ConversationTabs';
 import { ChatContextPanel } from '@/components/ChatContextPanel';
 import { ChatWindow } from '@/components/ChatWindow';
 import { ConversationWithMessages } from '@/types/database';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { MessageSquare, Users, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { MessageSquare } from 'lucide-react';
 import { RealtimeDebugPanel } from '@/components/RealtimeDebugPanel';
 import { useRealtimeFallback } from '@/hooks/useRealtimeFallback';
 
@@ -57,26 +57,6 @@ export default function Dashboard() {
     );
   }
 
-  const getConversationStats = () => {
-    const activeAI = conversations.filter(c => c.status === 'active_ai').length;
-    const activeHuman = conversations.filter(c => c.status === 'active_human').length;
-    const pendingHuman = conversations.filter(c => c.status === 'pending_human').length;
-    const unreadMessages = 0;
-    const total = conversations.length;
-
-    return { activeAI, activeHuman, pendingHuman, unreadMessages, total };
-  };
-
-  const stats = getConversationStats();
-
-  // Debug logs para verificar el flujo de datos
-  console.log('🔍 [DEBUG] Dashboard render:', {
-    selectedConversationId,
-    messagesCount: messages.length,
-    conversationsCount: conversations.length,
-    selectedConversation: selectedConversation?.id
-  });
-
   const handleResizeStart = (e: React.MouseEvent) => {
     e.preventDefault();
     const startX = e.clientX;
@@ -103,59 +83,6 @@ export default function Dashboard() {
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      {/* Stats Cards (más compacto) */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-1 px-2 pt-1 pb-0 flex-shrink-0">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 py-0.5">
-            <CardTitle className="text-[11px] font-medium">IA Activa</CardTitle>
-            <MessageSquare className="h-3 w-3 text-muted-foreground" />
-          </CardHeader>
-          <CardContent className="py-0.5">
-            <div className="text-base font-bold leading-none">{stats.activeAI}</div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 py-0.5">
-            <CardTitle className="text-[11px] font-medium">Humano Activo</CardTitle>
-            <Users className="h-3 w-3 text-muted-foreground" />
-          </CardHeader>
-          <CardContent className="py-0.5">
-            <div className="text-base font-bold leading-none">{stats.activeHuman}</div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 py-0.5">
-            <CardTitle className="text-[11px] font-medium">Pendiente Humano</CardTitle>
-            <Clock className="h-3 w-3 text-muted-foreground" />
-          </CardHeader>
-          <CardContent className="py-0.5">
-            <div className="text-base font-bold leading-none">{stats.pendingHuman}</div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 py-0.5">
-            <CardTitle className="text-[11px] font-medium">Sin Responder</CardTitle>
-            <AlertCircle className="h-3 w-3 text-red-500" />
-          </CardHeader>
-          <CardContent className="py-0.5">
-            <div className="text-base font-bold text-red-500 leading-none">{stats.unreadMessages}</div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 py-0.5">
-            <CardTitle className="text-[11px] font-medium">Total</CardTitle>
-            <CheckCircle className="h-3 w-3 text-muted-foreground" />
-          </CardHeader>
-          <CardContent className="py-0.5">
-            <div className="text-base font-bold leading-none">{stats.total}</div>
-          </CardContent>
-        </Card>
-      </div>
-
       {/* Main Content */}
       <div className="flex-1 min-h-0 p-6 pt-6 overflow-hidden">
         <div className="flex h-full gap-6">

@@ -10,6 +10,7 @@ import Placeholder from "./pages/Placeholder";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import Debug from "./pages/Debug";
+import Metrics from "./pages/Metrics";
 import { BarChart3, Bug, Menu } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { checkAndAddChannelColumn } from "@/utils/databaseStructureCheck";
@@ -127,11 +128,7 @@ const App = () => (
             <Route path="/metrics" element={
               <ProtectedRoute>
                 <AppLayout>
-                  <Placeholder 
-                    title="Métricas" 
-                    description="Las métricas y estadísticas estarán disponibles pronto."
-                    icon={<BarChart3 className="h-6 w-6 text-primary" />}
-                  />
+                  <Metrics />
                 </AppLayout>
               </ProtectedRoute>
             } />

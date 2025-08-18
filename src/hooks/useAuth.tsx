@@ -33,51 +33,66 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (session?.user && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
           // Defer profile fetch to avoid blocking
           setTimeout(async () => {
-            console.log('🔍 Buscando perfil para usuario:', session.user.email);
-            
-            // Find profile by email (new system without user_id dependency)
-            const { data: initialProfile, error: profileError } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('email', session.user.email || '')
-              .single();
-            let profile = initialProfile;
+            const u = session.user;
+            const email = u.email || '';
+            const name = (u.user_metadata as any)?.name || email?.split('@')[0] || 'Agente';
+            console.log('🔍 Buscando/creando perfil para usuario:', email);
+            try {
+              // Buscar por email (puede no existir aún)
+              const { data: initialProfile, error: selectErr } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('email', email)
+                .maybeSingle();
 
-            if (profileError) {
-              console.error('❌ Error buscando perfil por email:', profileError);
-              console.log('⚠️ No se encontró perfil para:', session.user.email);
-            } else if (profile) {
-              console.log('✅ Perfil encontrado por email:', profile);
-              
-              // Si el perfil está en estado "pending", activarlo automáticamente
-              if (profile.status === 'pending') {
-                console.log(`🔄 Activando agente pendiente: ${session.user.email}`);
-                
-                const { data: updatedProfile, error: updateError } = await supabase
+              let finalProfile = initialProfile as Profile | null;
+
+              if (selectErr) {
+                console.error('❌ Error buscando perfil por email:', selectErr);
+              }
+
+              if (!finalProfile) {
+                // Autocrear perfil mínimo (id = auth.uid())
+                console.log('➕ Creando perfil porque no existe:', email);
+                const { data: inserted, error: insertErr } = await supabase
+                  .from('profiles')
+                  .insert({ id: u.id, email, name, status: 'active' })
+                  .select('*')
+                  .maybeSingle();
+
+                if (insertErr) {
+                  console.error('❌ Error creando perfil:', insertErr);
+                } else {
+                  finalProfile = inserted as Profile | null;
+                }
+              } else if (finalProfile && (finalProfile as any).status === 'pending') {
+                // Activar si estaba pendiente
+                console.log(`🔄 Activando agente pendiente: ${email}`);
+                const { data: updated, error: updateErr } = await supabase
                   .from('profiles')
                   .update({ status: 'active' })
-                  .eq('email', session.user.email || '')
-                  .select()
-                  .single();
-
-                if (updateError) {
-                  console.error('❌ Error activando perfil:', updateError);
-                } else {
-                  console.log(`✅ Agente activado exitosamente: ${session.user.email}`);
-                  profile = updatedProfile; // Usar el perfil actualizado
+                  .eq('email', email)
+                  .select('*')
+                  .maybeSingle();
+                if (updateErr) {
+                  console.error('❌ Error activando perfil:', updateErr);
+                } else if (updated) {
+                  finalProfile = updated as Profile;
                 }
               }
-              
-              // Solo usar perfiles activos
-              if (profile.status !== 'active') {
-                console.log('⚠️ Perfil no está activo:', profile.status);
-                profile = null;
+
+              // Si no logramos obtener/crear, continuar sin bloquear la app
+              if (!finalProfile) {
+                console.log('⚠️ No se encontró/creó perfil, continuando sin perfil');
               }
+
+              console.log('🏁 Perfil final cargado en Auth:', finalProfile);
+              setProfile(finalProfile || null);
+            } catch (e) {
+              console.error('❌ Excepción resolviendo perfil:', e);
+              setProfile(null);
             }
-            
-            console.log('🏁 Perfil final cargado en Auth:', profile);
-            setProfile(profile);
-          }, 100);
+          }, 50);
         } else {
           console.log('👤 Usuario no autenticado o evento no relevante');
           setProfile(null);
@@ -91,13 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      
-      if (session?.user) {
-        // Initial profile fetch will be handled by the auth state change
-        setLoading(false);
-      } else {
-        setLoading(false);
-      }
+      setLoading(false);
     });
 
     return () => subscription.unsubscribe();

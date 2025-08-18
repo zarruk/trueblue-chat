@@ -13,10 +13,16 @@ export interface MessageTemplate {
   updated_at: string
 }
 
+type NewTemplateInput = {
+  name: string
+  message: string
+  category?: string
+}
+
 export function useMessageTemplates() {
   const [templates, setTemplates] = useState<MessageTemplate[]>([])
   const [loading, setLoading] = useState(true)
-  const { user, profile } = useAuth()
+  const { user } = useAuth()
 
   // Fetch message templates
   const fetchTemplates = useCallback(async () => {
@@ -24,11 +30,10 @@ export function useMessageTemplates() {
 
     try {
       setLoading(true)
-      
       const { data, error } = await supabase
-        .from('tb_agents')
+        .from('tb_message_templates')
         .select('*')
-        .order('created_at', { ascending: false })
+        .order('updated_at', { ascending: false })
 
       if (error) {
         console.error('Error fetching message templates:', error)
@@ -36,7 +41,7 @@ export function useMessageTemplates() {
         return
       }
 
-              setTemplates((data as any) || [])
+      setTemplates((data as any) || [])
     } catch (error) {
       console.error('Error fetching message templates:', error)
       toast.error('Error al cargar las plantillas de mensajes')
@@ -46,88 +51,95 @@ export function useMessageTemplates() {
   }, [user])
 
   // Create new template
-  const createTemplate = useCallback(async (templateData: Omit<MessageTemplate, 'id' | 'created_at' | 'updated_at'>) => {
-    if (!user || !profile) {
+  const createTemplate = useCallback(async (templateData: NewTemplateInput) => {
+    if (!user) {
       toast.error('Debes estar autenticado para crear plantillas')
-      return
+      return false
     }
 
     try {
       const { error } = await supabase
-        .from('tb_agents')
+        .from('tb_message_templates')
         .insert({
-          email: templateData.name,
-          name: templateData.message,
-          role: templateData.category
+          name: templateData.name,
+          message: templateData.message,
+          category: templateData.category || 'general'
+          // created_by/created_at/updated_at: confiar en defaults; policy de insert debe permitirlo
         })
 
       if (error) {
         console.error('Error creating template:', error)
         toast.error('Error al crear la plantilla')
-        return
+        return false
       }
 
       toast.success('Plantilla creada exitosamente')
       await fetchTemplates()
+      return true
     } catch (error) {
       console.error('Error creating template:', error)
       toast.error('Error al crear la plantilla')
+      return false
     }
-  }, [user, profile, fetchTemplates])
+  }, [user, fetchTemplates])
 
   // Update template
-  const updateTemplate = useCallback(async (templateId: string, updates: Partial<MessageTemplate>) => {
-    if (!user || !profile) {
+  const updateTemplate = useCallback(async (templateId: string, updates: Partial<Pick<MessageTemplate, 'name'|'message'|'category'>>) => {
+    if (!user) {
       toast.error('Debes estar autenticado para actualizar plantillas')
-      return
+      return false
     }
 
     try {
       const { error } = await supabase
-        .from('tb_agents')
-        .update(updates)
+        .from('tb_message_templates')
+        .update({ ...updates })
         .eq('id', templateId)
 
       if (error) {
         console.error('Error updating template:', error)
         toast.error('Error al actualizar la plantilla')
-        return
+        return false
       }
 
       toast.success('Plantilla actualizada exitosamente')
       await fetchTemplates()
+      return true
     } catch (error) {
       console.error('Error updating template:', error)
       toast.error('Error al actualizar la plantilla')
+      return false
     }
-  }, [user, profile, fetchTemplates])
+  }, [user, fetchTemplates])
 
   // Delete template
   const deleteTemplate = useCallback(async (templateId: string) => {
-    if (!user || !profile) {
+    if (!user) {
       toast.error('Debes estar autenticado para eliminar plantillas')
-      return
+      return false
     }
 
     try {
       const { error } = await supabase
-        .from('tb_agents')
+        .from('tb_message_templates')
         .delete()
         .eq('id', templateId)
 
       if (error) {
         console.error('Error deleting template:', error)
         toast.error('Error al eliminar la plantilla')
-        return
+        return false
       }
 
       toast.success('Plantilla eliminada exitosamente')
       await fetchTemplates()
+      return true
     } catch (error) {
       console.error('Error deleting template:', error)
       toast.error('Error al eliminar la plantilla')
+      return false
     }
-  }, [user, profile, fetchTemplates])
+  }, [user, fetchTemplates])
 
   // Get templates by category
   const getTemplatesByCategory = useCallback((category: string) => {
@@ -142,7 +154,6 @@ export function useMessageTemplates() {
   // Search templates
   const searchTemplates = useCallback((searchTerm: string) => {
     if (!searchTerm.trim()) return templates
-    
     const lowerSearchTerm = searchTerm.toLowerCase()
     return templates.filter(template => 
       template.name.toLowerCase().includes(lowerSearchTerm) ||

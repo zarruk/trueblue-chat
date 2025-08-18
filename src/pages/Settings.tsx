@@ -56,13 +56,10 @@ export default function Settings() {
     }
   };
 
-  const handleAddAutoMessage = () => {
+  const handleAddAutoMessage = async () => {
     if (!newMessage.title || !newMessage.message) return;
-    
-    const success = createTemplate(newMessage.title, newMessage.message);
-    if (success) {
-      setNewMessage({ title: "", message: "" });
-    }
+    const ok = await createTemplate({ name: newMessage.title, message: newMessage.message });
+    if (ok) setNewMessage({ title: "", message: "" });
   };
 
   const handleEditMessage = (messageId: string) => {
@@ -73,11 +70,13 @@ export default function Settings() {
     }
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (editingMessage) {
-      updateTemplate(editingMessage, editingData);
-      setEditingMessage(null);
-      setEditingData({ title: "", message: "" });
+      const ok = await updateTemplate(editingMessage, { name: editingData.title, message: editingData.message });
+      if (ok) {
+        setEditingMessage(null);
+        setEditingData({ title: "", message: "" });
+      }
     }
   };
 
@@ -86,8 +85,8 @@ export default function Settings() {
     setEditingData({ title: "", message: "" });
   };
 
-  const handleDeleteMessage = (id: string) => {
-    deleteTemplate(id);
+  const handleDeleteMessage = async (id: string) => {
+    await deleteTemplate(id);
   };
 
   return (
@@ -159,7 +158,7 @@ export default function Settings() {
                 <CardDescription>
                   Crea plantillas de respuestas rápidas para usar en conversaciones.
                   <br />
-                  <strong>Variables disponibles:</strong> {"{name}"} - se reemplaza por tu nombre
+                  <strong>Variables disponibles:</strong> {"{{nombre}}"} - se reemplaza por tu nombre
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -179,7 +178,7 @@ export default function Settings() {
                     id="message-content"
                     value={newMessage.message}
                     onChange={(e) => setNewMessage({ ...newMessage, message: e.target.value })}
-                    placeholder="Escribe el mensaje de la plantilla..."
+                    placeholder="Escribe el mensaje de la plantilla... (ej: Hola, soy {{nombre}} y te ayudaré)"
                     rows={3}
                   />
                 </div>

@@ -20,13 +20,14 @@ export function MessageTemplatesSuggestions({
   const { templates } = useMessageTemplates();
   const [isOpen, setIsOpen] = useState(false);
 
-  const getPreviewMessage = (message: string) => {
-    return message.replace(/{name}/g, currentUserName);
+  const applyName = (message: string) => {
+    if (!message) return message;
+    // Reemplazar primero las variantes con doble llave para no dejar llaves sueltas
+    let out = message
+      .replace(/\{\{\s*(name|nombre)\s*\}\}/gi, currentUserName)
+      .replace(/\{\s*(name|nombre)\s*\}/gi, currentUserName);
+    return out;
   };
-
-  if (templates.length === 0) {
-    return null;
-  }
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen} className={className}>
@@ -54,26 +55,30 @@ export function MessageTemplatesSuggestions({
       <CollapsibleContent className="space-y-2 mt-2">
         <Card>
           <CardContent className="p-3">
-            <div className="space-y-2">
-              {templates.map((template) => (
-                <Button
-                  key={template.id}
-                  variant="ghost"
-                  size="sm"
-                  className="w-full justify-start h-auto p-2 text-left"
-                  onClick={() => onSelectTemplate(template)}
-                >
-                  <div className="flex flex-col items-start gap-1 overflow-hidden">
-                    <div className="font-medium text-sm truncate w-full">
-                      {template.name}
+            {templates.length === 0 ? (
+              <div className="text-xs text-muted-foreground">No hay plantillas todavía. Crea una en Configuración → Mensajes Automáticos.</div>
+            ) : (
+              <div className="space-y-2">
+                {templates.map((template) => (
+                  <Button
+                    key={template.id}
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start h-auto p-2 text-left"
+                    onClick={() => onSelectTemplate({ ...template, message: applyName(template.message) })}
+                  >
+                    <div className="flex flex-col items-start gap-1 overflow-hidden">
+                      <div className="font-medium text-sm truncate w-full">
+                        {template.name}
+                      </div>
+                      <div className="text-xs text-muted-foreground line-clamp-2 w-full">
+                        {applyName(template.message)}
+                      </div>
                     </div>
-                    <div className="text-xs text-muted-foreground line-clamp-2 w-full">
-                      {getPreviewMessage(template.message)}
-                    </div>
-                  </div>
-                </Button>
-              ))}
-            </div>
+                  </Button>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </CollapsibleContent>

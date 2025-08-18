@@ -19,6 +19,7 @@ import { useAgents } from '@/hooks/useAgents'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { supabase } from '@/integrations/supabase/client'
+import { MessageTemplatesSuggestions } from '@/components/MessageTemplatesSuggestions'
 // Notificaciones deshabilitadas
 const toast = { success: (..._args: any[]) => {}, error: (..._args: any[]) => {}, info: (..._args: any[]) => {} } as const
 
@@ -67,7 +68,6 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   const [viewerOpen, setViewerOpen] = useState(false)
   const [viewerSrc, setViewerSrc] = useState<string | undefined>(undefined)
   const [viewerError, setViewerError] = useState(false)
-  const [imageVariantIndex, setImageVariantIndex] = useState<Record<string, number>>({})
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
@@ -90,32 +90,41 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     return getAvailableAgents()
   }, [getAvailableAgents])
 
-  // Utilidades Drive
-  function extractDriveFileId(url: string): string | undefined {
+  // Normaliza URLs de Google Drive a un formato embebible (uc?export=view&id=FILE_ID)
+  function normalizeDriveUrl(url: string): string {
     try {
       const u = new URL(url)
-      if (!u.hostname.includes('drive.google.com')) return undefined
-      const m = u.pathname.match(/\/file\/d\/([^/]+)\//)
-      if (m && m[1]) return m[1]
-      const q = u.searchParams.get('id')
-      return q || undefined
+      const isDrive = u.hostname.includes('drive.google.com')
+      if (!isDrive) return url
+
+      // Caso 1: /file/d/FILE_ID/view
+      const fileMatch = u.pathname.match(/\/file\/d\/([^/]+)\//)
+      if (fileMatch && fileMatch[1]) {
+        const id = fileMatch[1]
+        return `https://drive.google.com/uc?export=view&id=${id}`
+      }
+
+      // Caso 2: /open?id=FILE_ID o /thumbnail?id=FILE_ID
+      const possibleId = u.searchParams.get('id')
+      if (possibleId) {
+        return `https://drive.google.com/uc?export=view&id=${possibleId}`
+      }
+
+      // Caso 3: /uc?id=FILE_ID&export=download -> export=view
+      if (u.pathname.startsWith('/uc')) {
+        const id = u.searchParams.get('id')
+        if (id) {
+          return `https://drive.google.com/uc?export=view&id=${id}`
+        }
+      }
+
+      return url
     } catch {
-      return undefined
+      return url
     }
   }
 
-  function buildDriveCandidates(url: string): string[] {
-    const id = extractDriveFileId(url)
-    if (!id) return [url]
-    return [
-      `https://drive.google.com/uc?export=view&id=${id}`,
-      `https://drive.google.com/uc?export=download&id=${id}`,
-      `https://drive.google.com/thumbnail?id=${id}&sz=w2000`,
-      `https://lh3.googleusercontent.com/d/${id}=s1200`
-    ]
-  }
-
-  // Helper: extrae img-url e incorpora fallbacks de Drive si aplica
+  // Helper para extraer image_url de metadata (img-url o imgUrl) y normalizar Drive
   function getImageCandidatesFromMetadata(metadata: any): string[] {
     try {
       if (!metadata) return []
@@ -131,10 +140,20 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       try {
         const u = new URL(raw)
         if (u.hostname.includes('drive.google.com')) {
-          return buildDriveCandidates(raw)
+          // generar candidatos
+          const fileMatch = u.pathname.match(/\/file\/d\/([^/]+)\//)
+          const id = fileMatch?.[1] || u.searchParams.get('id') || ''
+          if (id) {
+            return [
+              `https://drive.google.com/uc?export=view&id=${id}`,
+              `https://drive.google.com/uc?export=download&id=${id}`,
+              `https://drive.google.com/thumbnail?id=${id}&sz=w2000`,
+              `https://lh3.googleusercontent.com/d/${id}=s1200`
+            ]
+          }
         }
       } catch {
-        // raw no es URL válida; no candidates
+        // raw no es URL válida
       }
       return [raw]
     } catch (e) {
@@ -449,8 +468,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     const senderInfo = getSenderInfo(msg)
     const alignment = getMessageAlignment(msg)
     const candidates = getImageCandidatesFromMetadata(msg?.metadata)
-    const idx = imageVariantIndex[msg.id] || 0
-    const imageUrl = candidates[idx]
+    const imageUrl = candidates[0]
     const hasImage = Boolean(imageUrl)
 
     return (
@@ -478,17 +496,13 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                   loading="lazy"
                   onClick={() => { setViewerSrc(imageUrl); setViewerError(false); setViewerOpen(true) }}
                   onError={(e) => { 
-                    const next = (imageVariantIndex[msg.id] || 0) + 1
-                    if (next < candidates.length) {
-                      setImageVariantIndex(prev => ({ ...prev, [msg.id]: next }))
-                    } else {
-                      const target = e.target as HTMLImageElement
-                      target.style.display = 'none'
-                      const errorDiv = document.createElement('div')
-                      errorDiv.className = 'text-xs text-destructive'
-                      errorDiv.innerText = 'Error al cargar la imagen.'
-                      target.parentElement?.appendChild(errorDiv)
-                    }
+                    const next = 1 // ya no usamos múltiples variantes aquí
+                    const target = e.target as HTMLImageElement
+                    target.style.display = 'none'
+                    const errorDiv = document.createElement('div')
+                    errorDiv.className = 'text-xs text-destructive'
+                    errorDiv.innerText = 'Error al cargar la imagen.'
+                    target.parentElement?.appendChild(errorDiv)
                   }}
                 />
               </div>
@@ -598,43 +612,6 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                 )}
               </div>
             </div>
-            
-            {/* Agent Assignment Selector */}
-            <div className="flex flex-col items-end space-y-1">
-              <label className="text-xs text-muted-foreground font-medium">
-                Asignar agente
-              </label>
-              <div className="flex items-center space-x-2">
-                <Select 
-                  onValueChange={handleAssignAgent} 
-                  value={conversation?.assigned_agent_id || "none"}
-                >
-                  <SelectTrigger className="h-8 w-[160px]">
-                    <SelectValue placeholder="Seleccionar agente" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Sin asignar</SelectItem>
-                    {availableAgents.map((agent) => (
-                      <SelectItem key={agent.id} value={agent.id}>
-                        👤 {agent.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            
-            <div className="flex flex-col items-end space-y-1">
-              <label className="text-xs text-muted-foreground font-medium">
-                Última actividad
-              </label>
-              <span className={`text-sm font-medium ${getStatusColor(conversation?.status || 'closed')}`}>
-                {conversation?.updated_at ? 
-                  format(new Date(conversation.updated_at), 'dd/MM HH:mm', { locale: es }) : 
-                  format(new Date(), 'dd/MM HH:mm', { locale: es })
-                }
-              </span>
-            </div>
           </div>
         </div>
       </div>
@@ -676,36 +653,6 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
               disabled={!profile?.id}
             >
               🎯 Tomar conversación
-            </Button>
-          </div>
-        )}
-
-        {/* Botón para regresar a IA */}
-        {conversation && (conversation.status === 'active_human' || conversation.status === 'pending_human') && conversation.assigned_agent_id === profile?.id && (
-          <div className="p-2 border-b bg-muted/20 dark:border-slate-700">
-            <Button 
-              onClick={async () => {
-                if (!conversationId) return
-                
-                try {
-                  console.log('🤖 ChatWindow: Botón "Regresar a IA" presionado para conversación:', conversationId)
-                  console.log('🤖 ChatWindow: Estado actual de la conversación antes del cambio:', conversation)
-                  
-                  // Regresar la conversación a IA usando el flujo unificado
-                  await handleStatusChange('active_ai')
-                  
-                  console.log('🤖 ChatWindow: Cambio a "active_ai" completado')
-                  // Éxito gestionado por hooks superiores (evitar toasts duplicados)
-                } catch (error) {
-                  console.error('❌ ChatWindow: Error al regresar la conversación:', error)
-                  toast.error('Error al regresar la conversación')
-                }
-              }}
-              size="sm"
-              variant="outline"
-              className="w-full"
-            >
-              🤖 Regresar a IA
             </Button>
           </div>
         )}
@@ -753,7 +700,13 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       </div>
 
       {/* Message Input */}
-      <div className="border-t dark:border-slate-700 p-4 flex-shrink-0">
+      <div className="border-t dark:border-slate-700 p-3 flex-shrink-0 space-y-2">
+        <MessageTemplatesSuggestions 
+          currentUserName={profile?.name || 'Agente'}
+          onSelectTemplate={(tpl) => {
+            setMessage(prev => (prev ? prev + '\n' : '') + tpl.message)
+          }}
+        />
         <form onSubmit={handleSendMessage} className="flex items-end space-x-2">
           <Button type="button" variant="ghost" size="icon" className="flex-shrink-0">
             <Paperclip className="h-4 w-4" />
