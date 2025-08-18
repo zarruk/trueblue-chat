@@ -25,7 +25,8 @@ export default function Dashboard() {
     selectConversation,
     messages,
     assignAgent,
-    selectedConversationId
+    selectedConversationId,
+    updateUserDisplayName
   } = useConversations();
   const { agents } = useAgents();
   
@@ -102,55 +103,55 @@ export default function Dashboard() {
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 p-6 pb-0 flex-shrink-0">
+      {/* Stats Cards (más compacto) */}
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-1 px-2 pt-1 pb-0 flex-shrink-0">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">IA Activa</CardTitle>
-            <MessageSquare className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 py-0.5">
+            <CardTitle className="text-[11px] font-medium">IA Activa</CardTitle>
+            <MessageSquare className="h-3 w-3 text-muted-foreground" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.activeAI}</div>
+          <CardContent className="py-0.5">
+            <div className="text-base font-bold leading-none">{stats.activeAI}</div>
           </CardContent>
         </Card>
         
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Humano Activo</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 py-0.5">
+            <CardTitle className="text-[11px] font-medium">Humano Activo</CardTitle>
+            <Users className="h-3 w-3 text-muted-foreground" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.activeHuman}</div>
+          <CardContent className="py-0.5">
+            <div className="text-base font-bold leading-none">{stats.activeHuman}</div>
           </CardContent>
         </Card>
         
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pendiente Humano</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 py-0.5">
+            <CardTitle className="text-[11px] font-medium">Pendiente Humano</CardTitle>
+            <Clock className="h-3 w-3 text-muted-foreground" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.pendingHuman}</div>
+          <CardContent className="py-0.5">
+            <div className="text-base font-bold leading-none">{stats.pendingHuman}</div>
           </CardContent>
         </Card>
         
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Sin Responder</CardTitle>
-            <AlertCircle className="h-4 w-4 text-red-500" />
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 py-0.5">
+            <CardTitle className="text-[11px] font-medium">Sin Responder</CardTitle>
+            <AlertCircle className="h-3 w-3 text-red-500" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-500">{stats.unreadMessages}</div>
+          <CardContent className="py-0.5">
+            <div className="text-base font-bold text-red-500 leading-none">{stats.unreadMessages}</div>
           </CardContent>
         </Card>
         
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total</CardTitle>
-            <CheckCircle className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 py-0.5">
+            <CardTitle className="text-[11px] font-medium">Total</CardTitle>
+            <CheckCircle className="h-3 w-3 text-muted-foreground" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.total}</div>
+          <CardContent className="py-0.5">
+            <div className="text-base font-bold leading-none">{stats.total}</div>
           </CardContent>
         </Card>
       </div>
@@ -215,6 +216,7 @@ export default function Dashboard() {
               <ChatContextPanel 
                 conversation={selectedConversation} 
                 onToggleVisibility={() => setContextPanelOpen(false)}
+                onUpdateUserName={updateUserDisplayName}
               />
             </div>
           )}

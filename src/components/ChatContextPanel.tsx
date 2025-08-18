@@ -4,16 +4,26 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Conversation } from '@/hooks/useConversations'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { useState } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { ChevronDown, ChevronRight, Pencil, Check, X } from 'lucide-react'
+import { Input } from '@/components/ui/input'
 
 interface ChatContextPanelProps {
   conversation: Conversation | null
   onToggleVisibility?: () => void
+  onUpdateUserName?: (userId: string, newName: string) => Promise<any> | any
 }
 
-export function ChatContextPanel({ conversation, onToggleVisibility }: ChatContextPanelProps) {
+export function ChatContextPanel({ conversation, onToggleVisibility, onUpdateUserName }: ChatContextPanelProps) {
   const [open, setOpen] = useState(true)
+  const [isEditingName, setIsEditingName] = useState(false)
+  const [nameValue, setNameValue] = useState('')
+
+  useEffect(() => {
+    setNameValue(conversation?.username || '')
+    setIsEditingName(false)
+  }, [conversation?.id, conversation?.username])
+
   if (!conversation) {
     return (
       <Card className="h-full">
@@ -25,6 +35,17 @@ export function ChatContextPanel({ conversation, onToggleVisibility }: ChatConte
         </CardContent>
       </Card>
     )
+  }
+
+  const handleSaveName = async () => {
+    const newName = (nameValue || '').trim()
+    if (!newName) return
+    if (onUpdateUserName) {
+      const res = await onUpdateUserName(conversation.user_id, newName)
+      if (!res || res.success !== false) {
+        setIsEditingName(false)
+      }
+    }
   }
 
   return (
@@ -62,9 +83,55 @@ export function ChatContextPanel({ conversation, onToggleVisibility }: ChatConte
                 {conversation.username?.charAt(0)?.toUpperCase() || 'U'}
               </AvatarFallback>
             </Avatar>
-            <div>
-              <div className="font-medium">
-                {conversation.username || conversation.user_id}
+            <div className="min-w-0">
+              <div className="font-medium flex items-center gap-2">
+                {!isEditingName ? (
+                  <>
+                    <span className="truncate" title={conversation.username || conversation.user_id}>
+                      {conversation.username || conversation.user_id}
+                    </span>
+                    <button
+                      type="button"
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                      onClick={() => setIsEditingName(true)}
+                      title="Editar nombre"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-1 w-full">
+                    <Input
+                      value={nameValue}
+                      onChange={(e) => setNameValue(e.target.value)}
+                      placeholder="Nombre del usuario"
+                      className="h-7 text-sm"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSaveName()
+                        if (e.key === 'Escape') setIsEditingName(false)
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="p-1 rounded hover:bg-accent"
+                      title="Guardar"
+                      onClick={handleSaveName}
+                    >
+                      <Check className="h-4 w-4 text-green-600" />
+                    </button>
+                    <button
+                      type="button"
+                      className="p-1 rounded hover:bg-accent"
+                      title="Cancelar"
+                      onClick={() => { setIsEditingName(false); setNameValue(conversation.username || '') }}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                ID usuario: {conversation.user_id}
               </div>
               <div className="text-xs text-muted-foreground">
                 {conversation.phone_number || '—'}

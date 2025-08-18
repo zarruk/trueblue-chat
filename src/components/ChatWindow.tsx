@@ -61,6 +61,8 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   const [localMessages, setLocalMessages] = useState<Message[]>([])
   const [updatingStatus, setUpdatingStatus] = useState(false)
 
+  const [historicalConversations, setHistoricalConversations] = useState<Array<{ id: string; created_at: string; updated_at: string; messages: Message[] }>>([])
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const { profile } = useAuth()
@@ -96,6 +98,51 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   useEffect(() => {
     setLocalMessages(propMessages || [])
   }, [propMessages])
+
+  // Cargar historial de todas las conversaciones previas del mismo usuario (excluyendo la actual)
+  const fetchHistoricalConversations = useCallback(async (userId: string, currentConvId: string) => {
+    try {
+      const { data: convs, error: convsError } = await supabase
+        .from('tb_conversations')
+        .select('id, created_at, updated_at')
+        .eq('user_id', userId)
+        .neq('id', currentConvId)
+        .order('created_at', { ascending: true })
+
+      if (convsError) {
+        console.error('❌ [ChatWindow] Error obteniendo conversaciones históricas:', convsError)
+        setHistoricalConversations([])
+        return
+      }
+
+      const results: Array<{ id: string; created_at: string; updated_at: string; messages: Message[] }> = []
+      for (const c of convs || []) {
+        const { data: msgs, error: msgsError } = await supabase
+          .from('tb_messages')
+          .select('*')
+          .eq('conversation_id', c.id)
+          .order('created_at', { ascending: true })
+        if (msgsError) {
+          console.error('❌ [ChatWindow] Error obteniendo mensajes históricos:', msgsError)
+          continue
+        }
+        results.push({ id: c.id, created_at: c.created_at as any, updated_at: c.updated_at as any, messages: (msgs as any) || [] })
+      }
+
+      setHistoricalConversations(results)
+    } catch (e) {
+      console.error('❌ [ChatWindow] Excepción cargando historial:', e)
+      setHistoricalConversations([])
+    }
+  }, [])
+
+  useEffect(() => {
+    if (conversation && conversation.user_id) {
+      fetchHistoricalConversations(conversation.user_id, conversation.id)
+    } else {
+      setHistoricalConversations([])
+    }
+  }, [conversation?.id, conversation?.user_id, fetchHistoricalConversations])
 
   // Realtime subscription scoped to this conversation as a fail-safe
   useEffect(() => {
@@ -339,6 +386,44 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     return msg.sender_role === 'user' ? 'justify-start' : 'justify-end'
   }
 
+  const renderMessageBubble = (msg: Message, muted = false) => {
+    const senderInfo = getSenderInfo(msg)
+    const alignment = getMessageAlignment(msg)
+    return (
+      <div key={msg.id} className={`flex ${alignment}`}>
+        <div className={`flex items-start space-x-3 max-w-[70%] ${alignment === 'justify-end' ? 'flex-row-reverse space-x-reverse' : ''}`}>
+          {msg.sender_role === 'user' && (
+            <Avatar className="h-8 w-8 flex-shrink-0">
+              <AvatarImage src={senderInfo.avatar} />
+              <AvatarFallback>
+                {senderInfo.name.charAt(0).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+          )}
+          <div className={`rounded-lg px-4 py-2 ${
+            msg.sender_role === 'user'
+              ? 'bg-muted'
+              : 'bg-gradient-to-br from-indigo-50 via-violet-50 to-fuchsia-50 text-slate-900 border border-indigo-100 dark:from-indigo-500 dark:via-violet-500 dark:to-fuchsia-500 dark:text-white'
+          } ${muted ? 'opacity-85 dark:opacity-95' : ''}`}>
+            <p className="text-sm">{msg.content}</p>
+            <p className={`text-xs mt-1 ${
+              msg.sender_role === 'user'
+                ? 'text-muted-foreground'
+                : 'text-indigo-700/80 dark:text-white/80'
+            }`}>
+              {msg.sender_role !== 'user' && (
+                <>
+                  {(msg.agent_name && msg.agent_name.trim()) || (msg.sender_role === 'agent' ? 'Agente' : 'IA')} ·{' '}
+                </>
+              )}
+              {format(new Date(msg.created_at), 'HH:mm', { locale: es })}
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (!conversationId) {
     return (
       <div className="flex-1 flex items-center justify-center bg-muted/20">
@@ -358,7 +443,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   return (
     <div className="h-full flex flex-col bg-background overflow-hidden">
       {/* Chat Header */}
-      <div className="border-b px-6 py-4 flex-shrink-0">
+      <div className="border-b dark:border-slate-700 px-6 py-4 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <Avatar className="h-10 w-10">
@@ -468,7 +553,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       <div className="flex-1 flex flex-col min-h-0 relative">
         {/* Botón para tomar conversación */}
         {conversation && conversation.status !== 'active_human' && conversation.status !== 'pending_human' && (
-          <div className="p-2 border-b bg-muted/20">
+          <div className="p-2 border-b bg-muted/20 dark:border-slate-700">
             <Button 
               onClick={async () => {
                 if (!profile?.id || !conversationId) return
@@ -507,7 +592,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
 
         {/* Botón para regresar a IA */}
         {conversation && (conversation.status === 'active_human' || conversation.status === 'pending_human') && conversation.assigned_agent_id === profile?.id && (
-          <div className="p-2 border-b bg-muted/20">
+          <div className="p-2 border-b bg-muted/20 dark:border-slate-700">
             <Button 
               onClick={async () => {
                 if (!conversationId) return
@@ -537,56 +622,40 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
         
         <div 
           ref={messagesContainerRef} 
-          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain p-6 space-y-4 chat-messages-scroll"
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain p-6 space-y-4 chat-messages-scroll dark:[&>.message-sep]:border-slate-700"
         >
           {loading ? (
             <div className="flex items-center justify-center h-full">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
-          ) : localMessages.length === 0 ? (
-            <div className="text-center text-muted-foreground">
-              <p>No hay mensajes aún. ¡Sé el primero en escribir!</p>
-            </div>
           ) : (
-            localMessages.map((msg) => {
-              const senderInfo = getSenderInfo(msg)
-              const alignment = getMessageAlignment(msg)
-              
-              return (
-                <div key={msg.id} className={`flex ${alignment}`}>
-                  <div className={`flex items-start space-x-3 max-w-[70%] ${alignment === 'justify-end' ? 'flex-row-reverse space-x-reverse' : ''}`}>
-                    {msg.sender_role === 'user' && (
-                      <Avatar className="h-8 w-8 flex-shrink-0">
-                        <AvatarImage src={senderInfo.avatar} />
-                        <AvatarFallback>
-                          {senderInfo.name.charAt(0).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                    )}
-                    
-                    <div className={`rounded-lg px-4 py-2 ${
-                      msg.sender_role === 'user'
-                        ? 'bg-muted'
-                        : 'bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 text-white dark:from-indigo-500 dark:via-violet-500 dark:to-fuchsia-500'
-                    }`}>
-                      <p className="text-sm">{msg.content}</p>
-                      <p className={`text-xs mt-1 ${
-                        msg.sender_role === 'user'
-                          ? 'text-muted-foreground'
-                          : 'text-white/80'
-                      }`}>
-                        {msg.sender_role !== 'user' && (
-                          <>
-                            {(msg.agent_name && msg.agent_name.trim()) || (msg.sender_role === 'agent' ? 'Agente' : 'IA')} ·{' '}
-                          </>
-                        )}
-                        {format(new Date(msg.created_at), 'HH:mm', { locale: es })}
-                      </p>
+            <>
+              {/* Historial de conversaciones anteriores */}
+              {historicalConversations.map((conv, idx) => (
+                <div key={conv.id} className="space-y-3">
+                  <div className="relative my-6 message-sep">
+                    <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t border-dashed border-muted-foreground/30" />
+                    </div>
+                    <div className="relative flex justify-center text-[11px] uppercase">
+                      <span className="bg-background px-2 text-muted-foreground">
+                        Histórico • {format(new Date(conv.created_at), 'dd/MM/yyyy', { locale: es })}
+                      </span>
                     </div>
                   </div>
+                  {conv.messages.map((m) => renderMessageBubble(m, true))}
                 </div>
-              )
-            })
+              ))}
+
+              {/* Mensajes de la conversación actual */}
+              {localMessages.length === 0 ? (
+                <div className="text-center text-muted-foreground">
+                  <p>No hay mensajes aún. ¡Sé el primero en escribir!</p>
+                </div>
+              ) : (
+                localMessages.map((msg) => renderMessageBubble(msg, false))
+              )}
+            </>
           )}
           
           <div ref={messagesEndRef} />
@@ -594,7 +663,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       </div>
 
       {/* Message Input */}
-      <div className="border-t p-4 flex-shrink-0">
+      <div className="border-t dark:border-slate-700 p-4 flex-shrink-0">
         <form onSubmit={handleSendMessage} className="flex items-end space-x-2">
           <Button type="button" variant="ghost" size="icon" className="flex-shrink-0">
             <Paperclip className="h-4 w-4" />

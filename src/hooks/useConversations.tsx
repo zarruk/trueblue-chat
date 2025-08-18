@@ -330,9 +330,7 @@ export function useConversations() {
           const newConversations = [...prev]
           const index = newConversations.findIndex(c => c.id === conversationId)
           if (index !== -1) {
-            // Esto es un poco simplista, idealmente guardarías el estado original
-            // pero por ahora, simplemente no aplicamos el cambio fallido.
-            // La UI se sincronizará en la próxima recarga o actualización de realtime.
+            // Sin reversión compleja por simplicidad
           }
           return newConversations
         })
@@ -340,7 +338,6 @@ export function useConversations() {
       }
 
       console.log('✅ Estado de conversación actualizado exitosamente en BD')
-      // Mostrar una sola notificación centralizada; ChatWindow no duplicará el toast
       toast.success('Estado actualizado exitosamente')
       
     } catch (error) {
@@ -399,7 +396,6 @@ export function useConversations() {
         toast.error('Error al asignar el agente')
         
         // Revertir el cambio local si falla
-        // Similar a updateConversationStatus, la reversión podría ser más robusta
         setConversations(prev => [...prev])
         return
       }
@@ -410,6 +406,40 @@ export function useConversations() {
     } catch (error) {
       console.error('Error assigning agent:', error)
       toast.error('Error al asignar el agente')
+    }
+  }, [])
+
+  // NUEVO: actualizar nombre visible del usuario (todas sus conversaciones)
+  const updateUserDisplayName = useCallback(async (userId: string, newName: string) => {
+    const trimmed = (newName || '').trim()
+    if (!trimmed) {
+      toast.error('El nombre no puede estar vacío')
+      return { success: false }
+    }
+    try {
+      console.log('✏️ Actualizando nombre de usuario:', { userId, newName: trimmed })
+
+      // Optimistic update local
+      setConversations(prev => prev.map(c => c.user_id === userId ? { ...c, username: trimmed, updated_at: new Date().toISOString() } : c))
+
+      const { error } = await supabase
+        .from('tb_conversations')
+        .update({ username: trimmed, updated_at: new Date().toISOString() })
+        .eq('user_id', userId)
+
+      if (error) {
+        console.error('❌ Error actualizando nombre de usuario:', error)
+        toast.error('No se pudo actualizar el nombre')
+        return { success: false, error }
+      }
+
+      console.log('✅ Nombre de usuario actualizado en BD')
+      toast.success('Nombre actualizado')
+      return { success: true }
+    } catch (error) {
+      console.error('❌ Excepción actualizando nombre de usuario:', error)
+      toast.error('No se pudo actualizar el nombre')
+      return { success: false, error }
     }
   }, [])
 
@@ -562,6 +592,7 @@ export function useConversations() {
     sendMessage,
     updateConversationStatus,
     assignAgent,
+    updateUserDisplayName,
     selectConversation,
     fetchConversations,
     fetchMessages
