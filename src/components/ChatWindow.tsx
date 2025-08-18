@@ -146,7 +146,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       imageFetchAttemptedRef.current.add(msg.id)
       setImageLoading(prev => ({ ...prev, [msg.id]: true }))
       console.log('🖼️ [ChatWindow] Descargando imagen de mensaje:', { id: msg.id, endpoint })
-      const res = await fetch(endpoint, { 
+      const res = await fetch(`/api/fetch-image?url=${encodeURIComponent(endpoint)}`, { 
         method: 'GET',
         headers: { 
           Authorization: IMAGE_AUTH_TOKEN,
@@ -541,7 +541,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                       setViewerError(false)
                       setViewerLoading(true)
                       try {
-                        const res = await fetch(ep, { method: 'GET', headers: { Authorization: IMAGE_AUTH_TOKEN, Accept: 'image/*' }, mode: 'cors', cache: 'no-store' })
+                        const res = await fetch(`/api/fetch-image?url=${encodeURIComponent(ep)}`, { method: 'GET', headers: { Authorization: IMAGE_AUTH_TOKEN, Accept: 'image/*' }, mode: 'cors', cache: 'no-store' })
                         if (!res.ok) throw new Error(`HTTP ${res.status}`)
                         const blob = await res.blob()
                         if (!blob.type.startsWith('image/')) throw new Error('Tipo no imagen')
