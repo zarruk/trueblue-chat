@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { useAuth } from '@/hooks/useAuth'
 import { useAgents } from '@/hooks/useAgents'
 import { format } from 'date-fns'
@@ -20,6 +21,9 @@ import { es } from 'date-fns/locale'
 import { supabase } from '@/integrations/supabase/client'
 // Notificaciones deshabilitadas
 const toast = { success: (..._args: any[]) => {}, error: (..._args: any[]) => {}, info: (..._args: any[]) => {} } as const
+
+// Token proporcionado por el usuario para descargar imágenes de mensajes
+const IMAGE_AUTH_TOKEN = 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJiZTdhZWQ5OC0yMzdmLTQ3NGUtYjVlMy0wNDU1OTEzNWJiNTQiLCJ1bmlxdWVfbmFtZSI6InNhbG9tb24rdHJ1ZWJsdWVAYXp0ZWNsYWIuY28iLCJuYW1laWQiOiJzYWxvbW9uK3RydWVibHVlQGF6dGVjbGFiLmNvIiwiZW1haWwiOiJzYWxvbW9uK3RydWVibHVlQGF6dGVjbGFiLmNvIiwiYXV0aF90aW1lIjoiMDgvMTcvMjAyNSAxMzoyODo1MyIsInRlbmFudF9pZCI6IjQ4MzU3MCIsImRiX25hbWUiOiJtdC1wcm9kLVRlbmFudHMiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJBRE1JTklTVFJBVE9SIiwiZXhwIjoyNTM0MDIzMDA4MDAsImlzcyI6IkNsYXJlX0FJIiwiYXVkIjoiQ2xhcmVfQUkifQ.dHQrUW2fFUD69mqiQfRd_nWnGZv6ClwujrRzkCRVd7E'
 
 interface ChatWindowProps {
   conversationId?: string
@@ -41,6 +45,7 @@ interface Message {
   agent_email?: string
   agent_name?: string
   created_at: string
+  metadata?: any
 }
 
 interface Conversation {
@@ -62,6 +67,16 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   const [updatingStatus, setUpdatingStatus] = useState(false)
 
   const [historicalConversations, setHistoricalConversations] = useState<Array<{ id: string; created_at: string; updated_at: string; messages: Message[] }>>([])
+  const [imageUrls, setImageUrls] = useState<Record<string, string>>({})
+  const [imageLoading, setImageLoading] = useState<Record<string, boolean>>({})
+  const [imageError, setImageError] = useState<Record<string, string>>({})
+  const [viewerOpen, setViewerOpen] = useState(false)
+  const [viewerSrc, setViewerSrc] = useState<string | undefined>(undefined)
+  const [viewerError, setViewerError] = useState(false)
+  const [viewerLoading, setViewerLoading] = useState(false)
+  const viewerObjectUrlRef = useRef<string | null>(null)
+  const imageObjectUrlsRef = useRef<string[]>([])
+  const imageFetchAttemptedRef = useRef<Set<string>>(new Set())
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
@@ -83,6 +98,93 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   const availableAgents = useMemo(() => {
     return getAvailableAgents()
   }, [getAvailableAgents])
+
+  // Helper para extraer image_endpoint de metadata que puede venir como objeto o string JSON
+  function getImageEndpointFromMetadata(metadata: any): string | undefined {
+    try {
+      if (!metadata) return undefined
+      if (typeof metadata === 'string') {
+        const parsed = JSON.parse(metadata)
+        return parsed?.image_endpoint || parsed?.imageEndpoint
+      }
+      if (typeof metadata === 'object') {
+        return metadata?.image_endpoint || (metadata as any)?.imageEndpoint
+      }
+      return undefined
+    } catch (e) {
+      console.warn('⚠️ [ChatWindow] No se pudo parsear metadata de mensaje:', e)
+      return undefined
+    }
+  }
+
+  // Descarga de imágenes para mensajes con metadata.image_endpoint
+  const fetchImageForMessage = useCallback(async (msg: Message) => {
+    try {
+      const endpoint = getImageEndpointFromMetadata(msg?.metadata)
+      if (!endpoint) return
+      if (imageUrls[msg.id] || imageLoading[msg.id] || imageError[msg.id]) return
+      if (imageFetchAttemptedRef.current.has(msg.id)) return
+
+      // Validación básica del endpoint
+      const isHttp = /^https?:\/\//i.test(endpoint)
+      const hasBraces = /[{}]/.test(endpoint)
+      if (!isHttp || hasBraces) {
+        console.warn('⚠️ [ChatWindow] image_endpoint inválido para mensaje:', { id: msg.id, endpoint })
+        setImageError(prev => ({ ...prev, [msg.id]: 'endpoint inválido' }))
+        return
+      }
+
+      imageFetchAttemptedRef.current.add(msg.id)
+      setImageLoading(prev => ({ ...prev, [msg.id]: true }))
+      console.log('🖼️ [ChatWindow] Descargando imagen de mensaje:', { id: msg.id, endpoint })
+      const res = await fetch(endpoint, { 
+        method: 'GET',
+        headers: { 
+          Authorization: IMAGE_AUTH_TOKEN,
+          Accept: 'image/*'
+        },
+        mode: 'cors',
+        cache: 'no-store'
+      })
+      console.log('🖼️ [ChatWindow] Respuesta imagen:', res.status, res.statusText)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const blob = await res.blob()
+      const contentType = blob.type
+      if (!contentType.startsWith('image/')) {
+        throw new Error(`Tipo no imagen: ${contentType || 'desconocido'}`)
+      }
+      const url = URL.createObjectURL(blob)
+      imageObjectUrlsRef.current.push(url)
+      setImageUrls(prev => ({ ...prev, [msg.id]: url }))
+    } catch (err: any) {
+      console.error('❌ [ChatWindow] Error descargando imagen del mensaje:', err?.message || err)
+      setImageError(prev => ({ ...prev, [msg.id]: err?.message || 'error' }))
+    } finally {
+      setImageLoading(prev => ({ ...prev, [msg.id]: false }))
+    }
+  }, [imageUrls, imageLoading, imageError])
+
+  useEffect(() => {
+    // Limpiar URLs creadas al desmontar
+    return () => {
+      imageObjectUrlsRef.current.forEach(u => URL.revokeObjectURL(u))
+      imageObjectUrlsRef.current = []
+    }
+  }, [])
+
+  useEffect(() => {
+    for (const m of localMessages) {
+      if (m?.metadata?.image_endpoint || (typeof m?.metadata === 'string' && m.metadata.includes('image_endpoint'))) fetchImageForMessage(m)
+    }
+  }, [localMessages, fetchImageForMessage])
+
+  useEffect(() => {
+    for (const conv of historicalConversations) {
+      for (const m of conv.messages) {
+        if (m?.metadata?.image_endpoint || (typeof m?.metadata === 'string' && m.metadata.includes('image_endpoint'))) fetchImageForMessage(m)
+      }
+    }
+  }, [historicalConversations, fetchImageForMessage])
 
   // Sincronizar conversación seleccionada y cargar mensajes cuando cambia conversationId
   useEffect(() => {
@@ -389,6 +491,12 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   const renderMessageBubble = (msg: Message, muted = false) => {
     const senderInfo = getSenderInfo(msg)
     const alignment = getMessageAlignment(msg)
+    const endpoint = getImageEndpointFromMetadata(msg?.metadata)
+    const hasImage = Boolean(endpoint)
+    const url = hasImage ? imageUrls[msg.id] : undefined
+    const isLoading = hasImage ? imageLoading[msg.id] : false
+    const errText = hasImage ? imageError[msg.id] : undefined
+
     return (
       <div key={msg.id} className={`flex ${alignment}`}>
         <div className={`flex items-start space-x-3 max-w-[70%] ${alignment === 'justify-end' ? 'flex-row-reverse space-x-reverse' : ''}`}>
@@ -405,7 +513,49 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
               ? 'bg-muted'
               : 'bg-gradient-to-br from-indigo-50 via-violet-50 to-fuchsia-50 text-slate-900 border border-indigo-100 dark:from-indigo-500 dark:via-violet-500 dark:to-fuchsia-500 dark:text-white'
           } ${muted ? 'opacity-85 dark:opacity-95' : ''}`}>
-            <p className="text-sm">{msg.content}</p>
+            {hasImage && (
+              <div className="mb-2">
+                {isLoading && (
+                  <div className="h-40 w-56 bg-muted-foreground/10 animate-pulse rounded-md" />
+                )}
+                {!isLoading && url && (
+                  <img 
+                    src={url} 
+                    alt="imagen adjunta" 
+                    className="rounded-md cursor-zoom-in max-w-full h-auto max-h-72 object-contain w-auto"
+                    loading="lazy"
+                    onClick={async () => { 
+                      const ep = endpoint!
+                      setViewerOpen(true)
+                      setViewerError(false)
+                      setViewerLoading(true)
+                      try {
+                        const res = await fetch(ep, { method: 'GET', headers: { Authorization: IMAGE_AUTH_TOKEN, Accept: 'image/*' }, mode: 'cors', cache: 'no-store' })
+                        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+                        const blob = await res.blob()
+                        if (!blob.type.startsWith('image/')) throw new Error('Tipo no imagen')
+                        const u = URL.createObjectURL(blob)
+                        if (viewerObjectUrlRef.current) URL.revokeObjectURL(viewerObjectUrlRef.current)
+                        viewerObjectUrlRef.current = u
+                        setViewerSrc(u)
+                      } catch (e) {
+                        console.error('❌ [ChatWindow] Error cargando imagen para visor:', e)
+                        setViewerError(true)
+                        setViewerSrc(undefined)
+                      } finally {
+                        setViewerLoading(false)
+                      }
+                    }}
+                  />
+                )}
+                {!isLoading && !url && (
+                  <div className="text-xs text-destructive">No se pudo cargar la imagen{errText ? `: ${errText}` : ''}</div>
+                )}
+              </div>
+            )}
+            {msg.content && (
+              <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
+            )}
             <p className={`text-xs mt-1 ${
               msg.sender_role === 'user'
                 ? 'text-muted-foreground'
@@ -699,6 +849,31 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
           </Button>
         </form>
       </div>
+
+      {/* Visor de imagen ampliada */}
+      <Dialog open={viewerOpen} onOpenChange={(o)=>{ 
+        setViewerOpen(o); 
+        if(!o){ setViewerError(false); setViewerLoading(false); setViewerSrc(undefined); if (viewerObjectUrlRef.current) { URL.revokeObjectURL(viewerObjectUrlRef.current); viewerObjectUrlRef.current = null } }
+      }}>
+        <DialogContent className="sm:max-w-[92vw] p-0 border bg-background/90 backdrop-blur">
+          <div className="max-w-[92vw] max-h-[85vh] w-[92vw] flex items-center justify-center p-2">
+            {viewerLoading && (
+              <div className="h-40 w-56 bg-muted-foreground/10 animate-pulse rounded-md" />
+            )}
+            {!viewerLoading && viewerSrc && (
+              <img 
+                src={viewerSrc} 
+                alt="imagen"
+                className="max-w-full max-h-[82vh] object-contain rounded-md"
+                onError={() => setViewerError(true)}
+              />
+            )}
+            {!viewerLoading && viewerError && (
+              <div className="text-sm text-destructive">No se pudo cargar la imagen</div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
