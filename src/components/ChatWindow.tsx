@@ -155,12 +155,6 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
 
       try {
         const u = new URL(raw)
-        // Opcional: permitir sólo hosts configurados
-        const allowed = (import.meta.env.VITE_ALLOWED_IMAGE_HOSTS as string | undefined)?.split(',').map(s=>s.trim()).filter(Boolean)
-        if (allowed && allowed.length > 0) {
-          const ok = allowed.some(h => u.hostname.endsWith(h))
-          if (!ok) return []
-        }
         // Evitar antiguos endpoints privados (wati) si aún persisten en datos históricos
         if (u.hostname.includes('wati.io')) return []
         if (u.hostname.includes('drive.google.com')) {
@@ -526,6 +520,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                     if (candidates && next < candidates.length) {
                       setImageVariantIndex(prev => ({ ...prev, [msg.id]: next }))
                     } else {
+                      console.error('❌ [ChatWindow] Error final al cargar la imagen:', imageUrl, candidates)
                       setImageError(prev => ({ ...prev, [msg.id]: 'Error al cargar la imagen.' }))
                       const target = e.target as HTMLImageElement
                       target.style.display = 'none'
