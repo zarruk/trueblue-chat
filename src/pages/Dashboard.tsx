@@ -30,7 +30,8 @@ export default function Dashboard() {
     assignAgent,
     selectedConversationId,
     updateUserDisplayName,
-    clearSelectedConversation
+    clearSelectedConversation,
+    fetchConversations
   } = useConversations();
   const { agents } = useAgents();
   
@@ -118,6 +119,8 @@ export default function Dashboard() {
               onSelectConversation={handleSelectConversation}
               conversations={conversations}
               loading={loading}
+              fetchConversations={fetchConversations}
+              selectById={(id) => handleSelectConversation(id)}
             />
           </div>
 
@@ -185,6 +188,8 @@ export default function Dashboard() {
                 onSelectConversation={handleSelectConversation}
                 conversations={conversations}
                 loading={loading}
+                fetchConversations={fetchConversations}
+                selectById={(id) => handleSelectConversation(id)}
               />
             </div>
           ) : (

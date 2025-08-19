@@ -325,6 +325,13 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     }
   }, [localMessages.length, scrollToBottomInstant])
 
+  // Asegurar scroll al fondo cuando se cambia de conversación
+  useEffect(() => {
+    if (!conversationId) return
+    const t = setTimeout(() => scrollToBottomInstant(), 100)
+    return () => clearTimeout(t)
+  }, [conversationId, scrollToBottomInstant])
+
   // Scroll suave cuando se agregan nuevos mensajes
   useEffect(() => {
     if (localMessages.length > 0) {
