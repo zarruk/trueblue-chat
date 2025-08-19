@@ -20,6 +20,9 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { supabase } from '@/integrations/supabase/client'
 import { MessageTemplatesSuggestions } from '@/components/MessageTemplatesSuggestions'
+import Picker from '@emoji-mart/react'
+import data from '@emoji-mart/data'
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 // Notificaciones deshabilitadas
 const toast = { success: (..._args: any[]) => {}, error: (..._args: any[]) => {}, info: (..._args: any[]) => {} } as const
 
@@ -70,6 +73,10 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   const [viewerError, setViewerError] = useState(false)
   // Índice de variante de imagen por mensaje (para fallbacks)
   const [imageVariantIndex, setImageVariantIndex] = useState<Record<string, number>>({})
+  // Errores de carga por imagen (por id de mensaje)
+  const [imageError, setImageError] = useState<Record<string, string | undefined>>({})
+  // Estado del popover de emojis
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
@@ -499,10 +506,14 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                   className="rounded-md cursor-zoom-in max-w-full h-auto max-h-72 object-contain w-auto"
                   loading="lazy"
                   onClick={() => { setViewerSrc(imageUrl); setViewerError(false); setViewerOpen(true) }}
-                  onError={() => {
+                  onError={(e) => {
                     const next = (imageVariantIndex[msg.id] || 0) + 1
                     if (candidates && next < candidates.length) {
                       setImageVariantIndex(prev => ({ ...prev, [msg.id]: next }))
+                    } else {
+                      setImageError(prev => ({ ...prev, [msg.id]: 'Error al cargar la imagen.' }))
+                      const target = e.target as HTMLImageElement
+                      target.style.display = 'none'
                     }
                   }}
                 />
@@ -712,9 +723,25 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
           <Button type="button" variant="ghost" size="icon" className="flex-shrink-0">
             <Paperclip className="h-4 w-4" />
           </Button>
-          <Button type="button" variant="ghost" size="icon" className="flex-shrink-0">
-            <Smile className="h-4 w-4" />
-          </Button>
+          <Popover open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
+            <PopoverTrigger asChild>
+              <Button type="button" variant="ghost" size="icon">
+                <Smile className="h-4 w-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="p-0 z-50">
+              <Picker 
+                data={data as any}
+                onEmojiSelect={(emoji: any) => {
+                  const native = emoji?.native || ''
+                  setMessage(prev => prev + native)
+                  setShowEmojiPicker(false)
+                }}
+                theme={document.documentElement.classList.contains('dark') ? 'dark' : 'light'}
+                locale="es"
+              />
+            </PopoverContent>
+          </Popover>
           <Textarea
             value={message}
             onChange={(e) => setMessage(e.target.value)}

@@ -95,7 +95,7 @@ export function useConversations() {
               .eq('conversation_id', conversation.id)
               .order('created_at', { ascending: false })
               .limit(1)
-              .single()
+              .maybeSingle()
 
             return {
               ...conversation,
