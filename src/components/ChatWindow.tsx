@@ -141,12 +141,13 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       let raw: string | undefined
       if (typeof metadata === 'string') {
         const trimmed = metadata.trim()
-        // Si la string ya es una URL válida, úsala tal cual
-        if (/^https?:\/\//i.test(trimmed)) {
-          raw = trimmed
-        } else {
+        if (trimmed === '' || trimmed === 'undefined' || trimmed === 'null' || trimmed === 'NaN') return []
+        // Si parece JSON, intentar parsear
+        if (/^[{\[]/.test(trimmed)) {
           const parsed = JSON.parse(trimmed)
           raw = parsed?.['img-url'] || parsed?.imgUrl
+        } else {
+          raw = trimmed
         }
       } else if (typeof metadata === 'object') {
         raw = (metadata as any)?.['img-url'] || (metadata as any)?.imgUrl
@@ -154,10 +155,17 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       if (!raw) return []
 
       try {
-        const u = new URL(raw)
+        let candidate = raw
+        // Agregar esquema si viene como www.domain.com/... 
+        if (!/^https?:\/\//i.test(candidate) && /^([\w-]+\.)+[\w-]{2,}/.test(candidate)) {
+          candidate = `https://${candidate}`
+        }
+        const u = new URL(candidate)
         // Evitar antiguos endpoints privados (wati) si aún persisten en datos históricos
         if (u.hostname.includes('wati.io')) return []
-        if (u.hostname.includes('drive.google.com')) {
+        const isDrive = u.hostname.includes('drive.google.com')
+        const isLh3 = u.hostname.includes('lh3.googleusercontent.com')
+        if (isDrive) {
           // generar candidatos
           const fileMatch = u.pathname.match(/\/file\/d\/([^/]+)\//)
           const id = fileMatch?.[1] || u.searchParams.get('id') || ''
@@ -169,11 +177,18 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
               `https://lh3.googleusercontent.com/d/${id}=s1200`
             ]
           }
+          return []
         }
+        if (isLh3) {
+          return [candidate]
+        }
+        // Aceptar otras URLs sólo si parecen imagen por extensión
+        const hasImageExt = /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/i.test(u.pathname)
+        return hasImageExt ? [candidate] : []
       } catch {
         // raw no es URL válida
       }
-      return [raw]
+      return []
     } catch (e) {
       console.warn('⚠️ [ChatWindow] No se pudo parsear metadata de mensaje:', e)
       return []
