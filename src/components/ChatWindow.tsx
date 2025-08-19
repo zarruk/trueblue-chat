@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { Send, Paperclip, Smile, ChevronDown, PanelRightOpen } from 'lucide-react'
+import { Send, Paperclip, Smile, ChevronDown, PanelRightOpen, ChevronLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -37,6 +37,7 @@ interface ChatWindowProps {
   conversations?: Conversation[]
   showContextToggle?: boolean
   onToggleContext?: () => void
+  onMobileBack?: () => void
 }
 
 interface Message {
@@ -62,7 +63,7 @@ interface Conversation {
   updated_at: string
 }
 
-export function ChatWindow({ conversationId, messages: propMessages, loading: propLoading, onSendMessage, onSelectConversation, onUpdateConversationStatus, onAssignAgent, conversations: propConversations, showContextToggle, onToggleContext }: ChatWindowProps) {
+export function ChatWindow({ conversationId, messages: propMessages, loading: propLoading, onSendMessage, onSelectConversation, onUpdateConversationStatus, onAssignAgent, conversations: propConversations, showContextToggle, onToggleContext, onMobileBack }: ChatWindowProps) {
   const [message, setMessage] = useState('')
   const [localMessages, setLocalMessages] = useState<Message[]>([])
   const [updatingStatus, setUpdatingStatus] = useState(false)
@@ -559,9 +560,15 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   return (
     <div className="h-full flex flex-col bg-background overflow-hidden">
       {/* Chat Header */}
-      <div className="border-b dark:border-slate-700 px-6 py-4 flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
+      <div className="border-b dark:border-slate-700 px-4 xl:px-6 py-3 xl:py-4 flex-shrink-0">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center space-x-2">
+            {/* Botón volver en móvil */}
+            {onMobileBack && (
+              <Button variant="ghost" size="icon" className="xl:hidden mr-1" onClick={onMobileBack}>
+                <ChevronLeft className="h-5 w-5" />
+              </Button>
+            )}
             <Avatar className="h-10 w-10">
               <AvatarFallback>
                 {conversation?.username?.charAt(0)?.toUpperCase() || 
@@ -586,13 +593,13 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
           </div>
           
           {/* Status Selector and Context Toggle */}
-          <div className="flex items-center space-x-4">
+          <div className="hidden xl:flex items-center space-x-4">
             {showContextToggle && onToggleContext && (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={onToggleContext}
-                className="hidden xl:flex items-center gap-2"
+                className="items-center gap-2"
               >
                 <PanelRightOpen className="h-4 w-4" />
                 Contexto

@@ -451,6 +451,12 @@ export function useConversations() {
     await fetchMessages(conversationId)
   }, [fetchMessages])
 
+  const clearSelectedConversation = useCallback(() => {
+    console.log('🧹 Cleared selected conversation')
+    setSelectedConversationId(null)
+    setMessages([])
+  }, [])
+
   // Effect to fetch messages when selectedConversationId changes
   useEffect(() => {
     if (selectedConversationId) {
@@ -595,6 +601,7 @@ export function useConversations() {
     updateUserDisplayName,
     selectConversation,
     fetchConversations,
-    fetchMessages
+    fetchMessages,
+    clearSelectedConversation
   }
 }

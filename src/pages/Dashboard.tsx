@@ -102,8 +102,8 @@ export default function Dashboard() {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* Main Content */}
-      <div className="flex-1 min-h-0 p-6 pt-6 overflow-hidden">
-        <div className="flex h-full gap-6">
+      <div className="flex-1 min-h-0 p-3 xl:p-6 pt-3 xl:pt-6 overflow-hidden">
+        <div className="flex h-full gap-3 xl:gap-6">
           {/* Conversations List */}
           <div 
             className="hidden xl:flex flex-col h-full min-h-0 flex-shrink-0"
@@ -142,6 +142,11 @@ export default function Dashboard() {
                     conversations={conversations}
                     showContextToggle={!contextPanelOpen}
                     onToggleContext={() => setContextPanelOpen(true)}
+                    onMobileBack={() => {
+                      const params = new URLSearchParams(location.search)
+                      params.delete('conv')
+                      navigate({ pathname: '/dashboard', search: params.toString() }, { replace: true })
+                    }}
                   />
                 ) : (
                   <div className="flex items-center justify-center h-full text-muted-foreground">
