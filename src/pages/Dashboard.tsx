@@ -29,7 +29,8 @@ export default function Dashboard() {
     messages,
     assignAgent,
     selectedConversationId,
-    updateUserDisplayName
+    updateUserDisplayName,
+    clearSelectedConversation
   } = useConversations();
   const { agents } = useAgents();
   
@@ -60,6 +61,9 @@ export default function Dashboard() {
     if (conv && conv !== selectedConversationId) {
       console.log('🔗 Dashboard: seleccionando conversación desde query param:', conv);
       selectConversation(conv);
+    } else if (!conv && selectedConversationId) {
+      // Si se elimina el query param, limpiar selección (útil en móvil al pulsar volver)
+      clearSelectedConversation();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search]);

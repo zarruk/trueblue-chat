@@ -140,15 +140,29 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       if (!metadata) return []
       let raw: string | undefined
       if (typeof metadata === 'string') {
-        const parsed = JSON.parse(metadata)
-        raw = parsed?.['img-url'] || parsed?.imgUrl
+        const trimmed = metadata.trim()
+        // Si la string ya es una URL válida, úsala tal cual
+        if (/^https?:\/\//i.test(trimmed)) {
+          raw = trimmed
+        } else {
+          const parsed = JSON.parse(trimmed)
+          raw = parsed?.['img-url'] || parsed?.imgUrl
+        }
       } else if (typeof metadata === 'object') {
-        raw = metadata?.['img-url'] || (metadata as any)?.imgUrl
+        raw = (metadata as any)?.['img-url'] || (metadata as any)?.imgUrl
       }
       if (!raw) return []
 
       try {
         const u = new URL(raw)
+        // Opcional: permitir sólo hosts configurados
+        const allowed = (import.meta.env.VITE_ALLOWED_IMAGE_HOSTS as string | undefined)?.split(',').map(s=>s.trim()).filter(Boolean)
+        if (allowed && allowed.length > 0) {
+          const ok = allowed.some(h => u.hostname.endsWith(h))
+          if (!ok) return []
+        }
+        // Evitar antiguos endpoints privados (wati) si aún persisten en datos históricos
+        if (u.hostname.includes('wati.io')) return []
         if (u.hostname.includes('drive.google.com')) {
           // generar candidatos
           const fileMatch = u.pathname.match(/\/file\/d\/([^/]+)\//)
