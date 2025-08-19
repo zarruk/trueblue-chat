@@ -134,64 +134,40 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     }
   }
 
-  // Helper para extraer image_url de metadata (img-url o imgUrl) y normalizar Drive
-  function getImageCandidatesFromMetadata(metadata: any): string[] {
+  // Helper: extraer URL de imagen desde metadata y normalizar Drive
+  function getImageUrlFromMetadata(metadata: any): string | undefined {
     try {
-      if (!metadata) return []
-      let raw: string | undefined
+      if (!metadata) return undefined
+      let url: string | undefined
       if (typeof metadata === 'string') {
         const trimmed = metadata.trim()
-        if (trimmed === '' || trimmed === 'undefined' || trimmed === 'null' || trimmed === 'NaN') return []
-        // Si parece JSON, intentar parsear
+        if (!trimmed || trimmed === 'undefined' || trimmed === 'null' || trimmed === 'NaN') return undefined
         if (/^[{\[]/.test(trimmed)) {
           const parsed = JSON.parse(trimmed)
-          raw = parsed?.['img-url'] || parsed?.imgUrl
+          url = parsed?.['img-url'] || parsed?.imgUrl
         } else {
-          raw = trimmed
+          url = trimmed
         }
       } else if (typeof metadata === 'object') {
-        raw = (metadata as any)?.['img-url'] || (metadata as any)?.imgUrl
+        url = (metadata as any)?.['img-url'] || (metadata as any)?.imgUrl
       }
-      if (!raw) return []
-
-      try {
-        let candidate = raw
-        // Agregar esquema si viene como www.domain.com/... 
-        if (!/^https?:\/\//i.test(candidate) && /^([\w-]+\.)+[\w-]{2,}/.test(candidate)) {
-          candidate = `https://${candidate}`
-        }
-        const u = new URL(candidate)
-        // Evitar antiguos endpoints privados (wati) si aún persisten en datos históricos
-        if (u.hostname.includes('wati.io')) return []
-        const isDrive = u.hostname.includes('drive.google.com')
-        const isLh3 = u.hostname.includes('lh3.googleusercontent.com')
-        if (isDrive) {
-          // generar candidatos
-          const fileMatch = u.pathname.match(/\/file\/d\/([^/]+)\//)
-          const id = fileMatch?.[1] || u.searchParams.get('id') || ''
-          if (id) {
-            return [
-              `https://drive.google.com/uc?export=view&id=${id}`,
-              `https://drive.google.com/uc?export=download&id=${id}`,
-              `https://drive.google.com/thumbnail?id=${id}&sz=w2000`,
-              `https://lh3.googleusercontent.com/d/${id}=s1200`
-            ]
-          }
-          return []
-        }
-        if (isLh3) {
-          return [candidate]
-        }
-        // Aceptar otras URLs sólo si parecen imagen por extensión
-        const hasImageExt = /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/i.test(u.pathname)
-        return hasImageExt ? [candidate] : []
-      } catch {
-        // raw no es URL válida
+      if (!url) return undefined
+      // Normalizar esquema si viene sin http(s)
+      if (!/^https?:\/\//i.test(url) && /^([\w-]+\.)+[\w-]{2,}/.test(url)) {
+        url = `https://${url}`
       }
-      return []
+      // Bloquear endpoints antiguos
+      if (url.includes('wati.io')) return undefined
+      // Normalizar URLs de Google Drive a uc?export=view&id=
+      const googleDriveMatch = url.match(/(?:id=|file\/d\/|drive\.google\.com\/file\/d\/)([a-zA-Z0-9_-]+)/)
+      if (googleDriveMatch && googleDriveMatch[1]) {
+        const fileId = googleDriveMatch[1]
+        return `https://drive.google.com/uc?export=view&id=${fileId}`
+      }
+      return url
     } catch (e) {
       console.warn('⚠️ [ChatWindow] No se pudo parsear metadata de mensaje:', e)
-      return []
+      return undefined
     }
   }
 
@@ -500,10 +476,36 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   const renderMessageBubble = (msg: Message, muted = false) => {
     const senderInfo = getSenderInfo(msg)
     const alignment = getMessageAlignment(msg)
-    const candidates = getImageCandidatesFromMetadata(msg?.metadata)
+    const baseImageUrl = getImageUrlFromMetadata(msg?.metadata)
+    const hasImage = Boolean(baseImageUrl)
+
+    // Variantes para Google Drive (sin hooks dentro del render de burbuja)
+    let googleDriveVariants: string[] = []
+    if (baseImageUrl && (baseImageUrl.includes('drive.google.com') || baseImageUrl.includes('drive.usercontent.google.com'))) {
+      const fileIdMatch = baseImageUrl.match(/(?:id=|file\/d\/)([a-zA-Z0-9_-]+)/)
+      if (fileIdMatch) {
+        const fileId = fileIdMatch[1]
+        googleDriveVariants = [
+          // Preferir dominios que no dan CORS en <img>
+          `https://lh3.googleusercontent.com/d/${fileId}=s2048`,
+          `https://lh3.googleusercontent.com/d/${fileId}`,
+          `https://drive.usercontent.google.com/uc?export=view&id=${fileId}`,
+          `https://drive.google.com/thumbnail?id=${fileId}&sz=w2000`,
+          `https://drive.google.com/open?id=${fileId}`,
+          `https://drive.google.com/file/d/${fileId}/view?usp=sharing`,
+          // Dejar uc al final porque suele bloquear por CORS
+          `https://drive.google.com/uc?export=view&id=${fileId}`,
+          `https://drive.google.com/uc?export=download&id=${fileId}`
+        ]
+      }
+    }
+
     const idx = imageVariantIndex[msg.id] || 0
-    const imageUrl = candidates[idx]
-    const hasImage = Boolean(imageUrl)
+    const imageUrl = hasImage
+      ? (googleDriveVariants.length > 0
+          ? googleDriveVariants[idx % googleDriveVariants.length]
+          : baseImageUrl)
+      : undefined
 
     return (
       <div key={msg.id} className={`flex ${alignment}`}>
@@ -529,13 +531,17 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                   alt="imagen adjunta" 
                   className="rounded-md cursor-zoom-in max-w-full h-auto max-h-72 object-contain w-auto"
                   loading="lazy"
+                  crossOrigin="anonymous"
+                  referrerPolicy="no-referrer"
                   onClick={() => { setViewerSrc(imageUrl); setViewerError(false); setViewerOpen(true) }}
                   onError={(e) => {
                     const next = (imageVariantIndex[msg.id] || 0) + 1
-                    if (candidates && next < candidates.length) {
+                    if (googleDriveVariants.length > 0 && next < googleDriveVariants.length) {
                       setImageVariantIndex(prev => ({ ...prev, [msg.id]: next }))
                     } else {
-                      console.error('❌ [ChatWindow] Error final al cargar la imagen:', imageUrl, candidates)
+                      if (import.meta.env.DEV) {
+                        console.warn('❌ [ChatWindow] Error final al cargar la imagen:', imageUrl, googleDriveVariants)
+                      }
                       setImageError(prev => ({ ...prev, [msg.id]: 'Error al cargar la imagen.' }))
                       const target = e.target as HTMLImageElement
                       target.style.display = 'none'
