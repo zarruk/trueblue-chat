@@ -11,17 +11,18 @@ export default defineConfig(({ mode }) => ({
     proxy: {
       // Proxy para evitar CORS al llamar al webhook de n8n desde el navegador en desarrollo
       "/api/n8n-webhook": {
-        target: process.env.VITE_N8N_WEBHOOK_URL || "https://aztec.app.n8n.cloud",
+        // Siempre apuntar al host de n8n en dev; el endpoint se define por rewrite
+        target: "https://aztec.app.n8n.cloud",
         changeOrigin: true,
         secure: true,
-        // Reescribe /api/n8n-webhook -> /webhook/<endpoint> si se define VITE_N8N_WEBHOOK_URL
+        // Reescribe /api/n8n-webhook -> /webhook/<endpoint>
+        // endpoint = tail de VITE_N8N_WEBHOOK_URL o 'tb_local' por defecto
         rewrite: (path) => {
-          const url = process.env.VITE_N8N_WEBHOOK_URL
-          if (url && url.includes('/webhook/')) {
-            const endpoint = url.split('/webhook/')[1]
-            return path.replace(/^\/api\/n8n-webhook/, `/webhook/${endpoint}`)
-          }
-          return path
+          const configured = process.env.VITE_N8N_WEBHOOK_URL
+          const endpoint = configured && configured.includes('/webhook/')
+            ? configured.split('/webhook/')[1]
+            : 'tb_local'
+          return path.replace(/^\/api\/n8n-webhook/, `/webhook/${endpoint}`)
         },
       },
     },
