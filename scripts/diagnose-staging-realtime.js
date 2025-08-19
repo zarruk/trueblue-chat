@@ -6,14 +6,13 @@ import { createClient } from '@supabase/supabase-js'
 console.log('🔍 DIAGNÓSTICO REALTIME - LOCAL vs STAGING')
 console.log('=' .repeat(60))
 
-// Configuración LOCAL (funciona)
-const LOCAL_SUPABASE_URL = "https://avkpygwhymnxotwqzknz.supabase.co"
-const LOCAL_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF2a3B5Z3doeW1ueG90d3F6a256Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMzMjEyMDcsImV4cCI6MjA2ODg5NzIwN30.p97K1S3WYNAeYb-ExRpRp3J_pqFegFJ11VOe5th_xHk"
+// Configuración LOCAL (leer de entorno para evitar exponer claves)
+const LOCAL_SUPABASE_URL = process.env.LOCAL_SUPABASE_URL
+const LOCAL_SUPABASE_ANON_KEY = process.env.LOCAL_SUPABASE_ANON_KEY
 
-// Configuración STAGING (necesitas agregar las credenciales)
-// IMPORTANTE: Reemplaza estos valores con los de tu proyecto de staging
-const STAGING_SUPABASE_URL = process.env.STAGING_SUPABASE_URL || "TU_URL_DE_STAGING"
-const STAGING_SUPABASE_ANON_KEY = process.env.STAGING_SUPABASE_ANON_KEY || "TU_ANON_KEY_DE_STAGING"
+// Configuración STAGING
+const STAGING_SUPABASE_URL = process.env.STAGING_SUPABASE_URL
+const STAGING_SUPABASE_ANON_KEY = process.env.STAGING_SUPABASE_ANON_KEY
 
 async function testEnvironment(name, url, anonKey) {
   console.log(`\n🧪 TESTING ${name} ENVIRONMENT`)
@@ -119,13 +118,17 @@ async function testEnvironment(name, url, anonKey) {
 
 async function compareEnvironments() {
   // Test LOCAL
-  const localResult = await testEnvironment('LOCAL', LOCAL_SUPABASE_URL, LOCAL_SUPABASE_ANON_KEY)
+  if (!LOCAL_SUPABASE_URL || !LOCAL_SUPABASE_ANON_KEY) {
+    console.log('\n⚠️ LOCAL CREDENTIALS NOT SET (skip)')
+  }
+  const localResult = LOCAL_SUPABASE_URL && LOCAL_SUPABASE_ANON_KEY
+    ? await testEnvironment('LOCAL', LOCAL_SUPABASE_URL, LOCAL_SUPABASE_ANON_KEY)
+    : false
   
   // Test STAGING
-  if (STAGING_SUPABASE_URL === "TU_URL_DE_STAGING") {
+  if (!STAGING_SUPABASE_URL || !STAGING_SUPABASE_ANON_KEY) {
     console.log('\n⚠️ STAGING CREDENTIALS NOT SET')
     console.log('Please set STAGING_SUPABASE_URL and STAGING_SUPABASE_ANON_KEY')
-    console.log('Or modify the script with your staging credentials')
     return
   }
   
