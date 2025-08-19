@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useConversations } from '@/hooks/useConversations';
 import { useAgents } from '@/hooks/useAgents';
@@ -11,12 +11,15 @@ import { Card, CardContent } from '@/components/ui/card';
 import { MessageSquare } from 'lucide-react';
 import { RealtimeDebugPanel } from '@/components/RealtimeDebugPanel';
 import { useRealtimeFallback } from '@/hooks/useRealtimeFallback';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 
 export default function Dashboard() {
   const [contextPanelOpen, setContextPanelOpen] = useState(false);
   const [conversationsPanelWidth, setConversationsPanelWidth] = useState(320); // ancho inicial en px
   const { profile } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   const { 
     conversations, 
     loading, 
@@ -44,7 +47,22 @@ export default function Dashboard() {
   const handleSelectConversation = (conversationId: string) => {
     console.log('🖱️ Conversation selected:', conversationId);
     selectConversation(conversationId);
+    // sincronizar URL para deep-linking
+    const params = new URLSearchParams(location.search);
+    params.set('conv', conversationId);
+    navigate({ pathname: '/dashboard', search: params.toString() }, { replace: true });
   };
+
+  // seleccionar conversación desde query param ?conv=
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const conv = params.get('conv');
+    if (conv && conv !== selectedConversationId) {
+      console.log('🔗 Dashboard: seleccionando conversación desde query param:', conv);
+      selectConversation(conv);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
 
   if (loading) {
     return (

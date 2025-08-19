@@ -5,6 +5,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Users, MessageSquare, Clock, RefreshCcw, Kanban } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 
 interface ConversationRow {
   id: string
@@ -37,6 +38,7 @@ export default function Embudo() {
   const [page, setPage] = useState(0)
   const [hasMore, setHasMore] = useState(true)
   const [userAgg, setUserAgg] = useState<Map<string, UserAggregate>>(new Map())
+  const navigate = useNavigate()
 
   const leads = useMemo(() => bucket(userAgg, 'leads'), [userAgg])
   const firstContact = useMemo(() => bucket(userAgg, 'first'), [userAgg])
@@ -168,6 +170,29 @@ export default function Embudo() {
     return () => { channel.unsubscribe() }
   }, [])
 
+  const handleOpenUser = useCallback(async (userId: string) => {
+    try {
+      const { data: conv, error } = await supabase
+        .from('tb_conversations')
+        .select('id')
+        .eq('user_id', userId)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (error) {
+        console.warn('⚠️ Embudo: error obteniendo última conversación del usuario', error)
+      }
+      if (conv?.id) {
+        navigate(`/dashboard?conv=${conv.id}`)
+      } else {
+        navigate('/dashboard')
+      }
+    } catch (e) {
+      console.warn('⚠️ Embudo: excepción al navegar a conversación', e)
+      navigate('/dashboard')
+    }
+  }, [navigate])
+
   return (
     <div className="h-full flex flex-col p-4 gap-3">
       <div className="flex items-center justify-between">
@@ -182,10 +207,10 @@ export default function Embudo() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 min-h-0 flex-1">
-        <Column title="Leads" description="IA x1, 0 humano" items={leads} loading={loading} />
-        <Column title="Primer contacto" description=">=2 IA, 0 humano" items={firstContact} loading={loading} />
-        <Column title="Discusión" description=">=1 humano" items={discussion} loading={loading} />
-        <Column title="Recurrentes" description=">1 conversación" items={recurring} loading={loading} />
+        <Column title="Leads" description="IA x1, 0 humano" items={leads} loading={loading} onOpen={handleOpenUser} />
+        <Column title="Primer contacto" description=">=2 IA, 0 humano" items={firstContact} loading={loading} onOpen={handleOpenUser} />
+        <Column title="Discusión" description=">=1 humano" items={discussion} loading={loading} onOpen={handleOpenUser} />
+        <Column title="Recurrentes" description=">1 conversación" items={recurring} loading={loading} onOpen={handleOpenUser} />
       </div>
 
       <div className="flex justify-center py-2">
@@ -222,7 +247,7 @@ function bucket(map: Map<string, UserAggregate>, type: 'leads'|'first'|'discussi
   return arr
 }
 
-function Column({ title, description, items, loading }: { title: string; description: string; items: UserAggregate[]; loading: boolean }) {
+function Column({ title, description, items, loading, onOpen }: { title: string; description: string; items: UserAggregate[]; loading: boolean; onOpen: (userId: string) => void }) {
   return (
     <Card className="flex flex-col min-h-0">
       <CardHeader className="py-2">
@@ -245,7 +270,9 @@ function Column({ title, description, items, loading }: { title: string; descrip
           ) : (
             <div className="space-y-2 py-2">
               {items.map(it => (
-                <div key={it.userId} className="border rounded-md p-2 text-xs flex items-center justify-between">
+                <div key={it.userId} className="border rounded-md p-2 text-xs flex items-center justify-between cursor-pointer hover:bg-accent/50"
+                  onClick={() => onOpen(it.userId)}
+                >
                   <div className="min-w-0">
                     <div className="font-medium truncate">{it.displayName}</div>
                     <div className="text-[11px] text-muted-foreground">Última: {new Date(it.lastActivity).toLocaleString()}</div>
