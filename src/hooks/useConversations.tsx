@@ -118,6 +118,41 @@ export function useConversations() {
       console.log('✅ fetchConversations: Último mensaje obtenido para cada conversación')
       console.log('🔍 fetchConversations: Setting conversations in state...')
       setConversations(conversationsWithLastMessage)
+
+      // Auto-cierre de conversaciones cuyo último mensaje del usuario tiene >24h
+      try {
+        if (profile?.role === 'admin') {
+          const now = Date.now()
+          const dayMs = 24 * 60 * 60 * 1000
+          const toClose = (conversationsWithLastMessage || []).filter((c: any) => {
+            if (!c || c.status === 'closed') return false
+            if (!c.last_message_at) return false
+            const age = now - new Date(c.last_message_at).getTime()
+            return age >= dayMs
+          })
+
+          if (toClose.length > 0) {
+            console.log(`🕒 Auto-cierre: cerrando ${toClose.length} conversación(es) por inactividad >24h`)
+            for (const conv of toClose) {
+              try {
+                const { error } = await supabase
+                  .from('tb_conversations')
+                  .update({ status: 'closed', updated_at: new Date().toISOString() })
+                  .eq('id', conv.id)
+                if (!error) {
+                  setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, status: 'closed', updated_at: new Date().toISOString() } : c))
+                } else {
+                  console.warn('⚠️ Auto-cierre: fallo al cerrar conversación', conv.id, error)
+                }
+              } catch (e) {
+                console.warn('⚠️ Auto-cierre: excepción cerrando conversación', conv.id, e)
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('⚠️ Auto-cierre: error general', e)
+      }
       setIsInitialized(true)
     } catch (error) {
       console.error('❌ Exception fetching conversations:', error)

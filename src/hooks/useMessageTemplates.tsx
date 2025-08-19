@@ -63,8 +63,8 @@ export function useMessageTemplates() {
         .insert({
           name: templateData.name,
           message: templateData.message,
-          category: templateData.category || 'general'
-          // created_by/created_at/updated_at: confiar en defaults; policy de insert debe permitirlo
+          category: templateData.category || 'general',
+          created_by: user.id
         })
 
       if (error) {

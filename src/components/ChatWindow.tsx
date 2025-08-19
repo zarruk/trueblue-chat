@@ -636,6 +636,9 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
               </Button>
             )}
             
+            {(() => {
+              const isClosed = conversation?.status === 'closed'
+              return (
             <div className="flex flex-col items-end space-y-1">
               <label className="text-xs text-muted-foreground font-medium">
                 Estado de la conversación
@@ -644,7 +647,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                 <Select 
                   onValueChange={handleStatusChange} 
                   value={conversation?.status || 'closed'}
-                  disabled={updatingStatus}
+                  disabled={updatingStatus || isClosed}
                 >
                   <SelectTrigger className="h-8 w-[160px]">
                     <SelectValue placeholder="Cambiar estado" />
@@ -661,14 +664,47 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                 )}
               </div>
             </div>
+              )
+            })()}
+
+            {/* Asignación de agente */}
+            {(() => {
+              const isClosed = conversation?.status === 'closed'
+              return (
+            <div className="flex flex-col items-end space-y-1">
+              <label className="text-xs text-muted-foreground font-medium">
+                Agente asignado
+              </label>
+              <div className="flex items-center space-x-2">
+                <Select
+                  onValueChange={(value) => handleAssignAgent(value)}
+                  value={conversation?.assigned_agent_id || 'none'}
+                  disabled={isClosed}
+                >
+                  <SelectTrigger className="h-8 w-[220px]">
+                    <SelectValue placeholder="Selecciona agente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sin asignar (volver a IA)</SelectItem>
+                    {availableAgents.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.name} · {a.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+              )
+            })()}
           </div>
         </div>
       </div>
 
       {/* Messages */}
       <div className="flex-1 flex flex-col min-h-0 relative">
-        {/* Botón para tomar conversación */}
-        {conversation && conversation.status !== 'active_human' && conversation.status !== 'pending_human' && (
+        {/* Botón para tomar conversación (solo cuando está en IA activa) */}
+        {conversation && conversation.status === 'active_ai' && (
           <div className="p-2 border-b bg-muted/20 dark:border-slate-700">
             <Button 
               onClick={async () => {
