@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { useAuth } from '@/hooks/useAuth'
 import { useAgents } from '@/hooks/useAgents'
 import { format } from 'date-fns'
@@ -68,6 +68,8 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   const [viewerOpen, setViewerOpen] = useState(false)
   const [viewerSrc, setViewerSrc] = useState<string | undefined>(undefined)
   const [viewerError, setViewerError] = useState(false)
+  // Índice de variante de imagen por mensaje (para fallbacks)
+  const [imageVariantIndex, setImageVariantIndex] = useState<Record<string, number>>({})
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
@@ -468,7 +470,8 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     const senderInfo = getSenderInfo(msg)
     const alignment = getMessageAlignment(msg)
     const candidates = getImageCandidatesFromMetadata(msg?.metadata)
-    const imageUrl = candidates[0]
+    const idx = imageVariantIndex[msg.id] || 0
+    const imageUrl = candidates[idx]
     const hasImage = Boolean(imageUrl)
 
     return (
@@ -490,19 +493,17 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
             {hasImage && (
               <div className="mb-2">
                 <img 
+                  key={`${msg.id}-${idx}`}
                   src={imageUrl} 
                   alt="imagen adjunta" 
                   className="rounded-md cursor-zoom-in max-w-full h-auto max-h-72 object-contain w-auto"
                   loading="lazy"
                   onClick={() => { setViewerSrc(imageUrl); setViewerError(false); setViewerOpen(true) }}
-                  onError={(e) => { 
-                    const next = 1 // ya no usamos múltiples variantes aquí
-                    const target = e.target as HTMLImageElement
-                    target.style.display = 'none'
-                    const errorDiv = document.createElement('div')
-                    errorDiv.className = 'text-xs text-destructive'
-                    errorDiv.innerText = 'Error al cargar la imagen.'
-                    target.parentElement?.appendChild(errorDiv)
+                  onError={() => {
+                    const next = (imageVariantIndex[msg.id] || 0) + 1
+                    if (candidates && next < candidates.length) {
+                      setImageVariantIndex(prev => ({ ...prev, [msg.id]: next }))
+                    }
                   }}
                 />
               </div>
@@ -749,6 +750,8 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
         if(!o){ setViewerError(false); setViewerSrc(undefined); }
       }}>
         <DialogContent className="sm:max-w-[92vw] p-0 border bg-background/90 backdrop-blur">
+          <DialogTitle className="sr-only">Visor de imagen</DialogTitle>
+          <DialogDescription className="sr-only">Imagen adjunta ampliada</DialogDescription>
           <div className="max-w-[92vw] max-h-[85vh] w-[92vw] flex items-center justify-center p-2">
             {!viewerError && viewerSrc && (
               <img 
