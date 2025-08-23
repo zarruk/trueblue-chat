@@ -56,9 +56,13 @@ export function useConversations() {
       setLoading(true)
       console.log('🔍 fetchConversations: Starting fetch...')
       
+      console.log('🔍 fetchConversations: Profile client_id:', profile?.client_id)
+      console.log('🔍 fetchConversations: Profile role:', profile?.role)
+      
       let query = supabase
         .from('tb_conversations')
         .select('*')
+        .eq('client_id', profile?.client_id) // Filtrar por cliente
         .order('updated_at', { ascending: false })
 
       // If user is not admin, only show conversations assigned to them or pending
@@ -74,7 +78,12 @@ export function useConversations() {
         console.log('👑 Admin user, showing all conversations')
       }
 
+      console.log('🔍 fetchConversations: Query construida, ejecutando...')
       const { data, error } = await query
+      console.log('🔍 fetchConversations: Query ejecutada')
+      console.log('🔍 fetchConversations: Error:', error)
+      console.log('🔍 fetchConversations: Data length:', data?.length)
+      console.log('🔍 fetchConversations: Data sample:', data?.slice(0, 2))
 
       if (error) {
         console.error('❌ Error fetching conversations:', error)

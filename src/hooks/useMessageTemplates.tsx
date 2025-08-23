@@ -22,7 +22,7 @@ type NewTemplateInput = {
 export function useMessageTemplates() {
   const [templates, setTemplates] = useState<MessageTemplate[]>([])
   const [loading, setLoading] = useState(true)
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
 
   // Fetch message templates
   const fetchTemplates = useCallback(async () => {
@@ -30,25 +30,41 @@ export function useMessageTemplates() {
 
     try {
       setLoading(true)
+      console.log('🔍 fetchTemplates: Obteniendo plantillas...')
+      console.log('🔍 fetchTemplates: Profile client_id:', profile?.client_id)
+      
+      // Si no tenemos client_id, esperar un poco y reintentar
+      if (!profile?.client_id) {
+        console.log('⚠️ fetchTemplates: No hay client_id disponible, esperando...')
+        setTimeout(() => {
+          if (profile?.client_id) {
+            fetchTemplates()
+          }
+        }, 1000)
+        return
+      }
+      
       const { data, error } = await supabase
         .from('tb_message_templates')
         .select('*')
+        .eq('client_id', profile.client_id) // Filtrar por cliente
         .order('updated_at', { ascending: false })
 
       if (error) {
-        console.error('Error fetching message templates:', error)
+        console.error('❌ Error fetching templates:', error)
         toast.error('Error al cargar las plantillas de mensajes')
         return
       }
 
+      console.log('✅ fetchTemplates: Plantillas obtenidas:', data?.length || 0)
       setTemplates((data as any) || [])
     } catch (error) {
-      console.error('Error fetching message templates:', error)
+      console.error('❌ Exception fetching templates:', error)
       toast.error('Error al cargar las plantillas de mensajes')
     } finally {
       setLoading(false)
     }
-  }, [user])
+  }, [user, profile?.client_id])
 
   // Create new template
   const createTemplate = useCallback(async (templateData: NewTemplateInput) => {
@@ -64,7 +80,8 @@ export function useMessageTemplates() {
           name: templateData.name,
           message: templateData.message,
           category: templateData.category || 'general',
-          created_by: user.id
+          created_by: user.id,
+          client_id: profile?.client_id // Asignar al mismo cliente
         })
 
       if (error) {

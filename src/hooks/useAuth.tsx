@@ -38,11 +38,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const name = (u.user_metadata as any)?.name || email?.split('@')[0] || 'Agente';
             console.log('🔍 Buscando/creando perfil para usuario:', email);
             try {
-              // Buscar por email (puede no existir aún)
+              // Buscar por email (puede no existir aún) - tomar el más reciente si hay duplicados
               const { data: initialProfile, error: selectErr } = await supabase
                 .from('profiles')
                 .select('*')
                 .eq('email', email)
+                .order('created_at', { ascending: false })
+                .limit(1)
                 .maybeSingle();
 
               let finalProfile = initialProfile as Profile | null;
@@ -56,7 +58,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 console.log('➕ Creando perfil porque no existe:', email);
                 const { data: inserted, error: insertErr } = await supabase
                   .from('profiles')
-                  .insert({ id: u.id, email, name, status: 'active' })
+                  .insert({ 
+                    id: u.id, 
+                    email, 
+                    name, 
+                    status: 'active',
+                    client_id: '550e8400-e29b-41d4-a716-446655440000' // Cliente Trueblue por defecto
+                  })
                   .select('*')
                   .maybeSingle();
 
@@ -87,6 +95,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               }
 
               console.log('🏁 Perfil final cargado en Auth:', finalProfile);
+              console.log('🏁 Client ID del perfil:', finalProfile?.client_id);
               setProfile(finalProfile || null);
             } catch (e) {
               console.error('❌ Excepción resolviendo perfil:', e);
