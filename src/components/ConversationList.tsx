@@ -109,12 +109,14 @@ export function ConversationList({ onSelectConversation, selectedConversationId,
     })
 
     const sorted = filtered.sort((a, b) => {
-      const pa = getPriority(a)
-      const pb = getPriority(b)
-      if (pa !== pb) return pa - pb
       const aRef = a.last_message_at || a.updated_at
       const bRef = b.last_message_at || b.updated_at
-      return new Date(bRef).getTime() - new Date(aRef).getTime()
+      const dt = new Date(bRef).getTime() - new Date(aRef).getTime()
+      if (dt !== 0) return dt
+      // Tie-breaker by priority if same timestamp
+      const pa = getPriority(a)
+      const pb = getPriority(b)
+      return pa - pb
     })
     return sorted
   }, [conversations, searchTerm, statusFilter, agentFilter])

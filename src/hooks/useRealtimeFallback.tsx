@@ -1,9 +1,17 @@
 import { useEffect, useRef } from 'react'
-import { useConversations } from './useConversations'
 
-// Hook de fallback para staging - usa polling cuando Realtime falla
-export function useRealtimeFallback(enabled: boolean = false) {
-  const { fetchConversations, fetchMessages, selectedConversationId } = useConversations()
+// Hook de fallback para staging/producción - usa polling cuando Realtime falla
+export function useRealtimeFallback({
+  enabled = false,
+  fetchConversations,
+  fetchMessages,
+  selectedConversationId
+}: {
+  enabled?: boolean
+  fetchConversations: (options?: { background?: boolean }) => Promise<any> | void
+  fetchMessages: (conversationId: string) => Promise<any> | void
+  selectedConversationId?: string | null
+}) {
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
   
   useEffect(() => {
@@ -11,11 +19,18 @@ export function useRealtimeFallback(enabled: boolean = false) {
     
     console.log('⚠️ [FALLBACK] Iniciando polling como fallback para Realtime')
     
-    // Polling cada 3 segundos
+    // Polling moderado cada 3 segundos
     intervalRef.current = setInterval(() => {
-      fetchConversations()
-      if (selectedConversationId) {
-        fetchMessages(selectedConversationId)
+      try {
+        fetchConversations({ background: true })
+        if (selectedConversationId) {
+          fetchMessages(selectedConversationId)
+        }
+      } catch (e) {
+        // Evitar romper el intervalo por errores temporales
+        if (import.meta.env.DEV) {
+          console.warn('⚠️ [FALLBACK] Error durante polling:', e)
+        }
       }
     }, 3000)
     

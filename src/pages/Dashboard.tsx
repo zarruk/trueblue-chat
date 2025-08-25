@@ -6,7 +6,6 @@ import { useAgents } from '@/hooks/useAgents';
 import { ConversationTabs } from '@/components/ConversationTabs';
 import { ChatContextPanel } from '@/components/ChatContextPanel';
 import { ChatWindow } from '@/components/ChatWindow';
-import { ConversationWithMessages } from '@/types/database';
 import { Card, CardContent } from '@/components/ui/card';
 import { MessageSquare } from 'lucide-react';
 import { RealtimeDebugPanel } from '@/components/RealtimeDebugPanel';
@@ -23,6 +22,7 @@ export default function Dashboard() {
   const { 
     conversations, 
     loading, 
+    refreshing,
     sendMessage, 
     updateConversationStatus, 
     selectConversation,
@@ -31,13 +31,21 @@ export default function Dashboard() {
     selectedConversationId,
     updateUserDisplayName,
     clearSelectedConversation,
-    fetchConversations
+    fetchConversations,
+    fetchMessages
   } = useConversations();
   const { agents } = useAgents();
   
-  // Activar fallback de polling en staging y production (no en dev local)
-  const enableFallback = import.meta.env.MODE === 'production' || import.meta.env.VITE_ENABLE_POLLING === 'true';
-  useRealtimeFallback(enableFallback);
+  // DESHABILITADO: No usar polling automático para evitar refrescos
+  // const enableFallback = import.meta.env.MODE === 'production' || import.meta.env.VITE_ENABLE_POLLING === 'true';
+  // useRealtimeFallback({
+  //   enabled: enableFallback,
+  //   fetchConversations,
+  //   fetchMessages,
+  //   selectedConversationId
+  // });
+
+  // Eliminado: No refrescar automáticamente al recuperar foco
 
   // Las conversaciones se actualizan automáticamente vía tiempo real
 
@@ -118,7 +126,7 @@ export default function Dashboard() {
               selectedConversationId={selectedConversationId || undefined}
               onSelectConversation={handleSelectConversation}
               conversations={conversations}
-              loading={loading}
+              loading={loading || refreshing}
               fetchConversations={fetchConversations}
               selectById={(id) => handleSelectConversation(id)}
             />
@@ -187,7 +195,7 @@ export default function Dashboard() {
                 selectedConversationId={selectedConversationId || undefined}
                 onSelectConversation={handleSelectConversation}
                 conversations={conversations}
-                loading={loading}
+                loading={loading || refreshing}
                 fetchConversations={fetchConversations}
                 selectById={(id) => handleSelectConversation(id)}
               />

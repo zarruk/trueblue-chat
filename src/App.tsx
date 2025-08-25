@@ -18,6 +18,7 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { checkAndAddChannelColumn } from "@/utils/databaseStructureCheck";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { DynamicTitle } from "@/components/DynamicTitle";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -65,7 +66,9 @@ function AppLayout({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <div className="h-screen flex w-full overflow-hidden">
+    <>
+      <DynamicTitle />
+      <div className="h-screen flex w-full overflow-hidden">
       <AppSidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
       <main className={`flex-1 flex flex-col min-h-0 overflow-hidden transition-all duration-300 ease-in-out ${
         sidebarOpen ? 'ml-64' : 'ml-0'
@@ -91,7 +94,8 @@ function AppLayout({ children }: { children: React.ReactNode }) {
           {children}
         </div>
       </main>
-    </div>
+      </div>
+    </>
   );
 }
 

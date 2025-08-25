@@ -30,8 +30,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(session);
         setUser(session?.user ?? null);
         
-        if (session?.user && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
-          // Defer profile fetch to avoid blocking
+        if (session?.user && event === 'SIGNED_IN') {
+          // Solo cargar perfil en SIGNED_IN, no en TOKEN_REFRESHED para evitar refrescos
           setTimeout(async () => {
             const u = session.user;
             const email = u.email || '';

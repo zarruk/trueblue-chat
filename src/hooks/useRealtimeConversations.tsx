@@ -39,6 +39,7 @@ interface UseRealtimeConversationsProps {
   onConversationUpdate?: (conversation: Conversation) => void
   onConversationDelete?: (conversationId: string) => void
   userId?: string
+  clientId?: string
 }
 
 export function useRealtimeConversations({
@@ -48,7 +49,8 @@ export function useRealtimeConversations({
   onConversationInsert,
   onConversationUpdate,
   onConversationDelete,
-  userId
+  userId,
+  clientId
 }: UseRealtimeConversationsProps) {
   
   // Usar useRef para evitar loop infinito
@@ -107,9 +109,40 @@ export function useRealtimeConversations({
             schema: 'public',
             table: 'tb_messages'
           },
-          (payload) => {
-            console.log('✅ [REALTIME] Nuevo mensaje recibido en tiempo real:', payload.new)
-            const newMessage = payload.new as Message
+          async (payload) => {
+            console.log('✅ [REALTIME] Raw message insert payload received:', payload);
+            const newMessage = payload.new as Message & { client_id?: string }
+
+            // --- Intensive Debugging ---
+            console.log(`[REALTIME DEBUG] Hook's client_id: ${clientId}`);
+            console.log(`[REALTIME DEBUG] Message's client_id: ${newMessage.client_id}`);
+
+            // Guardar por clientId si está disponible; si no, intentar inferirlo por la conversación
+            if (clientId) {
+              if (newMessage.client_id && newMessage.client_id !== clientId) {
+                console.log(`[REALTIME DEBUG] REJECTED: Message client_id (${newMessage.client_id}) does not match hook's client_id (${clientId}).`);
+                return
+              }
+              if (!newMessage.client_id && newMessage.conversation_id) {
+                console.log(`[REALTIME DEBUG] Message has no client_id. Fetching from conversation ${newMessage.conversation_id}...`);
+                try {
+                  const { data: conv } = await supabase
+                    .from('tb_conversations')
+                    .select('client_id')
+                    .eq('id', newMessage.conversation_id)
+                    .maybeSingle()
+                  console.log(`[REALTIME DEBUG] Fetched conversation's client_id: ${(conv as any)?.client_id}`);
+                  const convClientId = (conv as any)?.client_id as string | undefined
+                  if (convClientId && convClientId !== clientId) {
+                    console.log(`[REALTIME DEBUG] REJECTED: Conversation's client_id (${convClientId}) does not match hook's client_id (${clientId}).`);
+                    return
+                  }
+                } catch {}
+              }
+            }
+            console.log('[REALTIME DEBUG] PASSED: Message client_id check passed. Firing callback.');
+            // --- End Intensive Debugging ---
+
             if (callbacksRef.current.onMessageInsert) {
               console.log('📨 [REALTIME] Ejecutando callback onMessageInsert...')
               callbacksRef.current.onMessageInsert(newMessage)
@@ -117,7 +150,6 @@ export function useRealtimeConversations({
               console.log('⚠️ [REALTIME] Callback onMessageInsert no disponible')
             }
             
-            // Mostrar notificación solo si el mensaje no es del usuario actual
             if (newMessage.sender_role !== 'agent' || newMessage.responded_by_agent_id !== callbacksRef.current.userId) {
               toast.success('Nuevo mensaje recibido', {
                 description: `${newMessage.sender_role === 'user' ? 'Cliente' : 'IA'}: ${newMessage.content.substring(0, 50)}...`,
@@ -133,9 +165,12 @@ export function useRealtimeConversations({
             schema: 'public',
             table: 'tb_messages'
           },
-          (payload) => {
+          async (payload) => {
             console.log('🔄 [REALTIME] Mensaje actualizado en tiempo real:', payload.new)
-            const updatedMessage = payload.new as Message
+            const updatedMessage = payload.new as Message & { client_id?: string }
+            if (clientId) {
+              if (updatedMessage.client_id && updatedMessage.client_id !== clientId) return
+            }
             if (callbacksRef.current.onMessageUpdate) {
               console.log('📝 [REALTIME] Ejecutando callback onMessageUpdate...')
               callbacksRef.current.onMessageUpdate(updatedMessage)
@@ -180,7 +215,11 @@ export function useRealtimeConversations({
           },
           (payload) => {
             console.log('✅ [REALTIME] Nueva conversación recibida en tiempo real:', payload.new)
-            const newConversation = payload.new as Conversation
+            const newConversation = payload.new as Conversation & { client_id?: string }
+            if (clientId && newConversation.client_id && newConversation.client_id !== clientId) {
+              console.log(`[REALTIME DEBUG] REJECTED: Conversation client_id (${newConversation.client_id}) does not match hook's client_id (${clientId}).`);
+              return
+            }
             if (callbacksRef.current.onConversationInsert) {
               console.log('🆕 [REALTIME] Ejecutando callback onConversationInsert...')
               callbacksRef.current.onConversationInsert(newConversation)
@@ -203,7 +242,8 @@ export function useRealtimeConversations({
           },
           (payload) => {
             console.log('🔄 [REALTIME] Conversación actualizada en tiempo real:', payload.new)
-            const updatedConversation = payload.new as Conversation
+            const updatedConversation = payload.new as Conversation & { client_id?: string }
+            if (clientId && updatedConversation.client_id && updatedConversation.client_id !== clientId) return
             if (callbacksRef.current.onConversationUpdate) {
               console.log('🔄 [REALTIME] Ejecutando callback onConversationUpdate...')
               callbacksRef.current.onConversationUpdate(updatedConversation)
@@ -336,7 +376,7 @@ export function useRealtimeConversations({
         conversationsChannel.unsubscribe()
       }
     }
-  }, []) // Array vacío porque usamos useRef para los callbacks
+  }, [clientId]) // Array vacío porque usamos useRef para los callbacks
 
   useEffect(() => {
     console.log('🔌 [REALTIME] useEffect ejecutándose, configurando suscripciones...')

@@ -193,6 +193,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
         .from('tb_conversations')
         .select('id, created_at, updated_at')
         .eq('user_id', userId)
+        .eq('client_id', profile?.client_id)
         .neq('id', currentConvId)
         .order('created_at', { ascending: true })
 
@@ -208,6 +209,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
           .from('tb_messages')
           .select('*')
           .eq('conversation_id', c.id)
+          // .eq('client_id', profile?.client_id)
           .order('created_at', { ascending: true })
         if (msgsError) {
           console.error('❌ [ChatWindow] Error obteniendo mensajes históricos:', msgsError)
@@ -268,45 +270,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     }
   }, [conversationId])
 
-  // Polling de respaldo cada 2.5s para garantizar mensajes en tiempo real si falla la suscripción
-  useEffect(() => {
-    if (!conversationId) return
-
-    let isCancelled = false
-    const interval = setInterval(async () => {
-      try {
-        const { data, error } = await supabase
-          .from('tb_messages')
-          .select('*')
-          .eq('conversation_id', conversationId)
-          .order('created_at', { ascending: true })
-
-        if (error) {
-          console.error('❌ [ChatWindow] Polling mensajes error:', error)
-          return
-        }
-
-        if (!isCancelled && Array.isArray(data)) {
-          setLocalMessages(prev => {
-            if (prev.length === data.length) return prev
-            // Merge simple por id
-            const byId = new Map(prev.map(m => [m.id, m]))
-            for (const m of data as any[]) {
-              byId.set(m.id, m as any)
-            }
-            return Array.from(byId.values()).sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-          })
-        }
-      } catch (e) {
-        console.error('❌ [ChatWindow] Polling mensajes excepción:', e)
-      }
-    }, 2500)
-
-    return () => {
-      isCancelled = true
-      clearInterval(interval)
-    }
-  }, [conversationId])
+  // ELIMINADO: No usar polling automático para evitar refrescos
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
     if (messagesEndRef.current) {

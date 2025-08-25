@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 
 import { Button } from '@/components/ui/button';
@@ -16,13 +17,14 @@ export default function Auth() {
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const { signInWithMagicLink, user } = useAuth();
+  const navigate = useNavigate();
 
   // Redirect authenticated users
   useEffect(() => {
     if (user) {
-      window.location.href = `${window.location.origin}/`;
+      navigate('/', { replace: true });
     }
-  }, [user]);
+  }, [user, navigate]);
 
   // No need for invitation token handling anymore - simplified flow
 

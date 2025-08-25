@@ -15,7 +15,7 @@ interface ConversationTabsProps {
   conversations: Conversation[]
   loading: boolean
   // Nuevos: acciones elevadas desde Dashboard para evitar instancias duplicadas del hook
-  fetchConversations?: () => Promise<void>
+  fetchConversations?: (options?: { background?: boolean }) => Promise<void>
   selectById?: (conversationId: string) => void
 }
 
@@ -94,7 +94,7 @@ Cuéntanos cómo te podemos ayudar.`, [name, reason])
         setOpen(false)
         setPhone(''); setName(''); setReason('')
         // Refrescar lista para ver la conversación al instante
-        if (fetchConversations) await fetchConversations()
+        if (fetchConversations) await fetchConversations({ background: true })
         // Seleccionar si tenemos id
         if (createdId && selectById) {
           selectById(createdId)
