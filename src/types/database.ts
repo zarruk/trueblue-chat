@@ -50,7 +50,7 @@ export interface Database {
           id: string
           user_id: string
           username: string | null
-          status: 'active_ai' | 'active_human' | 'closed' | 'pending_human'
+          status: 'active_ai' | 'active_human' | 'closed' | 'pending_human' | 'pending_response'
           created_at: string
           updated_at: string
           assigned_agent_id: string | null
@@ -65,7 +65,7 @@ export interface Database {
           id?: string
           user_id: string
           username?: string | null
-          status?: 'active_ai' | 'active_human' | 'closed' | 'pending_human'
+          status?: 'active_ai' | 'active_human' | 'closed' | 'pending_human' | 'pending_response'
           created_at?: string
           updated_at?: string
           assigned_agent_id?: string | null
@@ -80,7 +80,7 @@ export interface Database {
           id?: string
           user_id?: string
           username?: string | null
-          status?: 'active_ai' | 'active_human' | 'closed' | 'pending_human'
+          status?: 'active_ai' | 'active_human' | 'closed' | 'pending_human' | 'pending_response'
           created_at?: string
           updated_at?: string
           assigned_agent_id?: string | null

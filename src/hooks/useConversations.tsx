@@ -11,7 +11,7 @@ export interface Conversation {
   user_id: string
   username?: string
   phone_number?: string
-  status: 'active_ai' | 'active_human' | 'closed' | 'pending_human'
+  status: 'active_ai' | 'active_human' | 'closed' | 'pending_human' | 'pending_response'
   assigned_agent_id?: string
   assigned_agent_email?: string
   assigned_agent_name?: string
@@ -557,6 +557,37 @@ export function useConversations() {
     } else {
       console.log('📨 [REALTIME] Mensaje no es de la conversación seleccionada, solo actualizando conversación')
     }
+
+    // Si es un mensaje del usuario y la conversación está en pending_response, cambiar a active_human
+    if (message.sender_role === 'user') {
+      setConversations(prevConversations => {
+        const conversation = prevConversations.find(c => c.id === message.conversation_id)
+        if (conversation && conversation.status === 'pending_response') {
+          console.log('🔄 [REALTIME] Cambiando estado de pending_response a active_human por mensaje del usuario')
+          
+          // Actualizar en la base de datos
+          supabase
+            .from('tb_conversations')
+            .update({ status: 'active_human' })
+            .eq('id', message.conversation_id)
+            .then(({ error }) => {
+              if (error) {
+                console.error('❌ Error actualizando estado de conversación:', error)
+              } else {
+                console.log('✅ Estado de conversación actualizado a active_human')
+              }
+            })
+          
+          // Actualizar en el estado local
+          return prevConversations.map(conv =>
+            conv.id === message.conversation_id
+              ? { ...conv, status: 'active_human' as const }
+              : conv
+          )
+        }
+        return prevConversations
+      })
+    }
     
     // Actualizar último mensaje de la conversación si ya existe en estado
     console.log('📨 [REALTIME] Actualizando conversación con último mensaje')
@@ -698,6 +729,9 @@ export function useConversations() {
       newStatus: conversation.status,
       newAgent: conversation.assigned_agent_name
     })
+    console.log('🔄 [REALTIME] DEBUG - Status es pending_response:', conversation.status === 'pending_response')
+    console.log('🔄 [REALTIME] DEBUG - Status es closed:', conversation.status === 'closed')
+    console.log('🔄 [REALTIME] DEBUG - Campo debería estar deshabilitado:', conversation.status === 'closed' || conversation.status === 'pending_response')
     
     setConversations(prevConversations => {
       const prevConversation = prevConversations.find(c => c.id === conversation.id)

@@ -52,7 +52,7 @@ interface Message {
 
 interface Conversation {
   id: string
-  status: 'active_ai' | 'active_human' | 'closed' | 'pending_human'
+  status: 'active_ai' | 'active_human' | 'closed' | 'pending_human' | 'pending_response'
   user_id: string
   username?: string
   phone_number?: string
@@ -389,6 +389,8 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
         return 'destructive'
       case 'pending_human':
         return 'outline'
+      case 'pending_response':
+        return 'outline'
       default:
         return 'secondary'
     }
@@ -404,6 +406,8 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
         return '🔒 Cerrada'
       case 'pending_human':
         return '⏳ Pendiente'
+      case 'pending_response':
+        return '⏳ Esperando Respuesta'
       default:
         return status
     }
@@ -419,6 +423,8 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
         return 'text-red-600'
       case 'pending_human':
         return 'text-orange-600'
+      case 'pending_response':
+        return 'text-yellow-600'
       default:
         return 'text-gray-600'
     }
@@ -789,9 +795,17 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
           <Textarea
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            placeholder="Escribe un mensaje..."
+            placeholder={
+              !conversationId 
+                ? "Escribe un mensaje..." 
+                : conversation?.status === 'closed' 
+                  ? "Conversación cerrada" 
+                  : conversation?.status === 'pending_response' 
+                    ? "Esperando respuesta del usuario..." 
+                    : "Escribe un mensaje..."
+            }
             className="flex-1 min-h-[40px] max-h-[120px] resize-none"
-            disabled={!conversationId}
+            disabled={!conversationId || conversation?.status === 'closed' || conversation?.status === 'pending_response'}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
@@ -809,7 +823,23 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
               target.style.height = Math.min(target.scrollHeight, 120) + 'px'
             }}
           />
-          <Button type="submit" size="icon" disabled={!message.trim() || !conversationId}>
+          {/* Debug info - remover en producción */}
+          {conversationId && (
+            <div className="text-xs text-muted-foreground mt-1">
+              Debug: ID={conversationId}, Status={conversation?.status}, Disabled={!conversationId || conversation?.status === 'closed' || conversation?.status === 'pending_response'}
+            </div>
+          )}
+          {/* Debug logs en consola */}
+          {conversationId && (() => {
+            console.log('🔍 ChatWindow Debug:', {
+              conversationId,
+              conversationStatus: conversation?.status,
+              isDisabled: !conversationId || conversation?.status === 'closed' || conversation?.status === 'pending_response',
+              conversation: conversation
+            });
+            return null;
+          })()}
+          <Button type="submit" size="icon" disabled={!message.trim() || !conversationId || conversation?.status === 'closed' || conversation?.status === 'pending_response'}>
             <Send className="h-4 w-4" />
           </Button>
         </form>

@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useMemo, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
+import { useClient } from '@/hooks/useClient'
 
 interface ConversationTabsProps {
   onSelectConversation: (conversationId: string) => void
@@ -21,6 +22,7 @@ interface ConversationTabsProps {
 
 export function ConversationTabs({ onSelectConversation, selectedConversationId, conversations, loading, fetchConversations, selectById }: ConversationTabsProps) {
   const { profile } = useAuth()
+  const { getClientDisplayName } = useClient()
   const [open, setOpen] = useState(false)
   const [country, setCountry] = useState<string>('CO')
   const [phone, setPhone] = useState('')
@@ -38,14 +40,17 @@ export function ConversationTabs({ onSelectConversation, selectedConversationId,
 
   const selected = useMemo(() => countries.find(c => c.code === country) || countries[0], [countries, country])
   const fullPhone = useMemo(() => `${selected.dial}${phone.replace(/[^0-9]/g,'')}`, [selected.dial, phone])
-  const preview = useMemo(() => `Hola, ${name || '{{name}}'}.
+  const preview = useMemo(() => {
+    const clientName = getClientDisplayName()
+    return `Hola, ${name || '{{name}}'}.
 
-Te contactamos de True Blue porque ${reason || '{{razon}}'}.
+Te contactamos de ${clientName} porque ${reason || '{{razon}}'}.
 
-Cuéntanos cómo te podemos ayudar.`, [name, reason])
+Quedamos súper pendientes.`
+  }, [name, reason, getClientDisplayName])
 
   const sendOutbound = async () => {
-    if (!profile?.id) return
+    if (!(profile as any)?.id) return
     // Usar función serverless que reenvía a la URL de entorno adecuada
     const url = '/api/n8n-outbound'
     const payload = {
@@ -60,22 +65,25 @@ Cuéntanos cómo te podemos ayudar.`, [name, reason])
       message: preview,
       channel: 'whatsapp',
       requestedBy: {
-        id: profile.id,
-        email: profile.email,
-        name: profile.name,
+        id: (profile as any).id,
+        email: (profile as any).email,
+        name: (profile as any).name,
+        client_id: (profile as any).client_id, // Agregar client_id del agente
       },
       conversationSeed: {
         user_id: fullPhone,
         username: name || undefined,
-        status: 'active_human',
-        assigned_agent_id: profile.id,
+        status: 'pending_response', // Cambiar a pending_response para outbound
+        assigned_agent_id: (profile as any).id,
         assigned_agent_email: (profile as any).email,
         assigned_agent_name: (profile as any).name,
+        client_id: (profile as any).client_id, // Agregar client_id para la conversación
       },
       metadata: {
         source: 'dashboard_outbound',
         appEnv: (import.meta as any).env?.VITE_APP_ENV || 'development',
         appUrl: (import.meta as any).env?.VITE_APP_URL || (window as any).location?.origin,
+        client_id: (profile as any).client_id, // Agregar client_id en metadata
       }
     }
     try {
