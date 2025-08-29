@@ -588,7 +588,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
               </h3>
               <div className="flex items-center space-x-2">
                 <Badge variant={getStatusBadgeVariant(conversation?.status || 'closed')}>
-                  {getStatusLabel(conversation?.status || 'Cerrada')}
+                  {getStatusLabel(conversation?.status || 'closed')}
                 </Badge>
                 {conversation?.assigned_agent_name && (
                   <span className="text-sm text-muted-foreground">
@@ -631,6 +631,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="pending_human">⏳ Pendiente</SelectItem>
+                    <SelectItem value="pending_response">⏳ Esperando Respuesta</SelectItem>
                     <SelectItem value="active_ai">🤖 IA Activa</SelectItem>
                     <SelectItem value="active_human">👤 Agente Activo</SelectItem>
                     <SelectItem value="closed">🔒 Cerrada</SelectItem>
