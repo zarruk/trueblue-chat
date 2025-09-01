@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { useAuth } from '@/hooks/useAuth'
+import { useClient } from '@/hooks/useClient'
 import { useState, useEffect } from 'react'
 
 const navigation = [
@@ -41,6 +42,7 @@ interface AppSidebarProps {
 export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
   const location = useLocation()
   const { user, profile, signOut } = useAuth()
+  const { getClientDisplayName, getClientShortName } = useClient()
   const [isMobile, setIsMobile] = useState(false)
 
   // Detectar si es móvil
@@ -73,9 +75,9 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
       <div className="flex h-16 items-center justify-between px-4 border-b">
         <Link to="/dashboard" className="flex items-center space-x-2">
           <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-            <span className="text-primary-foreground font-bold text-sm">TB</span>
+            <span className="text-primary-foreground font-bold text-sm">{getClientShortName()}</span>
           </div>
-          <span className="font-semibold text-lg">TrueBlue</span>
+          <span className="font-semibold text-lg">{getClientDisplayName()}</span>
         </Link>
         {isMobile && (
           <Button 

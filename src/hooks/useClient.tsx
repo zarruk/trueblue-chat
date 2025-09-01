@@ -35,7 +35,7 @@ export function useClient() {
         console.log('🔍 Intentando consulta simple...')
         const { data: simpleData, error: simpleError } = await supabase
           .from('clients')
-          .select('id, name, slug')
+          .select('*')
           .eq('id', targetClientId)
           .maybeSingle()
           
@@ -125,19 +125,19 @@ export function useClient() {
         // Construir objeto de información del cliente
         const clientInfo = {
           ...simpleData,
-          domain: 'azteclab.co',
-          logo_url: 'https://framerusercontent.com/images/vNczyX6ZmwhLPhsvtx36o1wPTc.svg?scale-down-to=512',
-          primary_color: '#3B82F6',
-          secondary_color: '#1E40AF',
-          status: 'active',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          domain: simpleData.domain || null,
+          logo_url: simpleData.logo_url || null,
+          primary_color: simpleData.primary_color || '#3B82F6',
+          secondary_color: simpleData.secondary_color || '#1E40AF',
+          status: simpleData.status || 'active',
+          created_at: simpleData.created_at || new Date().toISOString(),
+          updated_at: simpleData.updated_at || new Date().toISOString(),
           branding_config: brandingConfig || {
             name: simpleData.name,
             shortName: simpleData.name.substring(0, 2).toUpperCase(),
-            logo: 'https://framerusercontent.com/images/vNczyX6ZmwhLPhsvtx36o1wPTc.svg?scale-down-to=512',
-            primaryColor: '#3B82F6',
-            secondaryColor: '#1E40AF'
+            logo: simpleData.logo_url || null,
+            primaryColor: simpleData.primary_color || '#3B82F6',
+            secondaryColor: simpleData.secondary_color || '#1E40AF'
           }
         }
 
