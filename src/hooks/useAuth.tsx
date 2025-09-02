@@ -54,26 +54,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               }
 
               if (!finalProfile) {
-                // Autocrear perfil mínimo (id = auth.uid())
-                console.log('➕ Creando perfil porque no existe:', email);
-                const { data: inserted, error: insertErr } = await supabase
-                  .from('profiles')
-                  .insert({ 
-                    id: u.id, 
-                    email, 
-                    name, 
-                    status: 'active',
-                    client_id: '550e8400-e29b-41d4-a716-446655440000' // Cliente Trueblue por defecto
-                  })
-                  .select('*')
-                  .maybeSingle();
-
-                if (insertErr) {
-                  console.error('❌ Error creando perfil:', insertErr);
-                } else {
-                  finalProfile = inserted as Profile | null;
-                }
-              } else if (finalProfile && (finalProfile as any).status === 'pending') {
+                // NO crear perfil automáticamente
+                console.log('⚠️ Usuario sin perfil:', email);
+                console.log('⚠️ Contacta al administrador para crear tu perfil');
+                // Continuar sin perfil - mostrar pantalla de acceso denegado
+              }
+              else if (finalProfile && (finalProfile as any).status === 'pending') {
                 // Activar si estaba pendiente
                 console.log(`🔄 Activando agente pendiente: ${email}`);
                 const { data: updated, error: updateErr } = await supabase
