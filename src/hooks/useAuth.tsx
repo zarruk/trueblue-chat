@@ -54,14 +54,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               }
 
               if (!finalProfile) {
-<<<<<<< Updated upstream
                 // NO crear perfil automáticamente
                 console.log('⚠️ Usuario sin perfil:', email);
                 console.log('⚠️ Contacta al administrador para crear tu perfil');
                 // Continuar sin perfil - mostrar pantalla de acceso denegado
               }
               else if (finalProfile && (finalProfile as any).status === 'pending') {
-=======
                 // Autocrear perfil mínimo (id = auth.uid())
                 console.log('➕ Creando perfil porque no existe:', email);
                 const { data: inserted, error: insertErr } = await supabase
@@ -83,7 +81,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   finalProfile = inserted as Profile | null;
                 }
               } else if (finalProfile && (finalProfile as any).status === 'pending') {
->>>>>>> Stashed changes
                 // Activar si estaba pendiente
                 console.log(`🔄 Activando agente pendiente: ${email}`);
                 const { data: updated, error: updateErr } = await supabase
