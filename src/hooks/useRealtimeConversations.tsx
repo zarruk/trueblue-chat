@@ -137,7 +137,9 @@ export function useRealtimeConversations({
                     console.log(`[REALTIME DEBUG] REJECTED: Conversation's client_id (${convClientId}) does not match hook's client_id (${clientId}).`);
                     return
                   }
-                } catch {}
+                } catch (e) {
+                  console.warn('[REALTIME DEBUG] Error verificando client_id del mensaje:', e)
+                }
               }
             }
             console.log('[REALTIME DEBUG] PASSED: Message client_id check passed. Firing callback.');

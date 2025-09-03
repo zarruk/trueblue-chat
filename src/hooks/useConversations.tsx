@@ -640,9 +640,11 @@ export function useConversations() {
           } as any
           return [placeholder, ...prev]
         })
-      } catch {}
+      } catch (e) {
+        console.warn('⚠️ [REALTIME] Error procesando mensaje:', e)
+      }
 
-      ;(async () => {
+      (async () => {
         const tryFetch = async (attempt: number) => {
           try {
             const { data: newConv, error: fetchConvError } = await supabase
@@ -706,7 +708,9 @@ export function useConversations() {
       setTimeout(() => {
         fetchConversations({ background: true }).catch(() => {})
       }, 200)
-    } catch {}
+    } catch (e) {
+      console.warn('⚠️ [REALTIME] Error en refresco ligero:', e)
+    }
   }, [selectedConversationId, fetchMessages, fetchConversations])
 
   const handleConversationInsert = useCallback((conversation: Conversation) => {

@@ -98,7 +98,9 @@ Quedamos súper pendientes.`
         try {
           const body = await res.json()
           createdId = body?.conversationId || body?.conversation_id
-        } catch {}
+        } catch (e) {
+          console.warn('⚠️ No se pudo parsear respuesta del webhook:', e)
+        }
         setOpen(false)
         setPhone(''); setName(''); setReason('')
         // Refrescar lista para ver la conversación al instante

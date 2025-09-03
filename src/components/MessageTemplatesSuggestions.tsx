@@ -23,10 +23,9 @@ export function MessageTemplatesSuggestions({
   const applyName = (message: string) => {
     if (!message) return message;
     // Reemplazar primero las variantes con doble llave para no dejar llaves sueltas
-    let out = message
+    return message
       .replace(/\{\{\s*(name|nombre)\s*\}\}/gi, currentUserName)
       .replace(/\{\s*(name|nombre)\s*\}/gi, currentUserName);
-    return out;
   };
 
   return (
