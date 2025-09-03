@@ -98,7 +98,7 @@ export function useMessageTemplates() {
       toast.error('Error al crear la plantilla')
       return false
     }
-  }, [user, fetchTemplates])
+  }, [user, fetchTemplates, profile?.client_id])
 
   // Update template
   const updateTemplate = useCallback(async (templateId: string, updates: Partial<Pick<MessageTemplate, 'name'|'message'|'category'>>) => {

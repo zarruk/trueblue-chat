@@ -130,7 +130,7 @@ export default function Embudo() {
   // Carga inicial
   useEffect(() => {
     loadPage(0)
-  }, [])
+  }, [loadPage])
 
   // Realtime: actualizar agregados al llegar mensajes nuevos
   useEffect(() => {
