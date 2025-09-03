@@ -156,8 +156,6 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       if (!/^https?:\/\//i.test(url) && /^([\w-]+\.)+[\w-]{2,}/.test(url)) {
         url = `https://${url}`
       }
-      // Bloquear endpoints antiguos
-      if (url.includes('wati.io')) return undefined
       // Normalizar URLs de Google Drive a uc?export=view&id=
       const googleDriveMatch = url.match(/(?:id=|file\/d\/|drive\.google\.com\/file\/d\/)([a-zA-Z0-9_-]+)/)
       if (googleDriveMatch && googleDriveMatch[1]) {
