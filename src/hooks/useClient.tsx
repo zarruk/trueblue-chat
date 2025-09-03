@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/integrations/supabase/client'
 import { CurrentClientInfo, ClientConfig } from '@/types/database'
 import { useAuth } from './useAuth'
@@ -10,7 +10,7 @@ export function useClient() {
   const { profile } = useAuth()
 
   // Obtener información del cliente actual
-  const fetchClientInfo = async () => {
+  const fetchClientInfo = useCallback(async () => {
     if (!profile) {
       console.log('🔍 fetchClientInfo: No hay perfil disponible')
       return
@@ -35,7 +35,7 @@ export function useClient() {
         console.log('🔍 Intentando consulta simple...')
         const { data: simpleData, error: simpleError } = await supabase
           .from('clients')
-          .select('id, name, slug')
+          .select('*')
           .eq('id', targetClientId)
           .maybeSingle()
           
@@ -125,19 +125,19 @@ export function useClient() {
         // Construir objeto de información del cliente
         const clientInfo = {
           ...simpleData,
-          domain: 'azteclab.co',
-          logo_url: 'https://framerusercontent.com/images/vNczyX6ZmwhLPhsvtx36o1wPTc.svg?scale-down-to=512',
-          primary_color: '#3B82F6',
-          secondary_color: '#1E40AF',
-          status: 'active',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          domain: simpleData.domain || null,
+          logo_url: simpleData.logo_url || null,
+          primary_color: simpleData.primary_color || '#3B82F6',
+          secondary_color: simpleData.secondary_color || '#1E40AF',
+          status: simpleData.status || 'active',
+          created_at: simpleData.created_at || new Date().toISOString(),
+          updated_at: simpleData.updated_at || new Date().toISOString(),
           branding_config: brandingConfig || {
             name: simpleData.name,
             shortName: simpleData.name.substring(0, 2).toUpperCase(),
-            logo: 'https://framerusercontent.com/images/vNczyX6ZmwhLPhsvtx36o1wPTc.svg?scale-down-to=512',
-            primaryColor: '#3B82F6',
-            secondaryColor: '#1E40AF'
+            logo: simpleData.logo_url || null,
+            primaryColor: simpleData.primary_color || '#3B82F6',
+            secondaryColor: simpleData.secondary_color || '#1E40AF'
           }
         }
 
@@ -177,7 +177,7 @@ export function useClient() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [profile])
 
   // Obtener configuración específica del cliente
   const getClientConfig = async (configKey: string): Promise<any> => {
@@ -336,7 +336,7 @@ export function useClient() {
     if (profile) {
       fetchClientInfo()
     }
-  }, [profile])
+  }, [profile, fetchClientInfo])
 
   return {
     // Estado

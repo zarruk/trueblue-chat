@@ -156,8 +156,6 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       if (!/^https?:\/\//i.test(url) && /^([\w-]+\.)+[\w-]{2,}/.test(url)) {
         url = `https://${url}`
       }
-      // Bloquear endpoints antiguos
-      if (url.includes('wati.io')) return undefined
       // Normalizar URLs de Google Drive a uc?export=view&id=
       const googleDriveMatch = url.match(/(?:id=|file\/d\/|drive\.google\.com\/file\/d\/)([a-zA-Z0-9_-]+)/)
       if (googleDriveMatch && googleDriveMatch[1]) {
@@ -223,7 +221,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       console.error('❌ [ChatWindow] Excepción cargando historial:', e)
       setHistoricalConversations([])
     }
-  }, [])
+  }, [profile?.client_id])
 
   useEffect(() => {
     if (conversation && conversation.user_id) {
@@ -231,7 +229,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     } else {
       setHistoricalConversations([])
     }
-  }, [conversation?.id, conversation?.user_id, fetchHistoricalConversations])
+  }, [conversation?.id, conversation?.user_id, fetchHistoricalConversations, conversation])
 
   // Realtime subscription scoped to this conversation as a fail-safe
   useEffect(() => {
@@ -588,7 +586,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
               </h3>
               <div className="flex items-center space-x-2">
                 <Badge variant={getStatusBadgeVariant(conversation?.status || 'closed')}>
-                  {getStatusLabel(conversation?.status || 'Cerrada')}
+                  {getStatusLabel(conversation?.status || 'closed')}
                 </Badge>
                 {conversation?.assigned_agent_name && (
                   <span className="text-sm text-muted-foreground">
@@ -631,6 +629,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="pending_human">⏳ Pendiente</SelectItem>
+                    <SelectItem value="pending_response">⏳ Esperando Respuesta</SelectItem>
                     <SelectItem value="active_ai">🤖 IA Activa</SelectItem>
                     <SelectItem value="active_human">👤 Agente Activo</SelectItem>
                     <SelectItem value="closed">🔒 Cerrada</SelectItem>
