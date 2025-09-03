@@ -1,8 +1,13 @@
 import { createClient } from '@supabase/supabase-js'
 
 // Configuración de Supabase (igual que en la app web)
-const SUPABASE_URL = "https://avkpygwhymnxotwqzknz.supabase.co"
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF2a3B5Z3doeW1ueG90d3F6a256Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMzMjEyMDcsImV4cCI6MjA2ODg5NzIwN30.p97K1S3WYNAeYb-ExRpRp3J_pqFegFJ11VOe5th_xHk"
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.error('❌ Faltan SUPABASE_URL/SUPABASE_ANON_KEY (o VITE_*) en el entorno')
+  process.exit(1)
+}
 
 // Configuración del cliente (igual que en client.ts)
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -139,7 +144,7 @@ async function webSyncTest() {
       setTimeout(() => {
         timeout = true
         resolve(false)
-      }, 15000) // 15 segundos de timeout
+      }, 15000)
     })
     
     const eventPromise = new Promise(resolve => {

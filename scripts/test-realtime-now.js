@@ -1,8 +1,13 @@
 import { createClient } from '@supabase/supabase-js'
 
 // Configuración de Supabase
-const SUPABASE_URL = "https://avkpygwhymnxotwqzknz.supabase.co"
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF2a3B5Z3doeW1ueG90d3F6a256Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMzMjEyMDcsImV4cCI6MjA2ODg5NzIwN30.p97K1S3WYNAeYb-ExRpRp3J_pqFegFJ11VOe5th_xHk"
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.error('❌ Faltan SUPABASE_URL/SUPABASE_ANON_KEY (o VITE_*) en el entorno')
+  process.exit(1)
+}
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   realtime: {
@@ -148,31 +153,35 @@ async function testRealtimeNow() {
       })
       .eq('id', conversations[0].id)
     
-    // Esperar eventos de Realtime
+    // Esperar eventos Realtime
     console.log('\n⏳ Esperando 5 segundos para eventos de Realtime...')
-    await new Promise(resolve => setTimeout(resolve, 5000))
+    let timeout = false
+    const timeoutPromise = new Promise(resolve => {
+      setTimeout(() => {
+        timeout = true
+        resolve(false)
+      }, 15000)
+    })
     
-    // 6. Resultado final
-    console.log('\n📊 RESULTADOS DEL TEST:')
-    console.log('=' * 40)
-    console.log('🔌 Conexión básica:', '✅')
-    console.log('📤 Inserción de mensajes:', '✅')
-    console.log('🔄 Actualización de conversaciones:', '✅')
-    console.log('📨 Realtime para mensajes:', messageReceived ? '✅' : '❌')
-    console.log('🔄 Realtime para conversaciones:', conversationReceived ? '✅' : '❌')
+    const eventPromise = new Promise(resolve => {
+      const checkEvent = () => {
+        if (conversationReceived) {
+          resolve(true)
+        } else if (!timeout) {
+          setTimeout(checkEvent, 100)
+        } else {
+          resolve(false)
+        }
+      }
+      checkEvent()
+    })
     
-    if (!messageReceived && !conversationReceived) {
-      console.log('\n🚨 PROBLEMA IDENTIFICADO:')
-      console.log('• Las operaciones en BD funcionan')
-      console.log('• Pero Realtime NO está detectando los cambios')
-      console.log('• Esto indica que las tablas NO están habilitadas para Realtime')
-      
-      console.log('\n🔧 SOLUCIÓN INMEDIATA:')
-      console.log('Ve a Supabase Dashboard > SQL Editor y ejecuta:')
-      console.log('ALTER PUBLICATION supabase_realtime ADD TABLE tb_conversations;')
-      console.log('ALTER PUBLICATION supabase_realtime ADD TABLE tb_messages;')
+    const eventResult = await Promise.race([eventPromise, timeoutPromise])
+    
+    if (eventResult) {
+      console.log('✅ Evento Realtime recibido exitosamente')
     } else {
-      console.log('\n✅ ¡Realtime está funcionando! El problema debe estar en la app React.')
+      console.log('❌ Timeout esperando evento Realtime')
     }
     
     // Limpiar

@@ -3,8 +3,15 @@ import WebSocket from 'ws';
 async function testWebSocketConnection() {
   console.log('🔌 Probando conexión WebSocket directa a Supabase Realtime...\n');
   
-  const wsUrl = 'wss://avkpygwhymnxotwqzknz.supabase.co/realtime/v1/websocket';
-  const apiKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF2a3B5Z3doeW1ueG90d3F6a256Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMzMjEyMDcsImV4cCI6MjA2ODg5NzIwN30.p97K1S3WYNAeYb-ExRpRp3J_pqFegFJ11VOe5th_xHk';
+  const baseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+  const apiKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
+
+  if (!baseUrl || !apiKey) {
+    console.error('❌ Faltan SUPABASE_URL/SUPABASE_ANON_KEY (o VITE_*) en el entorno')
+    process.exit(1)
+  }
+
+  const wsUrl = baseUrl.replace('https://', 'wss://') + '/realtime/v1/websocket'
   
   return new Promise((resolve) => {
     console.log(`📡 Conectando a: ${wsUrl}`);
