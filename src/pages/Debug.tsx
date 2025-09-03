@@ -30,7 +30,7 @@ export default function DebugPage() {
               <strong>Base de Datos:</strong> Supabase
             </div>
             <div>
-              <strong>URL:</strong> avkpygwhymnxotwqzknz.supabase.co
+              <strong>URL:</strong> {import.meta.env.VITE_SUPABASE_URL || 'No configurada'}
             </div>
             <div>
               <strong>Estado:</strong> <Badge variant="outline">Conectado</Badge>
