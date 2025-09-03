@@ -223,7 +223,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       console.error('❌ [ChatWindow] Excepción cargando historial:', e)
       setHistoricalConversations([])
     }
-  }, [])
+  }, [profile?.client_id])
 
   useEffect(() => {
     if (conversation && conversation.user_id) {
@@ -231,7 +231,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     } else {
       setHistoricalConversations([])
     }
-  }, [conversation?.id, conversation?.user_id, fetchHistoricalConversations])
+  }, [conversation?.id, conversation?.user_id, fetchHistoricalConversations, conversation])
 
   // Realtime subscription scoped to this conversation as a fail-safe
   useEffect(() => {

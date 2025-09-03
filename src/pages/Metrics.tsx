@@ -214,7 +214,7 @@ export default function Metrics() {
 
         <Card>
           <CardHeader className="py-2"><CardTitle className="text-sm">Esperando respuesta</CardTitle></CardHeader>
-        	<CardContent className="py-2">
+          <CardContent className="py-2">
             <div className="text-xs text-muted-foreground mb-2">{awaitingResponse.length} requieren acción</div>
             <div className="space-y-1 max-h-56 overflow-auto">
               {awaitingResponse.slice(0,10).map(c => (

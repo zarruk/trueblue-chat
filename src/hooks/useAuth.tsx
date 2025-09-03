@@ -59,7 +59,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 const { data: inserted, error: insertErr } = await supabase
                   .from('profiles')
                   .insert({ 
-                    id: u.id, 
+                    id: u.id,
+                    user_id: u.id,
                     email, 
                     name, 
                     status: 'active',
@@ -86,6 +87,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   console.error('❌ Error activando perfil:', updateErr);
                 } else if (updated) {
                   finalProfile = updated as Profile;
+                }
+              }
+
+              // Backfill: asegurar que user_id esté seteado para RLS
+              if (finalProfile && !(finalProfile as any).user_id) {
+                console.log('🛠️ Backfill user_id en profiles para RLS');
+                const { data: updatedUserId, error: backfillErr } = await supabase
+                  .from('profiles')
+                  .update({ user_id: u.id })
+                  .eq('id', (finalProfile as any).id)
+                  .select('*')
+                  .maybeSingle();
+                if (backfillErr) {
+                  console.warn('⚠️ No se pudo backfillear user_id en profiles:', backfillErr);
+                } else if (updatedUserId) {
+                  finalProfile = updatedUserId as Profile;
                 }
               }
 

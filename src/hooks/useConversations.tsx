@@ -83,7 +83,7 @@ export function useConversations() {
       if (role !== 'admin') {
         if (profileId) {
           console.log('🔒 Non-admin user, filtering conversations')
-          query = (query as any).or(`assigned_agent_id.eq.${profileId},status.eq.pending_human,status.eq.active_ai`)
+          query = (query as any).or(`assigned_agent_id.eq.${profileId},status.eq.pending_human,status.eq.pending_response,status.eq.active_ai`)
         } else {
           console.log('🔒 No profile ID, showing only pending')
           query = query.eq('status', 'pending_human')
@@ -640,9 +640,11 @@ export function useConversations() {
           } as any
           return [placeholder, ...prev]
         })
-      } catch {}
+      } catch (e) {
+        console.warn('⚠️ [REALTIME] Error en handleMessageInsert:', e)
+      }
 
-      ;(async () => {
+      (async () => {
         const tryFetch = async (attempt: number) => {
           try {
             const { data: newConv, error: fetchConvError } = await supabase
@@ -706,7 +708,9 @@ export function useConversations() {
       setTimeout(() => {
         fetchConversations({ background: true }).catch(() => {})
       }, 200)
-    } catch {}
+          } catch (e) {
+        console.warn('⚠️ [REALTIME] Error en setTimeout:', e)
+      }
   }, [selectedConversationId, fetchMessages, fetchConversations])
 
   const handleConversationInsert = useCallback((conversation: Conversation) => {
