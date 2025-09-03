@@ -54,12 +54,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               }
 
               if (!finalProfile) {
+<<<<<<< Updated upstream
                 // NO crear perfil automáticamente
                 console.log('⚠️ Usuario sin perfil:', email);
                 console.log('⚠️ Contacta al administrador para crear tu perfil');
                 // Continuar sin perfil - mostrar pantalla de acceso denegado
               }
               else if (finalProfile && (finalProfile as any).status === 'pending') {
+=======
+                // Autocrear perfil mínimo (id = auth.uid())
+                console.log('➕ Creando perfil porque no existe:', email);
+                const { data: inserted, error: insertErr } = await supabase
+                  .from('profiles')
+                  .insert({ 
+                    id: u.id,
+                    user_id: u.id,
+                    email, 
+                    name, 
+                    status: 'active',
+                    client_id: '550e8400-e29b-41d4-a716-446655440000' // Cliente Trueblue por defecto
+                  })
+                  .select('*')
+                  .maybeSingle();
+
+                if (insertErr) {
+                  console.error('❌ Error creando perfil:', insertErr);
+                } else {
+                  finalProfile = inserted as Profile | null;
+                }
+              } else if (finalProfile && (finalProfile as any).status === 'pending') {
+>>>>>>> Stashed changes
                 // Activar si estaba pendiente
                 console.log(`🔄 Activando agente pendiente: ${email}`);
                 const { data: updated, error: updateErr } = await supabase
@@ -72,6 +96,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   console.error('❌ Error activando perfil:', updateErr);
                 } else if (updated) {
                   finalProfile = updated as Profile;
+                }
+              }
+
+              // Backfill: asegurar que user_id esté seteado para RLS
+              if (finalProfile && !(finalProfile as any).user_id) {
+                console.log('🛠️ Backfill user_id en profiles para RLS');
+                const { data: updatedUserId, error: backfillErr } = await supabase
+                  .from('profiles')
+                  .update({ user_id: u.id })
+                  .eq('id', (finalProfile as any).id)
+                  .select('*')
+                  .maybeSingle();
+                if (backfillErr) {
+                  console.warn('⚠️ No se pudo backfillear user_id en profiles:', backfillErr);
+                } else if (updatedUserId) {
+                  finalProfile = updatedUserId as Profile;
                 }
               }
 

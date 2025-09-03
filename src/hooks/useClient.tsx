@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/integrations/supabase/client'
 import { CurrentClientInfo, ClientConfig } from '@/types/database'
 import { useAuth } from './useAuth'
@@ -10,7 +10,7 @@ export function useClient() {
   const { profile } = useAuth()
 
   // Obtener información del cliente actual
-  const fetchClientInfo = async () => {
+  const fetchClientInfo = useCallback(async () => {
     if (!profile) {
       console.log('🔍 fetchClientInfo: No hay perfil disponible')
       return
@@ -177,7 +177,7 @@ export function useClient() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [profile])
 
   // Obtener configuración específica del cliente
   const getClientConfig = async (configKey: string): Promise<any> => {
@@ -336,7 +336,7 @@ export function useClient() {
     if (profile) {
       fetchClientInfo()
     }
-  }, [profile])
+  }, [profile, fetchClientInfo])
 
   return {
     // Estado

@@ -356,9 +356,67 @@ export interface CurrentClientInfo {
   } | null
 }
 
-// Extender tipos existentes
-export interface Profile extends Database['public']['Tables']['profiles']['Row'] {}
-export interface Conversation extends Database['public']['Tables']['tb_conversations']['Row'] {}
-export interface Message extends Database['public']['Tables']['tb_messages']['Row'] {}
-export interface Agent extends Database['public']['Tables']['tb_agents']['Row'] {}
-export interface MessageTemplate extends Database['public']['Tables']['tb_message_templates']['Row'] {}
+// Tipos para el sistema multi-cliente
+export interface Profile {
+  id: string
+  user_id: string | null
+  email: string
+  name: string
+  role: 'admin' | 'agent' | 'ai'
+  created_at: string
+  updated_at: string
+  status: string
+  created_by: string | null
+  created_by_name: string | null
+  created_by_email: string | null
+  client_id: string
+}
+
+export interface Conversation {
+  id: string
+  user_id: string
+  username: string | null
+  status: 'active_ai' | 'active_human' | 'closed' | 'pending_human' | 'pending_response'
+  created_at: string
+  updated_at: string
+  assigned_agent_id: string | null
+  summary: string | null
+  assigned_agent_name: string | null
+  assigned_agent_email: string | null
+  phone_number: string | null
+  channel: string
+  client_id: string
+}
+
+export interface Message {
+  id: string
+  conversation_id: string
+  sender_role: 'user' | 'ai' | 'agent'
+  content: string
+  created_at: string
+  updated_at: string
+  metadata: any
+  responded_by_agent_id: string | null
+  client_id: string
+}
+
+export interface Agent {
+  id: string
+  name: string
+  email: string
+  role: string
+  status: string
+  created_at: string
+  updated_at: string
+  client_id: string
+}
+
+export interface MessageTemplate {
+  id: string
+  name: string
+  message: string
+  created_at: string
+  updated_at: string
+  created_by: string
+  client_id: string
+}

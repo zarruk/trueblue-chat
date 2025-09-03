@@ -156,8 +156,6 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       if (!/^https?:\/\//i.test(url) && /^([\w-]+\.)+[\w-]{2,}/.test(url)) {
         url = `https://${url}`
       }
-      // Bloquear endpoints antiguos
-      if (url.includes('wati.io')) return undefined
       // Normalizar URLs de Google Drive a uc?export=view&id=
       const googleDriveMatch = url.match(/(?:id=|file\/d\/|drive\.google\.com\/file\/d\/)([a-zA-Z0-9_-]+)/)
       if (googleDriveMatch && googleDriveMatch[1]) {
@@ -223,7 +221,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       console.error('❌ [ChatWindow] Excepción cargando historial:', e)
       setHistoricalConversations([])
     }
-  }, [])
+  }, [profile?.client_id])
 
   useEffect(() => {
     if (conversation && conversation.user_id) {
@@ -231,7 +229,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     } else {
       setHistoricalConversations([])
     }
-  }, [conversation?.id, conversation?.user_id, fetchHistoricalConversations])
+  }, [conversation?.id, conversation?.user_id, fetchHistoricalConversations, conversation])
 
   // Realtime subscription scoped to this conversation as a fail-safe
   useEffect(() => {
