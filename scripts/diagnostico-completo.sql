@@ -112,3 +112,4 @@ WHERE pt.schemaname = 'public'
 -- FIN DE DIAGNÓSTICO
 -- =====================================================
 
+

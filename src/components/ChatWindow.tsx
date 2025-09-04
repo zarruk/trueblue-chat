@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Send, Paperclip, Smile, ChevronDown, PanelRightOpen, ChevronLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
