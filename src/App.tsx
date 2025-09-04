@@ -2,6 +2,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
+import { useClient } from "@/hooks/useClient";
 import { AppSidebar } from "@/components/AppSidebar";
 import Dashboard from "./pages/Dashboard";
 import Agents from "./pages/Agents";
@@ -10,11 +11,14 @@ import Placeholder from "./pages/Placeholder";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import Debug from "./pages/Debug";
+import Metrics from "./pages/Metrics";
+import Embudo from "./pages/Embudo";
 import { BarChart3, Bug, Menu } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { checkAndAddChannelColumn } from "@/utils/databaseStructureCheck";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { DynamicTitle } from "@/components/DynamicTitle";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -53,7 +57,8 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AppLayout({ children }: { children: React.ReactNode }) {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { getClientDisplayName } = useClient();
   
   useEffect(() => {
     // Verificar y agregar la columna channel si es necesario
@@ -61,10 +66,12 @@ function AppLayout({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <div className="h-screen flex w-full overflow-hidden">
+    <>
+      <DynamicTitle />
+      <div className="h-screen flex w-full overflow-hidden">
       <AppSidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
       <main className={`flex-1 flex flex-col min-h-0 overflow-hidden transition-all duration-300 ease-in-out ${
-        sidebarOpen ? 'lg:ml-64' : 'lg:ml-16'
+        sidebarOpen ? 'ml-64' : 'ml-0'
       }`}>
         <header className="h-12 flex items-center justify-between border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex-shrink-0">
           <div className="flex items-center">
@@ -72,11 +79,12 @@ function AppLayout({ children }: { children: React.ReactNode }) {
               variant="ghost" 
               size="icon" 
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="lg:hidden mr-2"
+              className="mr-2"
+              title={sidebarOpen ? "Ocultar sidebar" : "Mostrar sidebar"}
             >
               <Menu className="h-5 w-5" />
             </Button>
-            <div className="text-lg font-semibold">Trueblue</div>
+            <div className="text-lg font-semibold">{getClientDisplayName()}</div>
           </div>
           <div className="mr-4">
             <ThemeToggle />
@@ -86,7 +94,8 @@ function AppLayout({ children }: { children: React.ReactNode }) {
           {children}
         </div>
       </main>
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -126,11 +135,14 @@ const App = () => (
             <Route path="/metrics" element={
               <ProtectedRoute>
                 <AppLayout>
-                  <Placeholder 
-                    title="Métricas" 
-                    description="Las métricas y estadísticas estarán disponibles pronto."
-                    icon={<BarChart3 className="h-6 w-6 text-primary" />}
-                  />
+                  <Metrics />
+                </AppLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/embudo" element={
+              <ProtectedRoute>
+                <AppLayout>
+                  <Embudo />
                 </AppLayout>
               </ProtectedRoute>
             } />

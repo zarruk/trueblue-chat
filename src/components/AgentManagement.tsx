@@ -17,6 +17,13 @@ export default function AgentManagement() {
   const { agents, loading, createAgent, updateAgent, deleteAgent, toggleAgentStatus, resendInvitation } = useAgents();
   const { profile } = useAuth();
 
+  // Debug logs
+  console.log('🔍 AgentManagement: Component rendered');
+  console.log('🔍 AgentManagement: Loading state:', loading);
+  console.log('🔍 AgentManagement: Agents array:', agents);
+  console.log('🔍 AgentManagement: Agents length:', agents?.length);
+  console.log('🔍 AgentManagement: Profile:', profile);
+
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<Profile | null>(null);

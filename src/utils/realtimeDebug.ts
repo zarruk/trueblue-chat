@@ -14,8 +14,8 @@ export class RealtimeDebugger {
       console.log('📡 Estado de conexión Realtime:', connectionState)
       
       // 2. Verificar configuración de Supabase
-      console.log('⚙️ URL de Supabase:', import.meta.env.VITE_SUPABASE_URL)
-      console.log('🔑 Anon Key (primeros 20 chars):', import.meta.env.VITE_SUPABASE_ANON_KEY?.substring(0, 20) + '...')
+      console.log('⚙️ URL de Supabase configurada')
+      console.log('🔑 Anon Key presente (oculta)')
       
       // 3. Test básico de canal
       console.log('🧪 Creando canal de test...')

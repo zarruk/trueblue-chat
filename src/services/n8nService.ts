@@ -5,6 +5,7 @@ export interface N8nWebhookPayload {
   channel: string
   senderId: string
   chatId: string
+  clientId?: string // Agregar client_id opcional
 }
 
 export interface N8nWebhookResponse {
@@ -129,12 +130,16 @@ class N8nService {
     // El senderId debe ser el ID del agente que está enviando el mensaje
     const senderId = agentId
     
+    // Obtener el client_id de la conversación
+    const clientId = conversation.client_id
+    
     console.log('🔍 Preparando payload para n8n:', {
       conversationId,
       messageContent: messageContent.substring(0, 100) + (messageContent.length > 100 ? '...' : ''),
       channel,
       senderId,
       chatId,
+      clientId,
       conversationData: conversation
     })
     
@@ -143,7 +148,8 @@ class N8nService {
       message: messageContent,
       channel: channel,
       senderId: senderId,
-      chatId: chatId
+      chatId: chatId,
+      clientId: clientId // Agregar client_id al payload
     }
   }
 }

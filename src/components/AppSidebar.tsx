@@ -8,7 +8,8 @@ import {
   LogOut,
   Bug,
   Menu,
-  X
+  X,
+  Kanban
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -21,13 +22,15 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { useAuth } from '@/hooks/useAuth'
+import { useClient } from '@/hooks/useClient'
 import { useState, useEffect } from 'react'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: MessageSquare },
+  { name: 'Embudo', href: '/embudo', icon: Kanban },
   { name: 'Agentes', href: '/agents', icon: Users },
   { name: 'Métricas', href: '/metrics', icon: BarChart3 },
-  { name: 'Debug', href: '/debug', icon: Bug },
+  // { name: 'Debug', href: '/debug', icon: Bug }, // oculto
   { name: 'Configuración', href: '/settings', icon: Settings },
 ]
 
@@ -39,6 +42,7 @@ interface AppSidebarProps {
 export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
   const location = useLocation()
   const { user, profile, signOut } = useAuth()
+  const { getClientDisplayName, getClientShortName } = useClient()
   const [isMobile, setIsMobile] = useState(false)
 
   // Detectar si es móvil
@@ -71,9 +75,9 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
       <div className="flex h-16 items-center justify-between px-4 border-b">
         <Link to="/dashboard" className="flex items-center space-x-2">
           <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-            <span className="text-primary-foreground font-bold text-sm">TB</span>
+            <span className="text-primary-foreground font-bold text-sm">{getClientShortName()}</span>
           </div>
-          <span className="font-semibold text-lg">TrueBlue</span>
+          <span className="font-semibold text-lg">{getClientDisplayName()}</span>
         </Link>
         {isMobile && (
           <Button 
@@ -191,8 +195,8 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
   // Desktop sidebar
   return (
     <div className={`
-      hidden lg:flex lg:flex-col lg:fixed lg:inset-y-0 transition-all duration-300 ease-in-out
-      ${isOpen ? 'lg:w-64' : 'lg:w-16'}
+      hidden lg:flex lg:flex-col lg:fixed lg:inset-y-0 transition-all duration-300 ease-in-out z-30
+      ${isOpen ? 'lg:w-64' : 'lg:w-0 lg:overflow-hidden'}
     `}>
       <SidebarContent />
     </div>

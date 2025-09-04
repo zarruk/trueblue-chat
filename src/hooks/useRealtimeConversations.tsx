@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/integrations/supabase/client'
 import { RealtimeChannel } from '@supabase/supabase-js'
 // Notificaciones deshabilitadas
@@ -39,6 +39,7 @@ interface UseRealtimeConversationsProps {
   onConversationUpdate?: (conversation: Conversation) => void
   onConversationDelete?: (conversationId: string) => void
   userId?: string
+  clientId?: string
 }
 
 export function useRealtimeConversations({
@@ -48,16 +49,41 @@ export function useRealtimeConversations({
   onConversationInsert,
   onConversationUpdate,
   onConversationDelete,
-  userId
+  userId,
+  clientId
 }: UseRealtimeConversationsProps) {
   
+  // Usar useRef para evitar loop infinito
+  const callbacksRef = useRef({
+    onMessageInsert,
+    onMessageUpdate,
+    onMessageDelete,
+    onConversationInsert,
+    onConversationUpdate,
+    onConversationDelete,
+    userId
+  })
+
+  // Actualizar ref cuando cambien los callbacks
+  useEffect(() => {
+    callbacksRef.current = {
+      onMessageInsert,
+      onMessageUpdate,
+      onMessageDelete,
+      onConversationInsert,
+      onConversationUpdate,
+      onConversationDelete,
+      userId
+    }
+  }, [onMessageInsert, onMessageUpdate, onMessageDelete, onConversationInsert, onConversationUpdate, onConversationDelete, userId])
+
   const setupRealtimeSubscriptions = useCallback(() => {
     console.log('🔄 [REALTIME] Configurando suscripciones de tiempo real...')
     console.log('🔄 [REALTIME] Callbacks disponibles:', {
-      onMessageInsert: !!onMessageInsert,
-      onConversationInsert: !!onConversationInsert,
-      onConversationUpdate: !!onConversationUpdate,
-      userId: userId
+      onMessageInsert: !!callbacksRef.current.onMessageInsert,
+      onConversationInsert: !!callbacksRef.current.onConversationInsert,
+      onConversationUpdate: !!callbacksRef.current.onConversationUpdate,
+      userId: callbacksRef.current.userId
     })
     
     // Log adicional para debugging en staging
@@ -83,18 +109,50 @@ export function useRealtimeConversations({
             schema: 'public',
             table: 'tb_messages'
           },
-          (payload) => {
-            console.log('✅ [REALTIME] Nuevo mensaje recibido en tiempo real:', payload.new)
-            const newMessage = payload.new as Message
-            if (onMessageInsert) {
+          async (payload) => {
+            console.log('✅ [REALTIME] Raw message insert payload received:', payload);
+            const newMessage = payload.new as Message & { client_id?: string }
+
+            // --- Intensive Debugging ---
+            console.log(`[REALTIME DEBUG] Hook's client_id: ${clientId}`);
+            console.log(`[REALTIME DEBUG] Message's client_id: ${newMessage.client_id}`);
+
+            // Guardar por clientId si está disponible; si no, intentar inferirlo por la conversación
+            if (clientId) {
+              if (newMessage.client_id && newMessage.client_id !== clientId) {
+                console.log(`[REALTIME DEBUG] REJECTED: Message client_id (${newMessage.client_id}) does not match hook's client_id (${clientId}).`);
+                return
+              }
+              if (!newMessage.client_id && newMessage.conversation_id) {
+                console.log(`[REALTIME DEBUG] Message has no client_id. Fetching from conversation ${newMessage.conversation_id}...`);
+                try {
+                  const { data: conv } = await supabase
+                    .from('tb_conversations')
+                    .select('client_id')
+                    .eq('id', newMessage.conversation_id)
+                    .maybeSingle()
+                  console.log(`[REALTIME DEBUG] Fetched conversation's client_id: ${(conv as any)?.client_id}`);
+                  const convClientId = (conv as any)?.client_id as string | undefined
+                  if (convClientId && convClientId !== clientId) {
+                    console.log(`[REALTIME DEBUG] REJECTED: Conversation's client_id (${convClientId}) does not match hook's client_id (${clientId}).`);
+                    return
+                  }
+                } catch (e) {
+                  console.warn('[REALTIME DEBUG] Error verificando client_id del mensaje:', e)
+                }
+              }
+            }
+            console.log('[REALTIME DEBUG] PASSED: Message client_id check passed. Firing callback.');
+            // --- End Intensive Debugging ---
+
+            if (callbacksRef.current.onMessageInsert) {
               console.log('📨 [REALTIME] Ejecutando callback onMessageInsert...')
-              onMessageInsert(newMessage)
+              callbacksRef.current.onMessageInsert(newMessage)
             } else {
               console.log('⚠️ [REALTIME] Callback onMessageInsert no disponible')
             }
             
-            // Mostrar notificación solo si el mensaje no es del usuario actual
-            if (newMessage.sender_role !== 'agent' || newMessage.responded_by_agent_id !== userId) {
+            if (newMessage.sender_role !== 'agent' || newMessage.responded_by_agent_id !== callbacksRef.current.userId) {
               toast.success('Nuevo mensaje recibido', {
                 description: `${newMessage.sender_role === 'user' ? 'Cliente' : 'IA'}: ${newMessage.content.substring(0, 50)}...`,
                 duration: 3000
@@ -109,12 +167,15 @@ export function useRealtimeConversations({
             schema: 'public',
             table: 'tb_messages'
           },
-          (payload) => {
+          async (payload) => {
             console.log('🔄 [REALTIME] Mensaje actualizado en tiempo real:', payload.new)
-            const updatedMessage = payload.new as Message
-            if (onMessageUpdate) {
+            const updatedMessage = payload.new as Message & { client_id?: string }
+            if (clientId) {
+              if (updatedMessage.client_id && updatedMessage.client_id !== clientId) return
+            }
+            if (callbacksRef.current.onMessageUpdate) {
               console.log('📝 [REALTIME] Ejecutando callback onMessageUpdate...')
-              onMessageUpdate(updatedMessage)
+              callbacksRef.current.onMessageUpdate(updatedMessage)
             } else {
               console.log('⚠️ [REALTIME] Callback onMessageUpdate no disponible')
             }
@@ -130,9 +191,9 @@ export function useRealtimeConversations({
           (payload) => {
             console.log('🗑️ [REALTIME] Mensaje eliminado en tiempo real:', payload.old)
             const deletedMessage = payload.old as { id: string }
-            if (onMessageDelete) {
+            if (callbacksRef.current.onMessageDelete) {
               console.log('🗑️ [REALTIME] Ejecutando callback onMessageDelete...')
-              onMessageDelete(deletedMessage.id)
+              callbacksRef.current.onMessageDelete(deletedMessage.id)
             } else {
               console.log('⚠️ [REALTIME] Callback onMessageDelete no disponible')
             }
@@ -156,10 +217,14 @@ export function useRealtimeConversations({
           },
           (payload) => {
             console.log('✅ [REALTIME] Nueva conversación recibida en tiempo real:', payload.new)
-            const newConversation = payload.new as Conversation
-            if (onConversationInsert) {
+            const newConversation = payload.new as Conversation & { client_id?: string }
+            if (clientId && newConversation.client_id && newConversation.client_id !== clientId) {
+              console.log(`[REALTIME DEBUG] REJECTED: Conversation client_id (${newConversation.client_id}) does not match hook's client_id (${clientId}).`);
+              return
+            }
+            if (callbacksRef.current.onConversationInsert) {
               console.log('🆕 [REALTIME] Ejecutando callback onConversationInsert...')
-              onConversationInsert(newConversation)
+              callbacksRef.current.onConversationInsert(newConversation)
             } else {
               console.log('⚠️ [REALTIME] Callback onConversationInsert no disponible')
             }
@@ -179,10 +244,11 @@ export function useRealtimeConversations({
           },
           (payload) => {
             console.log('🔄 [REALTIME] Conversación actualizada en tiempo real:', payload.new)
-            const updatedConversation = payload.new as Conversation
-            if (onConversationUpdate) {
+            const updatedConversation = payload.new as Conversation & { client_id?: string }
+            if (clientId && updatedConversation.client_id && updatedConversation.client_id !== clientId) return
+            if (callbacksRef.current.onConversationUpdate) {
               console.log('🔄 [REALTIME] Ejecutando callback onConversationUpdate...')
-              onConversationUpdate(updatedConversation)
+              callbacksRef.current.onConversationUpdate(updatedConversation)
             } else {
               console.log('⚠️ [REALTIME] Callback onConversationUpdate no disponible')
             }
@@ -198,9 +264,9 @@ export function useRealtimeConversations({
           (payload) => {
             console.log('🗑️ [REALTIME] Conversación eliminada en tiempo real:', payload.old)
             const deletedConversation = payload.old as { id: string }
-            if (onConversationDelete) {
+            if (callbacksRef.current.onConversationDelete) {
               console.log('🗑️ [REALTIME] Ejecutando callback onConversationDelete...')
-              onConversationDelete(deletedConversation.id)
+              callbacksRef.current.onConversationDelete(deletedConversation.id)
             } else {
               console.log('⚠️ [REALTIME] Callback onConversationDelete no disponible')
             }
@@ -312,7 +378,7 @@ export function useRealtimeConversations({
         conversationsChannel.unsubscribe()
       }
     }
-  }, [onMessageInsert, onMessageUpdate, onMessageDelete, onConversationInsert, onConversationUpdate, onConversationDelete, userId])
+  }, [clientId]) // Array vacío porque usamos useRef para los callbacks
 
   useEffect(() => {
     console.log('🔌 [REALTIME] useEffect ejecutándose, configurando suscripciones...')

@@ -1,12 +1,20 @@
 import { createClient } from '@supabase/supabase-js'
 
-const SUPABASE_URL = 'https://nenlqfmkclpmaiosdefx.supabase.co'
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5lbmxxZm1rY2xwbWFpb3NkZWZ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUyNjcwNjMsImV4cCI6MjA3MDg0MzA2M30.bDszNEOuE9lYysInmUbCBjTYgI7IsSkHL37kK7ou6Bo'
+// Lee credenciales de entorno, no hardcodear
+const SUPABASE_URL = process.env.SUPABASE_URL
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY
 
-const EMAIL = process.env.TEST_EMAIL || 'salomon@azteclab.co'
-const REDIRECT = process.env.TEST_REDIRECT || 'https://staging.trueblue.azteclab.co/'
+const EMAIL = process.env.TEST_EMAIL
+const REDIRECT = process.env.TEST_REDIRECT
 
 async function main() {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    throw new Error('Configura SUPABASE_URL y SUPABASE_ANON_KEY en el entorno para ejecutar este script')
+  }
+  if (!EMAIL || !REDIRECT) {
+    throw new Error('Configura TEST_EMAIL y TEST_REDIRECT en el entorno para ejecutar este script')
+  }
+
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   console.log('→ Enviando magic link a', EMAIL, 'redirect:', REDIRECT)
   const { data, error } = await supabase.auth.signInWithOtp({
