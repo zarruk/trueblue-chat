@@ -11,7 +11,6 @@ export interface MessageTemplate {
   created_by: string
   created_at: string
   updated_at: string
-  client_id: string
 }
 
 type NewTemplateInput = {
@@ -46,7 +45,7 @@ export function useMessageTemplates() {
       }
       
       const { data, error } = await supabase
-        .from('tb_message_templates')
+        .from('message_templates')
         .select('*')
         .eq('client_id', profile.client_id) // Filtrar por cliente
         .order('updated_at', { ascending: false })
@@ -74,20 +73,15 @@ export function useMessageTemplates() {
       return false
     }
 
-    if (!profile?.client_id) {
-      toast.error('No se pudo determinar el cliente')
-      return false
-    }
-
     try {
       const { error } = await supabase
-        .from('tb_message_templates')
+        .from('message_templates')
         .insert({
           name: templateData.name,
           message: templateData.message,
           category: templateData.category || 'general',
-          created_by: user.id,
-          client_id: profile.client_id // Asignar al mismo cliente
+          created_by: profile.id,
+          client_id: profile?.client_id // Asignar al mismo cliente
         })
 
       if (error) {
@@ -115,7 +109,7 @@ export function useMessageTemplates() {
 
     try {
       const { error } = await supabase
-        .from('tb_message_templates')
+        .from('message_templates')
         .update({ ...updates })
         .eq('id', templateId)
 
@@ -144,7 +138,7 @@ export function useMessageTemplates() {
 
     try {
       const { error } = await supabase
-        .from('tb_message_templates')
+        .from('message_templates')
         .delete()
         .eq('id', templateId)
 
