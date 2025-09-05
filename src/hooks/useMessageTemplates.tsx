@@ -11,6 +11,7 @@ export interface MessageTemplate {
   created_by: string
   created_at: string
   updated_at: string
+  client_id: string
 }
 
 type NewTemplateInput = {
@@ -73,6 +74,11 @@ export function useMessageTemplates() {
       return false
     }
 
+    if (!profile?.client_id) {
+      toast.error('No se pudo determinar el cliente')
+      return false
+    }
+
     try {
       const { error } = await supabase
         .from('tb_message_templates')
@@ -81,7 +87,7 @@ export function useMessageTemplates() {
           message: templateData.message,
           category: templateData.category || 'general',
           created_by: user.id,
-          client_id: profile?.client_id // Asignar al mismo cliente
+          client_id: profile.client_id // Asignar al mismo cliente
         })
 
       if (error) {
