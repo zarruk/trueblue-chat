@@ -821,12 +821,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
               target.style.height = Math.min(target.scrollHeight, 120) + 'px'
             }}
           />
-          {/* Debug info - remover en producción */}
-          {conversationId && (
-            <div className="text-xs text-muted-foreground mt-1">
-              Debug: ID={conversationId}, Status={conversation?.status}, Disabled={!conversationId || conversation?.status === 'closed' || conversation?.status === 'pending_response'}
-            </div>
-          )}
+          
           {/* Debug logs en consola */}
           {conversationId && (() => {
             console.log('🔍 ChatWindow Debug:', {
