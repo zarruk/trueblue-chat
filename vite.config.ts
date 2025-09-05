@@ -25,6 +25,20 @@ export default defineConfig(({ mode }) => ({
           return path.replace(/^\/api\/n8n-webhook/, `/webhook/${endpoint}`)
         },
       },
+      // Proxy para outbound messages en desarrollo local
+      "/api/n8n-outbound": {
+        target: "https://aztec.app.n8n.cloud",
+        changeOrigin: true,
+        secure: true,
+        // Reescribe /api/n8n-outbound -> /webhook/<outbound-endpoint>
+        rewrite: (path) => {
+          const configured = process.env.VITE_N8N_OUTBOUND_WEBHOOK_URL
+          const endpoint = configured && configured.includes('/webhook/')
+            ? configured.split('/webhook/')[1]
+            : 'a1908f33-9836-4db3-9379-ab75d665f29b'
+          return path.replace(/^\/api\/n8n-outbound/, `/webhook/${endpoint}`)
+        },
+      },
     },
   },
   plugins: [

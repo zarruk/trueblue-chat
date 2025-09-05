@@ -2,6 +2,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
+import { useClient } from "@/hooks/useClient";
 import { AppSidebar } from "@/components/AppSidebar";
 import Dashboard from "./pages/Dashboard";
 import Agents from "./pages/Agents";
@@ -17,6 +18,7 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { checkAndAddChannelColumn } from "@/utils/databaseStructureCheck";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { DynamicTitle } from "@/components/DynamicTitle";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -56,6 +58,7 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 
 function AppLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { getClientDisplayName } = useClient();
   
   useEffect(() => {
     // Verificar y agregar la columna channel si es necesario
@@ -63,7 +66,9 @@ function AppLayout({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <div className="h-screen flex w-full overflow-hidden">
+    <>
+      <DynamicTitle />
+      <div className="h-screen flex w-full overflow-hidden">
       <AppSidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
       <main className={`flex-1 flex flex-col min-h-0 overflow-hidden transition-all duration-300 ease-in-out ${
         sidebarOpen ? 'ml-64' : 'ml-0'
@@ -79,7 +84,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
             >
               <Menu className="h-5 w-5" />
             </Button>
-            <div className="text-lg font-semibold">Trueblue</div>
+            <div className="text-lg font-semibold">{getClientDisplayName()}</div>
           </div>
           <div className="mr-4">
             <ThemeToggle />
@@ -89,7 +94,8 @@ function AppLayout({ children }: { children: React.ReactNode }) {
           {children}
         </div>
       </main>
-    </div>
+      </div>
+    </>
   );
 }
 

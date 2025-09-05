@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Send, Paperclip, Smile, ChevronDown, PanelRightOpen, ChevronLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -52,7 +51,7 @@ interface Message {
 
 interface Conversation {
   id: string
-  status: 'active_ai' | 'active_human' | 'closed' | 'pending_human'
+  status: 'active_ai' | 'active_human' | 'closed' | 'pending_human' | 'pending_response'
   user_id: string
   username?: string
   phone_number?: string
@@ -134,41 +133,38 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     }
   }
 
-  // Helper para extraer image_url de metadata (img-url o imgUrl) y normalizar Drive
-  function getImageCandidatesFromMetadata(metadata: any): string[] {
+  // Helper: extraer URL de imagen desde metadata y normalizar Drive
+  function getImageUrlFromMetadata(metadata: any): string | undefined {
     try {
-      if (!metadata) return []
-      let raw: string | undefined
+      if (!metadata) return undefined
+      let url: string | undefined
       if (typeof metadata === 'string') {
-        const parsed = JSON.parse(metadata)
-        raw = parsed?.['img-url'] || parsed?.imgUrl
-      } else if (typeof metadata === 'object') {
-        raw = metadata?.['img-url'] || (metadata as any)?.imgUrl
-      }
-      if (!raw) return []
-
-      try {
-        const u = new URL(raw)
-        if (u.hostname.includes('drive.google.com')) {
-          // generar candidatos
-          const fileMatch = u.pathname.match(/\/file\/d\/([^/]+)\//)
-          const id = fileMatch?.[1] || u.searchParams.get('id') || ''
-          if (id) {
-            return [
-              `https://drive.google.com/uc?export=view&id=${id}`,
-              `https://drive.google.com/uc?export=download&id=${id}`,
-              `https://drive.google.com/thumbnail?id=${id}&sz=w2000`,
-              `https://lh3.googleusercontent.com/d/${id}=s1200`
-            ]
-          }
+        const trimmed = metadata.trim()
+        if (!trimmed || trimmed === 'undefined' || trimmed === 'null' || trimmed === 'NaN') return undefined
+        if (/^[{\[]/.test(trimmed)) {
+          const parsed = JSON.parse(trimmed)
+          url = parsed?.['img-url'] || parsed?.imgUrl
+        } else {
+          url = trimmed
         }
-      } catch {
-        // raw no es URL válida
+      } else if (typeof metadata === 'object') {
+        url = (metadata as any)?.['img-url'] || (metadata as any)?.imgUrl
       }
-      return [raw]
+      if (!url) return undefined
+      // Normalizar esquema si viene sin http(s)
+      if (!/^https?:\/\//i.test(url) && /^([\w-]+\.)+[\w-]{2,}/.test(url)) {
+        url = `https://${url}`
+      }
+      // Normalizar URLs de Google Drive a uc?export=view&id=
+      const googleDriveMatch = url.match(/(?:id=|file\/d\/|drive\.google\.com\/file\/d\/)([a-zA-Z0-9_-]+)/)
+      if (googleDriveMatch && googleDriveMatch[1]) {
+        const fileId = googleDriveMatch[1]
+        return `https://drive.google.com/uc?export=view&id=${fileId}`
+      }
+      return url
     } catch (e) {
       console.warn('⚠️ [ChatWindow] No se pudo parsear metadata de mensaje:', e)
-      return []
+      return undefined
     }
   }
 
@@ -194,6 +190,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
         .from('tb_conversations')
         .select('id, created_at, updated_at')
         .eq('user_id', userId)
+        .eq('client_id', profile?.client_id)
         .neq('id', currentConvId)
         .order('created_at', { ascending: true })
 
@@ -209,6 +206,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
           .from('tb_messages')
           .select('*')
           .eq('conversation_id', c.id)
+          // .eq('client_id', profile?.client_id)
           .order('created_at', { ascending: true })
         if (msgsError) {
           console.error('❌ [ChatWindow] Error obteniendo mensajes históricos:', msgsError)
@@ -222,7 +220,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       console.error('❌ [ChatWindow] Excepción cargando historial:', e)
       setHistoricalConversations([])
     }
-  }, [])
+  }, [profile?.client_id])
 
   useEffect(() => {
     if (conversation && conversation.user_id) {
@@ -230,7 +228,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     } else {
       setHistoricalConversations([])
     }
-  }, [conversation?.id, conversation?.user_id, fetchHistoricalConversations])
+  }, [conversation?.id, conversation?.user_id, fetchHistoricalConversations, conversation])
 
   // Realtime subscription scoped to this conversation as a fail-safe
   useEffect(() => {
@@ -269,45 +267,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     }
   }, [conversationId])
 
-  // Polling de respaldo cada 2.5s para garantizar mensajes en tiempo real si falla la suscripción
-  useEffect(() => {
-    if (!conversationId) return
-
-    let isCancelled = false
-    const interval = setInterval(async () => {
-      try {
-        const { data, error } = await supabase
-          .from('tb_messages')
-          .select('*')
-          .eq('conversation_id', conversationId)
-          .order('created_at', { ascending: true })
-
-        if (error) {
-          console.error('❌ [ChatWindow] Polling mensajes error:', error)
-          return
-        }
-
-        if (!isCancelled && Array.isArray(data)) {
-          setLocalMessages(prev => {
-            if (prev.length === data.length) return prev
-            // Merge simple por id
-            const byId = new Map(prev.map(m => [m.id, m]))
-            for (const m of data as any[]) {
-              byId.set(m.id, m as any)
-            }
-            return Array.from(byId.values()).sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-          })
-        }
-      } catch (e) {
-        console.error('❌ [ChatWindow] Polling mensajes excepción:', e)
-      }
-    }, 2500)
-
-    return () => {
-      isCancelled = true
-      clearInterval(interval)
-    }
-  }, [conversationId])
+  // ELIMINADO: No usar polling automático para evitar refrescos
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
     if (messagesEndRef.current) {
@@ -325,6 +285,13 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       scrollToBottomInstant()
     }
   }, [localMessages.length, scrollToBottomInstant])
+
+  // Asegurar scroll al fondo cuando se cambia de conversación
+  useEffect(() => {
+    if (!conversationId) return
+    const t = setTimeout(() => scrollToBottomInstant(), 100)
+    return () => clearTimeout(t)
+  }, [conversationId, scrollToBottomInstant])
 
   // Scroll suave cuando se agregan nuevos mensajes
   useEffect(() => {
@@ -419,6 +386,8 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
         return 'destructive'
       case 'pending_human':
         return 'outline'
+      case 'pending_response':
+        return 'outline'
       default:
         return 'secondary'
     }
@@ -434,6 +403,8 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
         return '🔒 Cerrada'
       case 'pending_human':
         return '⏳ Pendiente'
+      case 'pending_response':
+        return '⏳ Esperando Respuesta'
       default:
         return status
     }
@@ -449,6 +420,8 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
         return 'text-red-600'
       case 'pending_human':
         return 'text-orange-600'
+      case 'pending_response':
+        return 'text-yellow-600'
       default:
         return 'text-gray-600'
     }
@@ -477,10 +450,36 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   const renderMessageBubble = (msg: Message, muted = false) => {
     const senderInfo = getSenderInfo(msg)
     const alignment = getMessageAlignment(msg)
-    const candidates = getImageCandidatesFromMetadata(msg?.metadata)
+    const baseImageUrl = getImageUrlFromMetadata(msg?.metadata)
+    const hasImage = Boolean(baseImageUrl)
+
+    // Variantes para Google Drive (sin hooks dentro del render de burbuja)
+    let googleDriveVariants: string[] = []
+    if (baseImageUrl && (baseImageUrl.includes('drive.google.com') || baseImageUrl.includes('drive.usercontent.google.com'))) {
+      const fileIdMatch = baseImageUrl.match(/(?:id=|file\/d\/)([a-zA-Z0-9_-]+)/)
+      if (fileIdMatch) {
+        const fileId = fileIdMatch[1]
+        googleDriveVariants = [
+          // Preferir dominios que no dan CORS en <img>
+          `https://lh3.googleusercontent.com/d/${fileId}=s2048`,
+          `https://lh3.googleusercontent.com/d/${fileId}`,
+          `https://drive.usercontent.google.com/uc?export=view&id=${fileId}`,
+          `https://drive.google.com/thumbnail?id=${fileId}&sz=w2000`,
+          `https://drive.google.com/open?id=${fileId}`,
+          `https://drive.google.com/file/d/${fileId}/view?usp=sharing`,
+          // Dejar uc al final porque suele bloquear por CORS
+          `https://drive.google.com/uc?export=view&id=${fileId}`,
+          `https://drive.google.com/uc?export=download&id=${fileId}`
+        ]
+      }
+    }
+
     const idx = imageVariantIndex[msg.id] || 0
-    const imageUrl = candidates[idx]
-    const hasImage = Boolean(imageUrl)
+    const imageUrl = hasImage
+      ? (googleDriveVariants.length > 0
+          ? googleDriveVariants[idx % googleDriveVariants.length]
+          : baseImageUrl)
+      : undefined
 
     return (
       <div key={msg.id} className={`flex ${alignment}`}>
@@ -506,12 +505,17 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                   alt="imagen adjunta" 
                   className="rounded-md cursor-zoom-in max-w-full h-auto max-h-72 object-contain w-auto"
                   loading="lazy"
+                  crossOrigin="anonymous"
+                  referrerPolicy="no-referrer"
                   onClick={() => { setViewerSrc(imageUrl); setViewerError(false); setViewerOpen(true) }}
                   onError={(e) => {
                     const next = (imageVariantIndex[msg.id] || 0) + 1
-                    if (candidates && next < candidates.length) {
+                    if (googleDriveVariants.length > 0 && next < googleDriveVariants.length) {
                       setImageVariantIndex(prev => ({ ...prev, [msg.id]: next }))
                     } else {
+                      if (import.meta.env.DEV) {
+                        console.warn('❌ [ChatWindow] Error final al cargar la imagen:', imageUrl, googleDriveVariants)
+                      }
                       setImageError(prev => ({ ...prev, [msg.id]: 'Error al cargar la imagen.' }))
                       const target = e.target as HTMLImageElement
                       target.style.display = 'none'
@@ -581,7 +585,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
               </h3>
               <div className="flex items-center space-x-2">
                 <Badge variant={getStatusBadgeVariant(conversation?.status || 'closed')}>
-                  {getStatusLabel(conversation?.status || 'Cerrada')}
+                  {getStatusLabel(conversation?.status || 'closed')}
                 </Badge>
                 {conversation?.assigned_agent_name && (
                   <span className="text-sm text-muted-foreground">
@@ -606,6 +610,9 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
               </Button>
             )}
             
+            {(() => {
+              const isClosed = conversation?.status === 'closed'
+              return (
             <div className="flex flex-col items-end space-y-1">
               <label className="text-xs text-muted-foreground font-medium">
                 Estado de la conversación
@@ -614,13 +621,14 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                 <Select 
                   onValueChange={handleStatusChange} 
                   value={conversation?.status || 'closed'}
-                  disabled={updatingStatus}
+                  disabled={updatingStatus || isClosed}
                 >
                   <SelectTrigger className="h-8 w-[160px]">
                     <SelectValue placeholder="Cambiar estado" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="pending_human">⏳ Pendiente</SelectItem>
+                    <SelectItem value="pending_response">⏳ Esperando Respuesta</SelectItem>
                     <SelectItem value="active_ai">🤖 IA Activa</SelectItem>
                     <SelectItem value="active_human">👤 Agente Activo</SelectItem>
                     <SelectItem value="closed">🔒 Cerrada</SelectItem>
@@ -631,14 +639,47 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                 )}
               </div>
             </div>
+              )
+            })()}
+
+            {/* Asignación de agente */}
+            {(() => {
+              const isClosed = conversation?.status === 'closed'
+              return (
+            <div className="flex flex-col items-end space-y-1">
+              <label className="text-xs text-muted-foreground font-medium">
+                Agente asignado
+              </label>
+              <div className="flex items-center space-x-2">
+                <Select
+                  onValueChange={(value) => handleAssignAgent(value)}
+                  value={conversation?.assigned_agent_id || 'none'}
+                  disabled={isClosed}
+                >
+                  <SelectTrigger className="h-8 w-[220px]">
+                    <SelectValue placeholder="Selecciona agente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sin asignar (volver a IA)</SelectItem>
+                    {availableAgents.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.name} · {a.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+              )
+            })()}
           </div>
         </div>
       </div>
 
       {/* Messages */}
       <div className="flex-1 flex flex-col min-h-0 relative">
-        {/* Botón para tomar conversación */}
-        {conversation && conversation.status !== 'active_human' && conversation.status !== 'pending_human' && (
+        {/* Botón para tomar conversación (solo cuando está en IA activa) */}
+        {conversation && conversation.status === 'active_ai' && (
           <div className="p-2 border-b bg-muted/20 dark:border-slate-700">
             <Button 
               onClick={async () => {
@@ -752,9 +793,17 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
           <Textarea
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            placeholder="Escribe un mensaje..."
+            placeholder={
+              !conversationId 
+                ? "Escribe un mensaje..." 
+                : conversation?.status === 'closed' 
+                  ? "Conversación cerrada" 
+                  : conversation?.status === 'pending_response' 
+                    ? "Esperando respuesta del usuario..." 
+                    : "Escribe un mensaje..."
+            }
             className="flex-1 min-h-[40px] max-h-[120px] resize-none"
-            disabled={!conversationId}
+            disabled={!conversationId || conversation?.status === 'closed' || conversation?.status === 'pending_response'}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
@@ -772,7 +821,23 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
               target.style.height = Math.min(target.scrollHeight, 120) + 'px'
             }}
           />
-          <Button type="submit" size="icon" disabled={!message.trim() || !conversationId}>
+          {/* Debug info - remover en producción */}
+          {conversationId && (
+            <div className="text-xs text-muted-foreground mt-1">
+              Debug: ID={conversationId}, Status={conversation?.status}, Disabled={!conversationId || conversation?.status === 'closed' || conversation?.status === 'pending_response'}
+            </div>
+          )}
+          {/* Debug logs en consola */}
+          {conversationId && (() => {
+            console.log('🔍 ChatWindow Debug:', {
+              conversationId,
+              conversationStatus: conversation?.status,
+              isDisabled: !conversationId || conversation?.status === 'closed' || conversation?.status === 'pending_response',
+              conversation: conversation
+            });
+            return null;
+          })()}
+          <Button type="submit" size="icon" disabled={!message.trim() || !conversationId || conversation?.status === 'closed' || conversation?.status === 'pending_response'}>
             <Send className="h-4 w-4" />
           </Button>
         </form>

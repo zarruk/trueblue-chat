@@ -38,13 +38,32 @@ export function useAgents() {
     try {
       setLoading(true)
       console.log('🔍 fetchAgents: Obteniendo agentes de la tabla profiles...')
+      console.log('🔍 fetchAgents: Profile client_id:', profile?.client_id)
+      
+      // Si no tenemos client_id, esperar un poco y reintentar
+      if (!profile?.client_id) {
+        console.log('⚠️ fetchAgents: No hay client_id disponible, esperando...')
+        setTimeout(() => {
+          if (profile?.client_id) {
+            fetchAgents()
+          }
+        }, 1000)
+        return
+      }
+      
+      console.log('🔍 fetchAgents: Construyendo consulta con client_id:', profile.client_id)
       
       const { data, error } = await supabase
         .from('profiles')
         .select('id, email, name, role, created_at')
         .in('role', ['agent', 'admin']) // Solo agentes y administradores
         .not('email', 'ilike', 'deleted_%') // Excluir agentes soft deleted
+        .eq('client_id', profile.client_id) // Filtrar por cliente
         .order('name', { ascending: true })
+
+      console.log('🔍 fetchAgents: Consulta ejecutada')
+      console.log('🔍 fetchAgents: Error:', error)
+      console.log('🔍 fetchAgents: Data:', data)
 
       if (error) {
         console.error('❌ Error fetching agents from profiles:', error)
@@ -53,6 +72,7 @@ export function useAgents() {
       }
 
       console.log('✅ fetchAgents: Agentes obtenidos:', data?.length || 0)
+      console.log('✅ fetchAgents: Datos completos:', data)
       setAgents((data as any) || [])
     } catch (error) {
       console.error('❌ Exception fetching agents:', error)
@@ -60,7 +80,7 @@ export function useAgents() {
     } finally {
       setLoading(false)
     }
-  }, [user])
+  }, [user, profile?.client_id])
 
   // Fetch agent statistics (disabled for now since we're using profiles table)
   const fetchAgentStats = useCallback(async () => {
@@ -96,7 +116,8 @@ export function useAgents() {
         .insert({
           email: email,
           name: name,
-          role: role
+          role: role,
+          client_id: profile?.client_id // Asignar al mismo cliente
         })
 
       if (error) {

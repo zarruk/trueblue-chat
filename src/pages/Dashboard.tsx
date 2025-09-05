@@ -6,7 +6,6 @@ import { useAgents } from '@/hooks/useAgents';
 import { ConversationTabs } from '@/components/ConversationTabs';
 import { ChatContextPanel } from '@/components/ChatContextPanel';
 import { ChatWindow } from '@/components/ChatWindow';
-import { ConversationWithMessages } from '@/types/database';
 import { Card, CardContent } from '@/components/ui/card';
 import { MessageSquare } from 'lucide-react';
 import { RealtimeDebugPanel } from '@/components/RealtimeDebugPanel';
@@ -23,19 +22,30 @@ export default function Dashboard() {
   const { 
     conversations, 
     loading, 
+    refreshing,
     sendMessage, 
     updateConversationStatus, 
     selectConversation,
     messages,
     assignAgent,
     selectedConversationId,
-    updateUserDisplayName
+    updateUserDisplayName,
+    clearSelectedConversation,
+    fetchConversations,
+    fetchMessages
   } = useConversations();
   const { agents } = useAgents();
   
-  // Activar fallback de polling en staging y production (no en dev local)
-  const enableFallback = import.meta.env.MODE === 'production' || import.meta.env.VITE_ENABLE_POLLING === 'true';
-  useRealtimeFallback(enableFallback);
+  // DESHABILITADO: No usar polling automático para evitar refrescos
+  // const enableFallback = import.meta.env.MODE === 'production' || import.meta.env.VITE_ENABLE_POLLING === 'true';
+  // useRealtimeFallback({
+  //   enabled: enableFallback,
+  //   fetchConversations,
+  //   fetchMessages,
+  //   selectedConversationId
+  // });
+
+  // Eliminado: No refrescar automáticamente al recuperar foco
 
   // Las conversaciones se actualizan automáticamente vía tiempo real
 
@@ -60,6 +70,9 @@ export default function Dashboard() {
     if (conv && conv !== selectedConversationId) {
       console.log('🔗 Dashboard: seleccionando conversación desde query param:', conv);
       selectConversation(conv);
+    } else if (!conv && selectedConversationId) {
+      // Si se elimina el query param, limpiar selección (útil en móvil al pulsar volver)
+      clearSelectedConversation();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search]);
@@ -113,7 +126,9 @@ export default function Dashboard() {
               selectedConversationId={selectedConversationId || undefined}
               onSelectConversation={handleSelectConversation}
               conversations={conversations}
-              loading={loading}
+              loading={loading || refreshing}
+              fetchConversations={fetchConversations}
+              selectById={(id) => handleSelectConversation(id)}
             />
           </div>
 
@@ -180,7 +195,9 @@ export default function Dashboard() {
                 selectedConversationId={selectedConversationId || undefined}
                 onSelectConversation={handleSelectConversation}
                 conversations={conversations}
-                loading={loading}
+                loading={loading || refreshing}
+                fetchConversations={fetchConversations}
+                selectById={(id) => handleSelectConversation(id)}
               />
             </div>
           ) : (

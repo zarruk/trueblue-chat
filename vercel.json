@@ -1,5 +1,6 @@
 {
   "installCommand": "npm ci",
+  "ignoreCommand": "if [ \"$VERCEL_ENV\" = \"production\" ]; then exit 0; else exit 1; fi",
   "buildCommand": "npm run type-check && if [ \"$VERCEL_ENV\" = \"production\" ]; then npm run build:production; else npm run build:staging; fi",
   "outputDirectory": "dist",
   "framework": "vite",

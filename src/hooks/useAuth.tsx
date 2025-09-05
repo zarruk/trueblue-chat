@@ -30,19 +30,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(session);
         setUser(session?.user ?? null);
         
-        if (session?.user && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
-          // Defer profile fetch to avoid blocking
+        if (session?.user && event === 'SIGNED_IN') {
+          // Solo cargar perfil en SIGNED_IN, no en TOKEN_REFRESHED para evitar refrescos
           setTimeout(async () => {
             const u = session.user;
             const email = u.email || '';
             const name = (u.user_metadata as any)?.name || email?.split('@')[0] || 'Agente';
             console.log('🔍 Buscando/creando perfil para usuario:', email);
             try {
-              // Buscar por email (puede no existir aún)
+              // Buscar por email (puede no existir aún) - tomar el más reciente si hay duplicados
               const { data: initialProfile, error: selectErr } = await supabase
                 .from('profiles')
                 .select('*')
                 .eq('email', email)
+                .order('created_at', { ascending: false })
+                .limit(1)
                 .maybeSingle();
 
               let finalProfile = initialProfile as Profile | null;
@@ -52,11 +54,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               }
 
               if (!finalProfile) {
+                // NO crear perfil automáticamente
+                console.log('⚠️ Usuario sin perfil:', email);
+                console.log('⚠️ Contacta al administrador para crear tu perfil');
+                // Continuar sin perfil - mostrar pantalla de acceso denegado
+              }
+              else if (finalProfile && (finalProfile as any).status === 'pending') {
                 // Autocrear perfil mínimo (id = auth.uid())
                 console.log('➕ Creando perfil porque no existe:', email);
                 const { data: inserted, error: insertErr } = await supabase
                   .from('profiles')
-                  .insert({ id: u.id, email, name, status: 'active' })
+                  .insert({ 
+                    id: u.id,
+                    user_id: u.id,
+                    email, 
+                    name, 
+                    status: 'active',
+                    client_id: '550e8400-e29b-41d4-a716-446655440000' // Cliente Trueblue por defecto
+                  })
                   .select('*')
                   .maybeSingle();
 
@@ -65,9 +80,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 } else {
                   finalProfile = inserted as Profile | null;
                 }
-              } else if (finalProfile && (finalProfile as any).status === 'pending') {
-                // Activar si estaba pendiente
-                console.log(`🔄 Activando agente pendiente: ${email}`);
+              } else if (finalProfile && (finalProfile as any).status === 'inactive') {
+                // Activar si estaba inactivo
+                console.log(`🔄 Activando agente inactivo: ${email}`);
                 const { data: updated, error: updateErr } = await supabase
                   .from('profiles')
                   .update({ status: 'active' })
@@ -81,12 +96,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 }
               }
 
+              // Backfill: asegurar que user_id esté seteado para RLS
+              if (finalProfile && !(finalProfile as any).user_id) {
+                console.log('🛠️ Backfill user_id en profiles para RLS');
+                const { data: updatedUserId, error: backfillErr } = await supabase
+                  .from('profiles')
+                  .update({ user_id: u.id })
+                  .eq('id', (finalProfile as any).id)
+                  .select('*')
+                  .maybeSingle();
+                if (backfillErr) {
+                  console.warn('⚠️ No se pudo backfillear user_id en profiles:', backfillErr);
+                } else if (updatedUserId) {
+                  finalProfile = updatedUserId as Profile;
+                }
+              }
+
               // Si no logramos obtener/crear, continuar sin bloquear la app
               if (!finalProfile) {
                 console.log('⚠️ No se encontró/creó perfil, continuando sin perfil');
               }
 
               console.log('🏁 Perfil final cargado en Auth:', finalProfile);
+              console.log('🏁 Client ID del perfil:', finalProfile?.client_id);
               setProfile(finalProfile || null);
             } catch (e) {
               console.error('❌ Excepción resolviendo perfil:', e);

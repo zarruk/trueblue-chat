@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -15,6 +16,7 @@ export function AuthForm({ mode }: AuthFormProps) {
   const [name, setName] = useState('')
   const [loading, setLoading] = useState(false)
   const { signInWithMagicLink, signUp } = useAuth()
+  const navigate = useNavigate()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -125,7 +127,7 @@ export function AuthForm({ mode }: AuthFormProps) {
               <p>
                 ¿No tienes cuenta?{' '}
                 <button
-                  onClick={() => window.location.href = '/auth?mode=register'}
+                  onClick={() => navigate('/auth?mode=register')}
                   className="text-primary hover:underline"
                 >
                   Regístrate aquí
@@ -135,7 +137,7 @@ export function AuthForm({ mode }: AuthFormProps) {
               <p>
                 ¿Ya tienes cuenta?{' '}
                 <button
-                  onClick={() => window.location.href = '/auth?mode=login'}
+                  onClick={() => navigate('/auth?mode=login')}
                   className="text-primary hover:underline"
                 >
                   Inicia sesión aquí
