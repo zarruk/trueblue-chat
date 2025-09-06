@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Send, Paperclip, Smile, ChevronDown, PanelRightOpen, ChevronLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -702,7 +701,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                     console.log('🎯 ChatWindow: Verificando estado DESPUÉS de tomar conversación:', conversation)
                   }, 200)
                   
-                  // Éxito gestionado por hooks superiores (evitar toasts duplicados)
+                  // Éxito gestionado por hooks superiores
                 } catch (error) {
                   console.error('❌ ChatWindow: Error al tomar la conversación:', error)
                   toast.error('Error al tomar la conversación')
@@ -748,7 +747,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
               {/* Mensajes de la conversación actual */}
               {localMessages.length === 0 ? (
                 <div className="text-center text-muted-foreground">
-                  <p>No hay mensajes aún. ¡Sé el primero en escribir!</p>
+                  <p>No hay mensajes aún. Sé el primero en escribir.</p>
                 </div>
               ) : (
                 localMessages.map((msg) => renderMessageBubble(msg, false))
@@ -822,12 +821,6 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
               target.style.height = Math.min(target.scrollHeight, 120) + 'px'
             }}
           />
-          {/* Debug info - remover en producción */}
-          {conversationId && (
-            <div className="text-xs text-muted-foreground mt-1">
-              Debug: ID={conversationId}, Status={conversation?.status}, Disabled={!conversationId || conversation?.status === 'closed' || conversation?.status === 'pending_response'}
-            </div>
-          )}
           {/* Debug logs en consola */}
           {conversationId && (() => {
             console.log('🔍 ChatWindow Debug:', {

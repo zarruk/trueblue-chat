@@ -52,4 +52,3 @@ ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 -- =====================================================
 -- FIN DE CREACIÓN DE PERFIL
 -- =====================================================
-

@@ -80,9 +80,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 } else {
                   finalProfile = inserted as Profile | null;
                 }
-              } else if (finalProfile && (finalProfile as any).status === 'pending') {
-                // Activar si estaba pendiente
-                console.log(`🔄 Activando agente pendiente: ${email}`);
+              } else if (finalProfile && (finalProfile as any).status === 'inactive') {
+                // Activar si estaba inactivo
+                console.log(`🔄 Activando agente inactivo: ${email}`);
                 const { data: updated, error: updateErr } = await supabase
                   .from('profiles')
                   .update({ status: 'active' })
