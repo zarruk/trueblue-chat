@@ -6,7 +6,7 @@
 ALTER TABLE profiles DISABLE ROW LEVEL SECURITY;
 ALTER TABLE tb_conversations DISABLE ROW LEVEL SECURITY;
 ALTER TABLE tb_agents DISABLE ROW LEVEL SECURITY;
-ALTER TABLE tb_message_templates DISABLE ROW LEVEL SECURITY;
+ALTER TABLE message_templates DISABLE ROW LEVEL SECURITY;
 
 -- 2. Verificar que el usuario admin tiene el client_id correcto
 UPDATE profiles 

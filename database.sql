@@ -392,9 +392,9 @@ CREATE INDEX IF NOT EXISTS idx_conversations_client_id ON tb_conversations(clien
 ALTER TABLE tb_agents ADD COLUMN IF NOT EXISTS client_id UUID REFERENCES clients(id);
 CREATE INDEX IF NOT EXISTS idx_agents_client_id ON tb_agents(client_id);
 
--- 5. Agregar columna client_id a tb_message_templates
-ALTER TABLE tb_message_templates ADD COLUMN IF NOT EXISTS client_id UUID REFERENCES clients(id);
-CREATE INDEX IF NOT EXISTS idx_message_templates_client_id ON tb_message_templates(client_id);
+-- 5. Agregar columna client_id a message_templates
+ALTER TABLE message_templates ADD COLUMN IF NOT EXISTS client_id UUID REFERENCES clients(id);
+CREATE INDEX IF NOT EXISTS idx_message_templates_client_id ON message_templates(client_id);
 
 -- 6. Crear cliente por defecto (Trueblue)
 INSERT INTO clients (id, name, slug, domain, logo_url, primary_color, secondary_color, settings) 
@@ -413,13 +413,13 @@ VALUES (
 UPDATE profiles SET client_id = '550e8400-e29b-41d4-a716-446655440000' WHERE client_id IS NULL;
 UPDATE tb_conversations SET client_id = '550e8400-e29b-41d4-a716-446655440000' WHERE client_id IS NULL;
 UPDATE tb_agents SET client_id = '550e8400-e29b-41d4-a716-446655440000' WHERE client_id IS NULL;
-UPDATE tb_message_templates SET client_id = '550e8400-e29b-41d4-a716-446655440000' WHERE client_id IS NULL;
+UPDATE message_templates SET client_id = '550e8400-e29b-41d4-a716-446655440000' WHERE client_id IS NULL;
 
 -- 8. Hacer client_id NOT NULL después de asignar valores
 ALTER TABLE profiles ALTER COLUMN client_id SET NOT NULL;
 ALTER TABLE tb_conversations ALTER COLUMN client_id SET NOT NULL;
 ALTER TABLE tb_agents ALTER COLUMN client_id SET NOT NULL;
-ALTER TABLE tb_message_templates ALTER COLUMN client_id SET NOT NULL;
+ALTER TABLE message_templates ALTER COLUMN client_id SET NOT NULL;
 
 -- 9. Crear RLS policies para multi-cliente
 -- Policy para profiles
@@ -441,7 +441,7 @@ CREATE POLICY "Users can only access their own client's agents" ON tb_agents
     ));
 
 -- Policy para message templates
-CREATE POLICY "Users can only access their own client's message templates" ON tb_message_templates
+CREATE POLICY "Users can only access their own client's message templates" ON message_templates
     FOR ALL USING (client_id = (
         SELECT client_id FROM profiles WHERE id = auth.uid()
     ));

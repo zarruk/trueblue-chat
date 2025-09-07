@@ -45,7 +45,7 @@ export function useMessageTemplates() {
       }
       
       const { data, error } = await supabase
-        .from('tb_message_templates')
+        .from('message_templates')
         .select('*')
         .eq('client_id', profile.client_id)
         .order('updated_at', { ascending: false })
@@ -75,7 +75,7 @@ export function useMessageTemplates() {
 
     try {
       const { error } = await supabase
-        .from('tb_message_templates')
+        .from('message_templates')
         .insert({
           name: templateData.name,
           message: templateData.message,
@@ -109,7 +109,7 @@ export function useMessageTemplates() {
 
     try {
       const { error } = await supabase
-        .from('tb_message_templates')
+        .from('message_templates')
         .update({ ...updates })
         .eq('id', templateId)
         .eq('client_id', profile?.client_id || '')
@@ -139,7 +139,7 @@ export function useMessageTemplates() {
 
     try {
       const { error } = await supabase
-        .from('tb_message_templates')
+        .from('message_templates')
         .delete()
         .eq('id', templateId)
         .eq('client_id', profile?.client_id || '')

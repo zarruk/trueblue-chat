@@ -1,21 +1,31 @@
-name: Deploy to Production (manual approval)
+name: Deploy to Vercel (production)
 
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Motivo del despliegue'
+        required: false
+        default: 'Release manual'
 
 concurrency:
   group: production-deploy
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  deploy-production:
     name: Deploy to Vercel Production
     runs-on: ubuntu-latest
     environment:
       name: production
-      url: ${{ steps.deploy.outputs.url }}
+      url: ${{ steps.deploy.outputs.preview-url }}
+
+    permissions:
+      contents: read
+      deployments: write
+
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
@@ -33,71 +43,33 @@ jobs:
       - name: Install Vercel CLI
         run: npm i -g vercel@latest
 
+      - name: Clean install dependencies
+        run: |
+          rm -rf node_modules package-lock.json
+          npm cache clean --force
+          npm install
+
+      - name: Type check
+        run: npm run type-check
+
+      - name: Lint
+        run: npm run lint
+
       - name: Pull Vercel Environment (production)
         run: vercel pull --yes --environment=production --token "$VERCEL_TOKEN"
 
       - name: Build (production)
         run: vercel build --prod --token "$VERCEL_TOKEN"
 
-      - name: Deploy (production)
+      - name: Deploy to Vercel (production)
         id: deploy
-        run: |
-          DEPLOY_URL=$(vercel deploy --prebuilt --prod --token "$VERCEL_TOKEN")
-          echo "url=$DEPLOY_URL" >> $GITHUB_OUTPUT
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.ORG_ID }}
+          vercel-project-id: ${{ secrets.PROJECT_ID }}
+          vercel-args: '--prod'
 
-name: Deploy to Vercel (production)
-
-on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:
-    inputs:
-      reason:
-        description: 'Motivo del despliegue'
-        required: false
-        default: 'Release manual'
-
-jobs:
-  deploy-production:
-    runs-on: ubuntu-latest
-    environment:
-      name: production
-      url: ${{ steps.deploy.outputs.preview-url }}
-
-    permissions:
-      contents: read
-      deployments: write
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-
-    - name: Clean install dependencies
-      run: |
-        rm -rf node_modules package-lock.json
-        npm cache clean --force
-        npm install
-
-    - name: Type check
-      run: npm run type-check
-
-    - name: Lint
-      run: npm run lint
-
-    - name: Deploy to Vercel (production)
-      id: deploy
-      uses: amondnet/vercel-action@v25
-      with:
-        vercel-token: ${{ secrets.VERCEL_TOKEN }}
-        vercel-org-id: ${{ secrets.ORG_ID }}
-        vercel-project-id: ${{ secrets.PROJECT_ID }}
-        vercel-args: '--prod'
-
-    - name: Publish production URL
-      run: echo "url=${{ steps.deploy.outputs.preview-url }}" >> $GITHUB_OUTPUT
+      - name: Publish production URL
+        run: echo "url=${{ steps.deploy.outputs.preview-url }}" >> $GITHUB_OUTPUT
 

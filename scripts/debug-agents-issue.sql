@@ -65,7 +65,7 @@ SELECT
   tablename,
   rowsecurity as rls_enabled
 FROM pg_tables 
-WHERE tablename IN ('profiles', 'tb_conversations', 'tb_agents', 'tb_message_templates')
+WHERE tablename IN ('profiles', 'tb_conversations', 'tb_agents', 'message_templates')
 ORDER BY tablename;
 
 -- 5. Verificar la función get_current_user_client_id

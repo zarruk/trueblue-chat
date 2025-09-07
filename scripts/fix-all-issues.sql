@@ -31,7 +31,7 @@ WHERE email = 'salomon@azteclab.co';
 ALTER TABLE profiles DISABLE ROW LEVEL SECURITY;
 ALTER TABLE tb_conversations DISABLE ROW LEVEL SECURITY;
 ALTER TABLE tb_agents DISABLE ROW LEVEL SECURITY;
-ALTER TABLE tb_message_templates DISABLE ROW LEVEL SECURITY;
+ALTER TABLE message_templates DISABLE ROW LEVEL SECURITY;
 
 -- 4. Verificar el estado actual
 SELECT 
@@ -75,7 +75,7 @@ SELECT
 SELECT 'Total perfiles' as metric, COUNT(*)::text as value FROM profiles;
 SELECT 'Total conversaciones' as metric, COUNT(*)::text as value FROM tb_conversations;
 SELECT 'Total agentes' as metric, COUNT(*)::text as value FROM tb_agents;
-SELECT 'Total plantillas' as metric, COUNT(*)::text as value FROM tb_message_templates;
+SELECT 'Total plantillas' as metric, COUNT(*)::text as value FROM message_templates;
 SELECT 'Total clientes' as metric, COUNT(*)::text as value FROM clients;
 SELECT 'Total configuraciones' as metric, COUNT(*)::text as value FROM client_configs;
 

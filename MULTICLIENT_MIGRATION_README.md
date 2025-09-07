@@ -53,7 +53,7 @@ Se agregó la columna `client_id UUID REFERENCES clients(id)` a:
 - `profiles`
 - `tb_conversations`
 - `tb_agents`
-- `tb_message_templates`
+- `message_templates`
 
 ### Nuevas Funciones
 
@@ -240,7 +240,7 @@ SELECT COUNT(*) FROM tb_conversations WHERE client_id IS NULL;
 -- Verificar que las políticas están activas
 SELECT schemaname, tablename, policyname, permissive, roles, cmd, qual 
 FROM pg_policies 
-WHERE tablename IN ('profiles', 'tb_conversations', 'tb_agents', 'tb_message_templates');
+WHERE tablename IN ('profiles', 'tb_conversations', 'tb_agents', 'message_templates');
 ```
 
 ## 🚨 Consideraciones Importantes
