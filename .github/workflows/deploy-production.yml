@@ -2,7 +2,7 @@ name: Deploy to Vercel (production)
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, staging0509 ]
   workflow_dispatch:
     inputs:
       reason:
