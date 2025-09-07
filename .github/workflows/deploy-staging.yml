@@ -1,8 +1,8 @@
-name: Deploy to Vercel (production)
+name: Deploy to Vercel (staging)
 
 on:
   push:
-    branches: [ main ]
+    branches: [ staging0509 ]
   workflow_dispatch:
     inputs:
       reason:
@@ -11,15 +11,15 @@ on:
         default: 'Release manual'
 
 concurrency:
-  group: production-deploy
+  group: staging-deploy
   cancel-in-progress: false
 
 jobs:
-  deploy-production:
-    name: Deploy to Vercel Production
+  deploy-staging:
+    name: Deploy to Vercel Staging
     runs-on: ubuntu-latest
     environment:
-      name: production
+      name: staging
       url: ${{ steps.deploy.outputs.preview-url }}
 
     permissions:
@@ -29,7 +29,7 @@ jobs:
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}      
 
     steps:
       - name: Checkout code
@@ -55,21 +55,20 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Pull Vercel Environment (production)
-        run: vercel pull --yes --environment=production --token "$VERCEL_TOKEN"
+      - name: Pull Vercel Environment (preview)
+        run: vercel pull --yes --environment=preview --token "$VERCEL_TOKEN"
 
-      - name: Build (production)
-        run: vercel build --prod --token "$VERCEL_TOKEN"
+      - name: Build (preview)
+        run: vercel build --token "$VERCEL_TOKEN"       
 
-      - name: Deploy to Vercel (production)
+      - name: Deploy to Vercel (preview)
         id: deploy
         uses: amondnet/vercel-action@v25
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.ORG_ID }}
-          vercel-project-id: ${{ secrets.PROJECT_ID }}
-          vercel-args: '--prod'
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          vercel-args: '--prebuilt'
 
-      - name: Publish production URL
+      - name: Publish staging URL
         run: echo "url=${{ steps.deploy.outputs.preview-url }}" >> $GITHUB_OUTPUT
-
