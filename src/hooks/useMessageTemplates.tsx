@@ -33,7 +33,7 @@ export function useMessageTemplates() {
       console.log('🔍 fetchTemplates: Obteniendo plantillas...')
       console.log('🔍 fetchTemplates: Profile client_id:', profile?.client_id)
       
-      // Si no tenemos client_id, esperar un poco y reintentar
+      // Si no tenemos client_id, esperar y reintentar
       if (!profile?.client_id) {
         console.log('⚠️ fetchTemplates: No hay client_id disponible, esperando...')
         setTimeout(() => {
@@ -45,9 +45,9 @@ export function useMessageTemplates() {
       }
       
       const { data, error } = await supabase
-        .from('message_templates')
+        .from('tb_message_templates')
         .select('*')
-        .eq('client_id', profile.client_id) // Filtrar por cliente
+        .eq('client_id', profile.client_id)
         .order('updated_at', { ascending: false })
 
       if (error) {
@@ -75,13 +75,13 @@ export function useMessageTemplates() {
 
     try {
       const { error } = await supabase
-        .from('message_templates')
+        .from('tb_message_templates')
         .insert({
           name: templateData.name,
           message: templateData.message,
           category: templateData.category || 'general',
           created_by: profile.id,
-          client_id: profile?.client_id // Asignar al mismo cliente
+          client_id: profile?.client_id
         })
 
       if (error) {
@@ -98,7 +98,7 @@ export function useMessageTemplates() {
       toast.error('Error al crear la plantilla')
       return false
     }
-  }, [user, fetchTemplates, profile?.client_id])
+  }, [user, fetchTemplates, profile?.client_id, profile?.id])
 
   // Update template
   const updateTemplate = useCallback(async (templateId: string, updates: Partial<Pick<MessageTemplate, 'name'|'message'|'category'>>) => {
@@ -109,9 +109,10 @@ export function useMessageTemplates() {
 
     try {
       const { error } = await supabase
-        .from('message_templates')
+        .from('tb_message_templates')
         .update({ ...updates })
         .eq('id', templateId)
+        .eq('client_id', profile?.client_id || '')
 
       if (error) {
         console.error('Error updating template:', error)
@@ -127,7 +128,7 @@ export function useMessageTemplates() {
       toast.error('Error al actualizar la plantilla')
       return false
     }
-  }, [user, fetchTemplates])
+  }, [user, fetchTemplates, profile?.client_id])
 
   // Delete template
   const deleteTemplate = useCallback(async (templateId: string) => {
@@ -138,9 +139,10 @@ export function useMessageTemplates() {
 
     try {
       const { error } = await supabase
-        .from('message_templates')
+        .from('tb_message_templates')
         .delete()
         .eq('id', templateId)
+        .eq('client_id', profile?.client_id || '')
 
       if (error) {
         console.error('Error deleting template:', error)
@@ -156,7 +158,7 @@ export function useMessageTemplates() {
       toast.error('Error al eliminar la plantilla')
       return false
     }
-  }, [user, fetchTemplates])
+  }, [user, fetchTemplates, profile?.client_id])
 
   // Get templates by category
   const getTemplatesByCategory = useCallback((category: string) => {
