@@ -36,7 +36,7 @@ SELECT 'Plantillas sin client_id' as check_name,
             THEN '✅ TODAS TIENEN CLIENT_ID' 
             ELSE '❌ ' || COUNT(*) || ' SIN CLIENT_ID' 
        END as status
-FROM tb_message_templates WHERE client_id IS NULL;
+FROM message_templates WHERE client_id IS NULL;
 
 -- 3. Verificar que las funciones existen
 SELECT 'Función get_current_user_client_id' as check_name,
@@ -77,7 +77,7 @@ SELECT 'RLS Agents' as check_name,
        END as status;
 
 SELECT 'RLS Message Templates' as check_name,
-       CASE WHEN EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'tb_message_templates') 
+       CASE WHEN EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'message_templates') 
             THEN '✅ ACTIVAS' 
             ELSE '❌ NO ACTIVAS' 
        END as status;
@@ -125,7 +125,7 @@ SELECT 'Total de conversaciones migradas' as metric, COUNT(*)::text as value FRO
 
 SELECT 'Total de agentes migrados' as metric, COUNT(*)::text as value FROM tb_agents;
 
-SELECT 'Total de plantillas migradas' as metric, COUNT(*)::text as value FROM tb_message_templates;
+SELECT 'Total de plantillas migradas' as metric, COUNT(*)::text as value FROM message_templates;
 
 SELECT 'Total de configuraciones de cliente' as metric, COUNT(*)::text as value FROM client_configs;
 

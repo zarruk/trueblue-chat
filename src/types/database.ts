@@ -159,7 +159,7 @@ export interface Database {
           client_id?: string // Nuevo campo
         }
       }
-      tb_message_templates: {
+      message_templates: {
         Row: {
           id: string
           name: string

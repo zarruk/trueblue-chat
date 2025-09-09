@@ -15,12 +15,13 @@ interface ConversationListProps {
   loading: boolean
 }
 
-type ConversationStatus = 'active_ai' | 'active_human' | 'closed' | 'pending_human'
+type ConversationStatus = 'active_ai' | 'active_human' | 'closed' | 'pending_human' | 'pending_response'
 
 const statusConfig = {
   active_ai: { label: 'AI Activo', icon: Clock, variant: 'secondary' as const, color: 'text-blue-500 dark:text-blue-400' },
   active_human: { label: 'Humano Activo', icon: MessageSquare, variant: 'default' as const, color: 'text-green-500 dark:text-green-400' },
   pending_human: { label: 'Pendiente', icon: AlertCircle, variant: 'destructive' as const, color: 'text-orange-500 dark:text-orange-400' },
+  pending_response: { label: 'Esperando Respuesta', icon: Clock, variant: 'outline' as const, color: 'text-yellow-500 dark:text-yellow-400' },
   closed: { label: 'Cerrado', icon: CheckCircle, variant: 'outline' as const, color: 'text-gray-500 dark:text-gray-400' }
 }
 
@@ -48,14 +49,15 @@ const getChannelConfig = (channel?: string) => {
   }
 }
 
-// Prioridad: 1) pending_human, 2) active_human con último mensaje del usuario, 3) active_human respondidas, 4) active_ai, 5) closed
+// Prioridad: 1) pending_human, 2) active_human con último mensaje del usuario, 3) pending_response, 4) active_human respondidas, 5) active_ai, 6) closed
 const getPriority = (c: Conversation) => {
   if (c.status === 'pending_human') return 1
   if (c.status === 'active_human' && c.last_message_sender_role === 'user') return 2
-  if (c.status === 'active_human') return 3
-  if (c.status === 'active_ai') return 4
-  if (c.status === 'closed') return 5
-  return 6
+  if (c.status === 'pending_response') return 3
+  if (c.status === 'active_human') return 4
+  if (c.status === 'active_ai') return 5
+  if (c.status === 'closed') return 6
+  return 7
 }
 
 export function ConversationList({ onSelectConversation, selectedConversationId, conversations, loading }: ConversationListProps) {
@@ -87,6 +89,7 @@ export function ConversationList({ onSelectConversation, selectedConversationId,
   const needsUrgentResponse = (conversation: any) => {
     if (conversation.status === 'pending_human') return true
     if (conversation.status === 'active_human' && conversation.last_message_sender_role === 'user') return true
+    if (conversation.status === 'pending_response') return true
     return false
   }
 
@@ -109,14 +112,14 @@ export function ConversationList({ onSelectConversation, selectedConversationId,
     })
 
     const sorted = filtered.sort((a, b) => {
-      const aRef = a.last_message_at || a.updated_at
-      const bRef = b.last_message_at || b.updated_at
-      const dt = new Date(bRef).getTime() - new Date(aRef).getTime()
-      if (dt !== 0) return dt
-      // Tie-breaker by priority if same timestamp
+      // Prioridad primero, timestamp como tie-breaker
       const pa = getPriority(a)
       const pb = getPriority(b)
-      return pa - pb
+      if (pa !== pb) return pa - pb
+      // Tie-breaker by timestamp if same priority
+      const aRef = a.last_message_at || a.updated_at
+      const bRef = b.last_message_at || b.updated_at
+      return new Date(bRef).getTime() - new Date(aRef).getTime()
     })
     return sorted
   }, [conversations, searchTerm, statusFilter, agentFilter])
@@ -177,6 +180,7 @@ export function ConversationList({ onSelectConversation, selectedConversationId,
               <SelectItem value="active_ai">AI Activo</SelectItem>
               <SelectItem value="active_human">Humano Activo</SelectItem>
               <SelectItem value="pending_human">Pendiente</SelectItem>
+              <SelectItem value="pending_response">Pendiente Respuesta</SelectItem>
               <SelectItem value="abierta">Abierta</SelectItem>
               <SelectItem value="closed">Cerrado</SelectItem>
             </SelectContent>
@@ -241,6 +245,8 @@ export function ConversationList({ onSelectConversation, selectedConversationId,
                 ? 'unassigned'
                 : conversation.status === 'active_human' && conversation.last_message_sender_role === 'user'
                 ? 'awaiting_response'
+                : conversation.status === 'pending_response'
+                ? 'pending_response'
                 : 'none'
 
               const ch = getChannelConfig(conversation.channel)
@@ -259,6 +265,8 @@ export function ConversationList({ onSelectConversation, selectedConversationId,
                       ? 'urgent-unassigned border-l-4 border-l-red-500 bg-red-50 dark:border-l-red-400 dark:bg-red-950/40'
                       : urgencyType === 'awaiting_response'
                       ? 'urgent-awaiting border-l-4 border-l-orange-500 bg-orange-50 dark:border-l-orange-400 dark:bg-orange-950/40'
+                      : urgencyType === 'pending_response'
+                      ? 'urgent-pending-response border-l-4 border-l-yellow-500 bg-yellow-50 dark:border-l-yellow-400 dark:bg-yellow-950/40'
                       : ''
                     }
                   `}
@@ -293,12 +301,18 @@ export function ConversationList({ onSelectConversation, selectedConversationId,
                           {isUrgent && (
                             <div className="flex items-center space-x-1">
                               <div className={`w-2 h-2 rounded-full animate-pulse ${
-                                urgencyType === 'unassigned' ? 'bg-red-500' : 'bg-orange-500'
+                                urgencyType === 'unassigned' ? 'bg-red-500' : 
+                                urgencyType === 'awaiting_response' ? 'bg-orange-500' : 
+                                'bg-yellow-500'
                               }`}></div>
                               <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
-                                urgencyType === 'unassigned' ? 'text-red-700 bg-red-100 dark:text-red-300 dark:bg-red-900/40' : 'text-orange-700 bg-orange-100 dark:text-orange-300 dark:bg-orange-900/40'
+                                urgencyType === 'unassigned' ? 'text-red-700 bg-red-100 dark:text-red-300 dark:bg-red-900/40' : 
+                                urgencyType === 'awaiting_response' ? 'text-orange-700 bg-orange-100 dark:text-orange-300 dark:bg-orange-900/40' : 
+                                'text-yellow-700 bg-yellow-100 dark:text-yellow-300 dark:bg-yellow-900/40'
                               }`}>
-                                {urgencyType === 'unassigned' ? 'URGENTE' : 'RESPONDER'}
+                                {urgencyType === 'unassigned' ? 'URGENTE' : 
+                                 urgencyType === 'awaiting_response' ? 'RESPONDER' : 
+                                 'ESPERANDO'}
                               </span>
                             </div>
                           )}

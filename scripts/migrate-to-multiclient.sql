@@ -45,11 +45,11 @@ BEGIN
     END IF;
 END $$;
 
--- 5. Agregar columna client_id a tb_message_templates (si no existe)
+-- 5. Agregar columna client_id a message_templates (si no existe)
 DO $$ 
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tb_message_templates' AND column_name = 'client_id') THEN
-        ALTER TABLE tb_message_templates ADD COLUMN client_id UUID REFERENCES clients(id);
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'message_templates' AND column_name = 'client_id') THEN
+        ALTER TABLE message_templates ADD COLUMN client_id UUID REFERENCES clients(id);
     END IF;
 END $$;
 
@@ -70,13 +70,13 @@ VALUES (
 UPDATE profiles SET client_id = '550e8400-e29b-41d4-a716-446655440000' WHERE client_id IS NULL;
 UPDATE tb_conversations SET client_id = '550e8400-e29b-41d4-a716-446655440000' WHERE client_id IS NULL;
 UPDATE tb_agents SET client_id = '550e8400-e29b-41d4-a716-446655440000' WHERE client_id IS NULL;
-UPDATE tb_message_templates SET client_id = '550e8400-e29b-41d4-a716-446655440000' WHERE client_id IS NULL;
+UPDATE message_templates SET client_id = '550e8400-e29b-41d4-a716-446655440000' WHERE client_id IS NULL;
 
 -- 8. Crear índices si no existen
 CREATE INDEX IF NOT EXISTS idx_profiles_client_id ON profiles(client_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_client_id ON tb_conversations(client_id);
 CREATE INDEX IF NOT EXISTS idx_agents_client_id ON tb_agents(client_id);
-CREATE INDEX IF NOT EXISTS idx_message_templates_client_id ON tb_message_templates(client_id);
+CREATE INDEX IF NOT EXISTS idx_message_templates_client_id ON message_templates(client_id);
 
 -- 9. Crear tabla de configuración por cliente
 CREATE TABLE IF NOT EXISTS client_configs (
@@ -180,7 +180,7 @@ CREATE INDEX IF NOT EXISTS idx_conversations_client_created ON tb_conversations(
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tb_conversations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tb_agents ENABLE ROW LEVEL SECURITY;
-ALTER TABLE tb_message_templates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE message_templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE clients ENABLE ROW LEVEL SECURITY;
 ALTER TABLE client_configs ENABLE ROW LEVEL SECURITY;
 
@@ -201,8 +201,8 @@ CREATE POLICY "Users can only access their own client's agents" ON tb_agents
     FOR ALL USING (client_id = get_current_user_client_id());
 
 -- Policy para message templates
-DROP POLICY IF EXISTS "Users can only access their own client's message templates" ON tb_message_templates;
-CREATE POLICY "Users can only access their own client's message templates" ON tb_message_templates
+DROP POLICY IF EXISTS "Users can only access their own client's message templates" ON message_templates;
+CREATE POLICY "Users can only access their own client's message templates" ON message_templates
     FOR ALL USING (client_id = get_current_user_client_id());
 
 -- Policy para clients (solo admins pueden ver todos los clientes)

@@ -103,9 +103,9 @@ CREATE POLICY "Admins can update agents from their client" ON tb_agents
         )
     );
 
--- 4. Corregir políticas en tb_message_templates
-DROP POLICY IF EXISTS "Users can view templates from their client" ON tb_message_templates;
-CREATE POLICY "Users can view templates from their client" ON tb_message_templates
+-- 4. Corregir políticas en message_templates
+DROP POLICY IF EXISTS "Users can view templates from their client" ON message_templates;
+CREATE POLICY "Users can view templates from their client" ON message_templates
     FOR SELECT USING (
         client_id = get_current_user_client_id() OR
         EXISTS (
@@ -115,8 +115,8 @@ CREATE POLICY "Users can view templates from their client" ON tb_message_templat
         )
     );
 
-DROP POLICY IF EXISTS "Users can insert templates for their client" ON tb_message_templates;
-CREATE POLICY "Users can insert templates for their client" ON tb_message_templates
+DROP POLICY IF EXISTS "Users can insert templates for their client" ON message_templates;
+CREATE POLICY "Users can insert templates for their client" ON message_templates
     FOR INSERT WITH CHECK (
         client_id = get_current_user_client_id() OR
         EXISTS (
@@ -126,8 +126,8 @@ CREATE POLICY "Users can insert templates for their client" ON tb_message_templa
         )
     );
 
-DROP POLICY IF EXISTS "Users can update templates from their client" ON tb_message_templates;
-CREATE POLICY "Users can update templates from their client" ON tb_message_templates
+DROP POLICY IF EXISTS "Users can update templates from their client" ON message_templates;
+CREATE POLICY "Users can update templates from their client" ON message_templates
     FOR UPDATE USING (
         client_id = get_current_user_client_id() OR
         EXISTS (
@@ -169,13 +169,13 @@ WHERE tablename = 'tb_agents'
 ORDER BY policyname;
 
 SELECT 
-  'Políticas corregidas en tb_message_templates' as table_name,
+  'Políticas corregidas en message_templates' as table_name,
   policyname,
   permissive,
   roles,
   cmd
 FROM pg_policies 
-WHERE tablename = 'tb_message_templates'
+WHERE tablename = 'message_templates'
 ORDER BY policyname;
 
 -- =====================================================

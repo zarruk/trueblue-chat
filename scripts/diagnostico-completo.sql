@@ -12,7 +12,7 @@ SELECT
   tablename,
   rowsecurity as rls_enabled
 FROM pg_tables 
-WHERE tablename IN ('profiles', 'tb_conversations', 'tb_agents', 'tb_message_templates')
+WHERE tablename IN ('profiles', 'tb_conversations', 'tb_agents', 'message_templates')
 ORDER BY tablename;
 
 -- 2. Verificar perfil de juanca@azteclab.co

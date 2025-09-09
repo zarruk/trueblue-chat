@@ -72,14 +72,14 @@ WHERE tablename = 'tb_agents'
 ORDER BY policyname;
 
 SELECT 
-  'Políticas en tb_message_templates' as table_name,
+  'Políticas en message_templates' as table_name,
   policyname,
   permissive,
   roles,
   cmd,
   qual
 FROM pg_policies 
-WHERE tablename = 'tb_message_templates'
+WHERE tablename = 'message_templates'
 ORDER BY policyname;
 
 -- 6. Verificar función get_current_user_client_id
