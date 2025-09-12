@@ -32,7 +32,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         if (session?.user && event === 'SIGNED_IN') {
           // Solo cargar perfil en SIGNED_IN, no en TOKEN_REFRESHED para evitar refrescos
-          setTimeout(async () => {
+          // Cargar perfil inmediatamente para evitar race conditions
+          (async () => {
             const u = session.user;
             const email = u.email || '';
             const name = (u.user_metadata as any)?.name || email?.split('@')[0] || 'Agente';
@@ -124,7 +125,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               console.error('❌ Excepción resolviendo perfil:', e);
               setProfile(null);
             }
-          }, 50);
+          })();
         } else {
           console.log('👤 Usuario no autenticado o evento no relevante');
           setProfile(null);

@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Users, MessageSquare, Clock, RefreshCcw, Kanban } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '@/hooks/useAuth'
 
 interface ConversationRow {
   id: string
@@ -39,6 +40,7 @@ export default function Embudo() {
   const [hasMore, setHasMore] = useState(true)
   const [userAgg, setUserAgg] = useState<Map<string, UserAggregate>>(new Map())
   const navigate = useNavigate()
+  const { user, profile } = useAuth()
 
   const leads = useMemo(() => bucket(userAgg, 'leads'), [userAgg])
   const firstContact = useMemo(() => bucket(userAgg, 'first'), [userAgg])
@@ -46,14 +48,34 @@ export default function Embudo() {
   const recurring = useMemo(() => bucket(userAgg, 'recurring'), [userAgg])
 
   const loadPage = useCallback(async (nextPage: number) => {
+    if (!user || !profile) {
+      console.log('❌ Embudo: No user or profile available')
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
     try {
-      // 1) Obtener conversaciones más recientes paginadas
-      const { data: convs, error: convErr } = await supabase
+      const p = profile as any
+      const clientId = p?.client_id as string | undefined
+      
+      if (!clientId) {
+        console.log('❌ Embudo: No client_id in profile')
+        setLoading(false)
+        return
+      }
+
+      console.log('🔍 Embudo: Loading page with client_id:', clientId)
+      
+      // 1) Obtener conversaciones más recientes paginadas filtradas por cliente
+      let query = supabase
         .from('tb_conversations')
-        .select('id,user_id,username,updated_at')
+        .select('id,user_id,username,updated_at,client_id')
+        .eq('client_id', clientId)
         .order('updated_at', { ascending: false })
         .range(nextPage * PAGE_SIZE, nextPage * PAGE_SIZE + PAGE_SIZE - 1)
+
+      const { data: convs, error: convErr } = await query
 
       if (convErr) {
         console.error('❌ Embudo: error obteniendo conversaciones', convErr)
@@ -72,11 +94,12 @@ export default function Embudo() {
       const convToUser = new Map<string, ConversationRow>()
       convRows.forEach(c => convToUser.set(c.id, c))
 
-      // 2) Obtener mensajes de esas conversaciones
+      // 2) Obtener mensajes de esas conversaciones filtrados por cliente
       const { data: msgs, error: msgErr } = await supabase
         .from('tb_messages')
-        .select('id,conversation_id,sender_role,created_at,agent_email')
+        .select('id,conversation_id,sender_role,created_at,agent_email,client_id')
         .in('conversation_id', convIds)
+        .eq('client_id', clientId)
         .order('created_at', { ascending: true })
 
       if (msgErr) {
@@ -85,47 +108,49 @@ export default function Embudo() {
         return
       }
 
-      const updated = new Map(userAgg)
+      setUserAgg(prev => {
+        const updated = new Map(prev)
 
-      // Seed agregados por usuario con últimas fechas de conversación
-      for (const c of convRows) {
-        const key = c.user_id
-        const prev = updated.get(key)
-        const displayName = c.username || c.user_id
-        if (!prev) {
-          updated.set(key, {
-            userId: key,
-            displayName,
-            lastActivity: c.updated_at,
-            aiCount: 0,
-            agentCount: 0,
-            conversationIds: new Set([c.id])
-          })
-        } else {
-          prev.displayName = prev.displayName || displayName
-          prev.lastActivity = new Date(prev.lastActivity) > new Date(c.updated_at) ? prev.lastActivity : c.updated_at
-          prev.conversationIds.add(c.id)
+        // Seed agregados por usuario con últimas fechas de conversación
+        for (const c of convRows) {
+          const key = c.user_id
+          const current = updated.get(key)
+          const displayName = c.username || c.user_id
+          if (!current) {
+            updated.set(key, {
+              userId: key,
+              displayName,
+              lastActivity: c.updated_at,
+              aiCount: 0,
+              agentCount: 0,
+              conversationIds: new Set([c.id])
+            })
+          } else {
+            current.displayName = current.displayName || displayName
+            current.lastActivity = new Date(current.lastActivity) > new Date(c.updated_at) ? current.lastActivity : c.updated_at
+            current.conversationIds.add(c.id)
+          }
         }
-      }
 
-      // Acumular mensajes por usuario
-      for (const m of (msgs as unknown as MessageRow[])) {
-        const conv = convToUser.get(m.conversation_id)
-        if (!conv) continue
-        const agg = updated.get(conv.user_id)
-        if (!agg) continue
-        if (m.sender_role === 'ai') agg.aiCount += 1
-        if (m.sender_role === 'agent') agg.agentCount += 1
-        // actualizar última actividad
-        if (new Date(m.created_at) > new Date(agg.lastActivity)) agg.lastActivity = m.created_at
-      }
+        // Acumular mensajes por usuario
+        for (const m of (msgs as unknown as MessageRow[])) {
+          const conv = convToUser.get(m.conversation_id)
+          if (!conv) continue
+          const agg = updated.get(conv.user_id)
+          if (!agg) continue
+          if (m.sender_role === 'ai') agg.aiCount += 1
+          if (m.sender_role === 'agent') agg.agentCount += 1
+          // actualizar última actividad
+          if (new Date(m.created_at) > new Date(agg.lastActivity)) agg.lastActivity = m.created_at
+        }
 
-      setUserAgg(updated)
+        return updated
+      })
       setPage(nextPage)
     } finally {
       setLoading(false)
     }
-  }, [userAgg])
+  }, [user, profile])
 
   // Carga inicial
   useEffect(() => {
@@ -134,15 +159,33 @@ export default function Embudo() {
 
   // Realtime: actualizar agregados al llegar mensajes nuevos
   useEffect(() => {
+    if (!user || !profile) return
+
+    const p = profile as any
+    const clientId = p?.client_id as string | undefined
+    
+    if (!clientId) {
+      console.log('❌ Embudo: No client_id for realtime')
+      return
+    }
+
     const channel = supabase
       .channel('embudo-messages')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tb_messages' }, async (payload) => {
         const m = payload.new as unknown as MessageRow
+        
+        // Verificar que el mensaje pertenece al cliente correcto
+        if (m.client_id && m.client_id !== clientId) {
+          console.log('❌ Embudo: Message client_id does not match user client_id')
+          return
+        }
+        
         // Buscar conversación para mapear a usuario
         const { data: conv, error } = await supabase
           .from('tb_conversations')
-          .select('id,user_id,username,updated_at')
+          .select('id,user_id,username,updated_at,client_id')
           .eq('id', m.conversation_id)
+          .eq('client_id', clientId)
           .maybeSingle()
         if (error || !conv) return
         setUserAgg(prev => {
@@ -168,14 +211,30 @@ export default function Embudo() {
       })
     channel.subscribe()
     return () => { channel.unsubscribe() }
-  }, [])
+  }, [user, profile])
 
   const handleOpenUser = useCallback(async (userId: string) => {
+    if (!user || !profile) {
+      console.log('❌ Embudo: No user or profile for handleOpenUser')
+      navigate('/dashboard')
+      return
+    }
+
     try {
+      const p = profile as any
+      const clientId = p?.client_id as string | undefined
+      
+      if (!clientId) {
+        console.log('❌ Embudo: No client_id for handleOpenUser')
+        navigate('/dashboard')
+        return
+      }
+
       const { data: conv, error } = await supabase
         .from('tb_conversations')
         .select('id')
         .eq('user_id', userId)
+        .eq('client_id', clientId)
         .order('updated_at', { ascending: false })
         .limit(1)
         .maybeSingle()
@@ -191,7 +250,7 @@ export default function Embudo() {
       console.warn('⚠️ Embudo: excepción al navegar a conversación', e)
       navigate('/dashboard')
     }
-  }, [navigate])
+  }, [navigate, user, profile])
 
   return (
     <div className="h-full flex flex-col p-4 gap-3">
