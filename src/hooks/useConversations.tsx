@@ -37,6 +37,33 @@ export interface Message {
   created_at: string
 }
 
+// Función de priorización de conversaciones
+// Prioridad: 1) pending_human, 2) active_human con último mensaje del usuario, 3) pending_response, 4) active_human respondidas, 5) active_ai, 6) closed
+const getPriority = (c: Conversation) => {
+  if (c.status === 'pending_human') return 1
+  if (c.status === 'active_human' && c.last_message_sender_role === 'user') return 2
+  if (c.status === 'pending_response') return 3
+  if (c.status === 'active_human') return 4
+  if (c.status === 'active_ai') return 5
+  if (c.status === 'closed') return 6
+  return 7
+}
+
+// Función para ordenar conversaciones por prioridad
+const sortConversationsByPriority = (conversations: Conversation[]) => {
+  return [...conversations].sort((a, b) => {
+    // Prioridad primero, timestamp como tie-breaker
+    const pa = getPriority(a)
+    const pb = getPriority(b)
+    if (pa !== pb) return pa - pb
+    
+    // Tie-breaker by timestamp if same priority
+    const aRef = a.last_message_at || a.updated_at
+    const bRef = b.last_message_at || b.updated_at
+    return new Date(bRef).getTime() - new Date(aRef).getTime()
+  })
+}
+
 export function useConversations() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [messages, setMessages] = useState<Message[]>([])
@@ -46,6 +73,14 @@ export function useConversations() {
   const [isInitialized, setIsInitialized] = useState(false)
   const { user, profile } = useAuth()
   const p = profile as any
+
+  // Estados para scroll infinito
+  const [currentPage, setCurrentPage] = useState(0)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
+  const [isSearching, setIsSearching] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [totalCount, setTotalCount] = useState(0)
 
   // Fetch conversations
   const fetchConversations = useCallback(async (options?: { background?: boolean }) => {
@@ -69,6 +104,7 @@ export function useConversations() {
         .from('tb_conversations')
         .select('*')
         .order('updated_at', { ascending: false })
+        .limit(poolSize) // Cargar un pool inicial más grande para priorizar
 
       // Aplicar filtro por cliente solo si existe en el perfil (RLS hace el resto)
       // Tipado defensivo: algunos perfiles antiguos podrían no tener client_id explícito
@@ -143,8 +179,30 @@ export function useConversations() {
       )
 
       console.log('✅ fetchConversations: Último mensaje obtenido para cada conversación')
+      console.log('🔍 fetchConversations: Aplicando priorización...')
+      
+      // Aplicar priorización al pool de conversaciones
+      const prioritizedPool = sortConversationsByPriority(conversationsWithLastMessage)
+      console.log('✅ fetchConversations: Pool priorizado:', prioritizedPool.length, 'conversaciones')
+      
+      // Guardar el pool priorizado para el scroll infinito
+      setConversationPool(prioritizedPool)
+      setPoolOffset(0)
+      
+      // En la carga inicial, mostrar solo las primeras 20 conversaciones del pool priorizado
+      const initialConversations = prioritizedPool.slice(0, 20)
+      console.log('🔍 fetchConversations: Mostrando primeras', initialConversations.length, 'conversaciones del pool')
+      
       console.log('🔍 fetchConversations: Setting conversations in state...')
-      setConversations(conversationsWithLastMessage)
+      setConversations(initialConversations)
+      
+      // Resetear estados de paginación en la carga inicial
+      if (!options?.background) {
+        setCurrentPage(0)
+        setHasMore(prioritizedPool.length > 20) // Hay más si el pool tiene más de 20 conversaciones
+        setTotalCount(prioritizedPool.length)
+        console.log('🔄 fetchConversations: hasMore =', prioritizedPool.length > 20, 'poolSize =', prioritizedPool.length)
+      }
 
       // Auto-cierre de conversaciones cuyo último mensaje del usuario tiene >24h
       try {
@@ -524,6 +582,155 @@ export function useConversations() {
     setMessages([])
   }, [])
 
+  // Estados para el pool de conversaciones priorizadas
+  const [conversationPool, setConversationPool] = useState<Conversation[]>([])
+  const [poolOffset, setPoolOffset] = useState(0)
+  const [poolSize, setPoolSize] = useState(100) // Tamaño del pool inicial
+
+  // Función para cargar más conversaciones del pool
+  const loadMoreFromPool = useCallback(async () => {
+    try {
+      setLoadingMore(true)
+      console.log('🔄 loadMore: Cargando desde el pool, página', currentPage + 1)
+      
+      // Calcular cuántas conversaciones mostrar del pool
+      const conversationsToShow = (currentPage + 1) * 20
+      const conversationsToDisplay = conversationPool.slice(0, conversationsToShow)
+      
+      console.log('🔄 loadMore: Mostrando', conversationsToDisplay.length, 'de', conversationPool.length, 'conversaciones del pool')
+      
+      // Actualizar la lista con las conversaciones del pool
+      setConversations(conversationsToDisplay)
+      setCurrentPage(prev => prev + 1)
+
+      // Si ya mostramos todas las conversaciones del pool, necesitamos cargar más
+      if (conversationsToDisplay.length >= conversationPool.length) {
+        console.log('📦 loadMore: Pool agotado, cargando más conversaciones...')
+        await loadMoreConversationsFromDB()
+      }
+
+      console.log('✅ loadMore: Cargadas', conversationsToDisplay.length, 'conversaciones del pool')
+    } catch (error) {
+      console.error('❌ Error loading more from pool:', error)
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [currentPage, conversationPool])
+
+  // Función para cargar más conversaciones de la base de datos
+  const loadMoreConversationsFromDB = useCallback(async () => {
+    try {
+      console.log('🗄️ loadMoreConversationsFromDB: Cargando más conversaciones de la BD')
+      
+      let query = supabase
+        .from('tb_conversations')
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .range(poolOffset + poolSize, poolOffset + poolSize + poolSize - 1) // Siguiente lote
+
+      // Aplicar filtro por cliente
+      const clientIdUnsafe = p?.client_id as string | undefined
+      if (clientIdUnsafe) {
+        query = (query as any).eq('client_id', clientIdUnsafe)
+      }
+
+      // Aplicar filtro por rol
+      const role = p?.role as string | undefined
+      const profileId = p?.id as string | undefined
+      if (role !== 'admin') {
+        if (profileId) {
+          query = (query as any).or(`assigned_agent_id.eq.${profileId},status.eq.pending_human,status.eq.active_ai`)
+        } else {
+          query = query.eq('status', 'pending_human')
+        }
+      }
+
+      const { data, error } = await (query as any)
+
+      if (error) {
+        console.error('❌ Error loading more conversations from DB:', error)
+        setHasMore(false)
+        return
+      }
+
+      if (!data || data.length === 0) {
+        console.log('✅ loadMoreConversationsFromDB: No hay más conversaciones en la BD')
+        setHasMore(false)
+        return
+      }
+
+      // Obtener último mensaje de cada conversación
+      const newConversationsWithLastMessage = await Promise.all(
+        (data || []).map(async (conversation: any) => {
+          try {
+            const { data: lastMessage } = await supabase
+              .from('tb_messages')
+              .select('sender_role, content, created_at')
+              .eq('conversation_id', conversation.id)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle()
+
+            return {
+              ...conversation,
+              last_message_sender_role: lastMessage?.sender_role || null,
+              last_message_at: lastMessage?.created_at || null,
+              last_message_content: lastMessage?.content || null
+            }
+          } catch (error) {
+            return {
+              ...conversation,
+              last_message_sender_role: null,
+              last_message_at: null,
+              last_message_content: null
+            }
+          }
+        })
+      )
+
+      // Aplicar priorización a las nuevas conversaciones
+      const newPrioritizedConversations = sortConversationsByPriority(newConversationsWithLastMessage)
+      
+      // Agregar las nuevas conversaciones al pool existente
+      setConversationPool(prev => {
+        const combined = [...prev, ...newPrioritizedConversations]
+        // Re-priorizar el pool completo para mantener el orden correcto
+        return sortConversationsByPriority(combined)
+      })
+      
+      // Actualizar el offset para el siguiente lote
+      setPoolOffset(prev => prev + poolSize)
+      
+      console.log('✅ loadMoreConversationsFromDB: Agregadas', newPrioritizedConversations.length, 'conversaciones al pool')
+    } catch (error) {
+      console.error('❌ Error loading more conversations from DB:', error)
+      setHasMore(false)
+    }
+  }, [poolOffset, poolSize, p?.client_id, p?.role, p?.id])
+
+  // Función principal para cargar más conversaciones (scroll infinito)
+  const loadMore = useCallback(async () => {
+    if (!user || loadingMore || !hasMore) {
+      console.log('❌ loadMore: No se puede cargar más - user:', !!user, 'loadingMore:', loadingMore, 'hasMore:', hasMore)
+      return
+    }
+
+    await loadMoreFromPool()
+  }, [user, loadingMore, hasMore, loadMoreFromPool])
+
+  // Función de búsqueda (placeholder por ahora)
+  const searchConversations = useCallback(async (query: string) => {
+    console.log('🔍 searchConversations: Buscando:', query)
+    setSearchQuery(query)
+    setIsSearching(true)
+    
+    // TODO: Implementar búsqueda real
+    // Por ahora solo resetear la lista
+    setTimeout(() => {
+      setIsSearching(false)
+    }, 500)
+  }, [])
+
   // Effect to fetch messages when selectedConversationId changes
   useEffect(() => {
     if (selectedConversationId) {
@@ -844,6 +1051,13 @@ export function useConversations() {
     selectConversation,
     fetchConversations,
     fetchMessages,
-    clearSelectedConversation
+    clearSelectedConversation,
+    loadMore,
+    loadingMore,
+    hasMore,
+    searchConversations,
+    isSearching,
+    searchQuery,
+    currentPage
   }
 }

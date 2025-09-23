@@ -1,5 +1,5 @@
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { Search, Filter, MessageSquare, Clock, CheckCircle, AlertCircle, Users, MessageCircle, Send } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -13,6 +13,16 @@ interface ConversationListProps {
   selectedConversationId?: string
   conversations: Conversation[]
   loading: boolean
+  // Props de scroll infinito y búsqueda
+  loadMore?: () => void
+  loadingMore?: boolean
+  hasMore?: boolean
+  onSearch?: (query: string) => void
+  isSearching?: boolean
+  searchQuery?: string
+  // Props de paginación (legacy - para mantener compatibilidad)
+  currentPage?: number
+  totalCount?: number
 }
 
 type ConversationStatus = 'active_ai' | 'active_human' | 'closed' | 'pending_human' | 'pending_response'
@@ -60,10 +70,27 @@ const getPriority = (c: Conversation) => {
   return 7
 }
 
-export function ConversationList({ onSelectConversation, selectedConversationId, conversations, loading }: ConversationListProps) {
+export function ConversationList({ 
+  onSelectConversation, 
+  selectedConversationId, 
+  conversations, 
+  loading,
+  loadMore,
+  loadingMore = false,
+  hasMore = false,
+  onSearch,
+  isSearching = false,
+  searchQuery = '',
+  currentPage = 1,
+  totalCount = 0
+}: ConversationListProps) {
   const [searchTerm, setSearchTerm] = useState('')
-  const [statusFilter, setStatusFilter] = useState<ConversationStatus | 'all' | 'abierta'>('abierta')
+  const [statusFilter, setStatusFilter] = useState<ConversationStatus | 'all' | 'abierta'>('all')
   const [agentFilter, setAgentFilter] = useState<string>('all')
+  
+  // Refs para el scroll infinito
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const loadMoreTriggerRef = useRef<HTMLDivElement>(null)
 
   // Log para debugging de re-renderizado
   console.log('🔄 ConversationList: Re-renderizando con conversaciones:', conversations.length)
@@ -72,6 +99,48 @@ export function ConversationList({ onSelectConversation, selectedConversationId,
     const selectedConv = conversations.find(c => c.id === selectedConversationId)
     console.log('🔍 ConversationList: Conversación seleccionada:', selectedConv)
   }
+  
+  // Debounce para búsqueda
+  useEffect(() => {
+    if (!onSearch) return
+    
+    const timeoutId = setTimeout(() => {
+      onSearch(searchTerm)
+    }, 300) // 300ms de debounce
+    
+    return () => clearTimeout(timeoutId)
+  }, [searchTerm, onSearch])
+  
+  // Implementar IntersectionObserver para scroll infinito
+  useEffect(() => {
+    if (!loadMore || isSearching) return // No scroll infinito en modo búsqueda
+    
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const firstEntry = entries[0]
+        if (firstEntry.isIntersecting && hasMore && !loadingMore) {
+          console.log('📜 Scroll infinito: Cargando más conversaciones...')
+          loadMore()
+        }
+      },
+      {
+        root: scrollContainerRef.current,
+        rootMargin: '100px', // Cargar cuando falten 100px para el final
+        threshold: 0.1
+      }
+    )
+
+    const currentTrigger = loadMoreTriggerRef.current
+    if (currentTrigger) {
+      observer.observe(currentTrigger)
+    }
+
+    return () => {
+      if (currentTrigger) {
+        observer.unobserve(currentTrigger)
+      }
+    }
+  }, [loadMore, hasMore, loadingMore, isSearching])
 
   // Obtener lista única de agentes asignados
   const assignedAgents = useMemo(() => {
@@ -111,17 +180,9 @@ export function ConversationList({ onSelectConversation, selectedConversationId,
       return matchesSearch && matchesStatus && matchesAgent
     })
 
-    const sorted = filtered.sort((a, b) => {
-      // Prioridad primero, timestamp como tie-breaker
-      const pa = getPriority(a)
-      const pb = getPriority(b)
-      if (pa !== pb) return pa - pb
-      // Tie-breaker by timestamp if same priority
-      const aRef = a.last_message_at || a.updated_at
-      const bRef = b.last_message_at || b.updated_at
-      return new Date(bRef).getTime() - new Date(aRef).getTime()
-    })
-    return sorted
+    // Ya no necesitamos ordenar aquí porque las conversaciones vienen ordenadas desde la BD
+    // Mantener el orden original que viene del backend
+    return filtered
   }, [conversations, searchTerm, statusFilter, agentFilter])
 
   const getStatusConfigLocal = (status: ConversationStatus) => {
@@ -202,15 +263,9 @@ export function ConversationList({ onSelectConversation, selectedConversationId,
         </div>
       </div>
 
-      {/* Conversation Count */}
-      <div className="px-2 py-1 bg-muted/20">
-        <p className="text-xs text-muted-foreground">
-          {filteredConversations.length} conversación{filteredConversations.length !== 1 ? 'es' : ''}
-        </p>
-      </div>
 
       {/* Conversations List */}
-      <div className="flex-1 overflow-y-auto h-[60vh] max-h-[600px] min-h-[300px] scroll-smooth">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto h-[60vh] max-h-[600px] min-h-[300px] scroll-smooth">
         {filteredConversations.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center p-4">
             <MessageSquare className="h-12 w-12 text-muted-foreground mb-2" />
@@ -355,6 +410,37 @@ export function ConversationList({ onSelectConversation, selectedConversationId,
                 </div>
               )
             })}
+            
+            {/* Trigger para cargar más conversaciones */}
+            {!isSearching && hasMore && (
+              <div ref={loadMoreTriggerRef} className="p-4 text-center">
+                {loadingMore ? (
+                  <div className="flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                    <span className="ml-2 text-sm text-muted-foreground">Cargando más conversaciones...</span>
+                  </div>
+                ) : (
+                  <div className="text-xs text-muted-foreground">
+                    {/* Mensaje sutil para indicar que se puede hacer scroll */}
+                    <div className="w-full h-1" />
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Indicador cuando se han cargado todas */}
+            {!isSearching && !hasMore && conversations.length > 0 && (
+              <div className="p-4 text-center text-xs text-muted-foreground">
+                Has llegado al final • {totalCount} conversaciones en total
+              </div>
+            )}
+            
+            {/* Indicador para búsqueda */}
+            {isSearching && conversations.length > 0 && (
+              <div className="p-4 text-center text-xs text-muted-foreground">
+                Mostrando {conversations.length} resultados de búsqueda
+              </div>
+            )}
           </div>
         )}
       </div>

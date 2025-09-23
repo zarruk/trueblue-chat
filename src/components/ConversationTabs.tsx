@@ -18,9 +18,34 @@ interface ConversationTabsProps {
   // Nuevos: acciones elevadas desde Dashboard para evitar instancias duplicadas del hook
   fetchConversations?: (options?: { background?: boolean }) => Promise<void>
   selectById?: (conversationId: string) => void
+  // Props de scroll infinito y búsqueda
+  loadMore?: () => void
+  loadingMore?: boolean
+  hasMore?: boolean
+  searchConversations?: (query: string) => void
+  isSearching?: boolean
+  searchQuery?: string
+  // Props de paginación (legacy)
+  currentPage?: number
+  totalCount?: number
 }
 
-export function ConversationTabs({ onSelectConversation, selectedConversationId, conversations, loading, fetchConversations, selectById }: ConversationTabsProps) {
+export function ConversationTabs({ 
+  onSelectConversation, 
+  selectedConversationId, 
+  conversations, 
+  loading, 
+  fetchConversations, 
+  selectById,
+  loadMore,
+  loadingMore,
+  hasMore,
+  searchConversations,
+  isSearching,
+  searchQuery,
+  currentPage = 1,
+  totalCount = 0
+}: ConversationTabsProps) {
   const { profile } = useAuth()
   const { getClientDisplayName } = useClient()
   const [open, setOpen] = useState(false)
@@ -135,6 +160,16 @@ Quedamos súper pendientes.`
           selectedConversationId={selectedConversationId}
           conversations={conversations}
           loading={loading}
+          // Props de scroll infinito y búsqueda
+          loadMore={loadMore}
+          loadingMore={loadingMore}
+          hasMore={hasMore}
+          onSearch={searchConversations}
+          isSearching={isSearching}
+          searchQuery={searchQuery}
+          // Props de paginación (legacy)
+          currentPage={currentPage}
+          totalCount={totalCount}
         />
       </div>
 
