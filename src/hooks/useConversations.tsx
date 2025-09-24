@@ -649,12 +649,14 @@ export function useConversations() {
 
       if (error) {
         console.error('❌ Error loading more conversations from DB:', error)
+        console.log('🔄 loadMoreConversationsFromDB: hasMore cambiado a FALSE por error')
         setHasMore(false)
         return
       }
 
       if (!data || data.length === 0) {
         console.log('✅ loadMoreConversationsFromDB: No hay más conversaciones en la BD')
+        console.log('🔄 loadMoreConversationsFromDB: hasMore cambiado a FALSE - No hay más conversaciones')
         setHasMore(false)
         return
       }
