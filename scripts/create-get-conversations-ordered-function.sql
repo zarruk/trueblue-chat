@@ -139,3 +139,6 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Permisos
 GRANT EXECUTE ON FUNCTION count_conversations_ordered TO authenticated;
+
+
+

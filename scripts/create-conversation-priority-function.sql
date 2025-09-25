@@ -65,3 +65,6 @@ FROM (
         ('closed', NULL)
 ) AS test_cases(status, last_message_sender_role)
 ORDER BY priority;
+
+
+
