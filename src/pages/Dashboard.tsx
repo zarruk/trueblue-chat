@@ -32,7 +32,17 @@ export default function Dashboard() {
     updateUserDisplayName,
     clearSelectedConversation,
     fetchConversations,
-    fetchMessages
+    fetchMessages,
+    // Scroll infinito y búsqueda
+    loadMore,
+    loadingMore,
+    hasMore,
+    searchConversations,
+    isSearching,
+    searchQuery,
+    // Estados de paginación (legacy)
+    currentPage,
+    totalCount
   } = useConversations();
   const { agents } = useAgents();
   
@@ -129,6 +139,16 @@ export default function Dashboard() {
               loading={loading || refreshing}
               fetchConversations={fetchConversations}
               selectById={(id) => handleSelectConversation(id)}
+              // Props de scroll infinito y búsqueda
+              loadMore={loadMore}
+              loadingMore={loadingMore}
+              hasMore={hasMore}
+              searchConversations={searchConversations}
+              isSearching={isSearching}
+              searchQuery={searchQuery}
+              // Props de paginación (legacy)
+              currentPage={currentPage}
+              totalCount={totalCount}
             />
           </div>
 
@@ -198,6 +218,16 @@ export default function Dashboard() {
                 loading={loading || refreshing}
                 fetchConversations={fetchConversations}
                 selectById={(id) => handleSelectConversation(id)}
+                // Props de scroll infinito y búsqueda
+                loadMore={loadMore}
+                loadingMore={loadingMore}
+                hasMore={hasMore}
+                searchConversations={searchConversations}
+                isSearching={isSearching}
+                searchQuery={searchQuery}
+                // Props de paginación (legacy)
+                currentPage={currentPage}
+                totalCount={totalCount}
               />
             </div>
           ) : (

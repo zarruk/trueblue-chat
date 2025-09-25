@@ -113,9 +113,18 @@ export function useClient() {
 
           if (!brandingError && brandingData) {
             try {
-              brandingConfig = JSON.parse(brandingData.config_value)
+              // Si config_value ya es un objeto, usarlo directamente
+              if (typeof brandingData.config_value === 'object' && brandingData.config_value !== null) {
+                brandingConfig = brandingData.config_value
+              } else if (typeof brandingData.config_value === 'string') {
+                // Si es string, intentar parsearlo como JSON
+                brandingConfig = JSON.parse(brandingData.config_value)
+              } else {
+                console.warn('⚠️ config_value tiene un tipo inesperado:', typeof brandingData.config_value)
+              }
             } catch (e) {
               console.warn('⚠️ Error parsing branding config:', e)
+              console.warn('⚠️ config_value raw:', brandingData.config_value)
             }
           }
         } catch (e) {
