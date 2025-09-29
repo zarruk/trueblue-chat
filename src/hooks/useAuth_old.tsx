@@ -146,21 +146,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const resolveRedirectUrl = (): string => {
-    // En desarrollo, usar siempre la URL de red para evitar problemas de móvil
-    if (import.meta.env.DEV) {
-      const networkUrl = import.meta.env.VITE_NETWORK_URL;
-      if (networkUrl) {
-        console.log('🔧 Development mode, using network URL:', networkUrl);
-        return networkUrl;
-      }
-    }
-    
-    // Usar la URL actual del navegador
+    // Preferir siempre el dominio actual para evitar envs desactualizados
     if (typeof window !== 'undefined' && window.location?.origin) {
       return `${window.location.origin}/`;
     }
-    
-    // Fallback a variable de entorno
+    // Fallback a variable de entorno si por alguna razón no hay window (SSR no aplica aquí)
     return (import.meta.env.VITE_APP_URL as string) || '/';
   };
 
@@ -178,21 +168,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return { error };
     }
     
-    return { message: 'Enlace mágico enviado. Revisa tu correo electrónico.' };
+    return { 
+      error: null, 
+      message: 'Se ha enviado un enlace mágico a tu correo electrónico. Revisa tu bandeja de entrada.' 
+    };
   };
 
   const signUp = async (email: string, password: string, name: string) => {
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          name,
-        },
-      },
-    });
-    
-    return { error };
+    try {
+      const redirectUrl = resolveRedirectUrl();
+      
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: redirectUrl,
+          data: {
+            name: name
+          }
+        }
+      });
+
+      return { error };
+    } catch (error: any) {
+      return { error };
+    }
   };
 
   const signOut = async () => {
