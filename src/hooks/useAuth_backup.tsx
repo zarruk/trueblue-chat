@@ -22,17 +22,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Logs específicos para diagnóstico móvil
-    console.log('🔍 MOBILE DEBUG - AuthProvider useEffect started');
-    console.log('🔍 MOBILE DEBUG - User agent:', navigator.userAgent);
-    console.log('🔍 MOBILE DEBUG - Is mobile:', /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
-    console.log('🔍 MOBILE DEBUG - Window location:', window.location.href);
-    console.log('🔍 MOBILE DEBUG - Supabase URL:', import.meta.env.VITE_SUPABASE_URL);
-    
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('🔍 MOBILE DEBUG - Auth state changed:', event, session?.user?.email);
         console.log('🔄 Auth state changed:', event, session?.user?.email);
         
         setSession(session);
@@ -154,16 +146,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const resolveRedirectUrl = (): string => {
-    // En desarrollo, SIEMPRE usar la URL de red para magic links
+    // En desarrollo, usar siempre la URL de red para evitar problemas de móvil
     if (import.meta.env.DEV) {
       const networkUrl = import.meta.env.VITE_NETWORK_URL;
       if (networkUrl) {
-        console.log('🔧 Development mode - Always using network URL for magic links:', networkUrl);
+        console.log('🔧 Development mode, using network URL:', networkUrl);
         return networkUrl;
       }
     }
     
-    // En producción, usar la URL actual del navegador
+    // Usar la URL actual del navegador
     if (typeof window !== 'undefined' && window.location?.origin) {
       return `${window.location.origin}/`;
     }

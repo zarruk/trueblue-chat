@@ -1,5 +1,4 @@
-
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useConversations } from '@/hooks/useConversations';
 import { useAgents } from '@/hooks/useAgents';
@@ -33,14 +32,14 @@ export default function Dashboard() {
     clearSelectedConversation,
     fetchConversations,
     fetchMessages,
-    // Scroll infinito y búsqueda
+    // Scroll infinito y bÃºsqueda
     loadMore,
     loadingMore,
     hasMore,
     searchConversations,
     isSearching,
     searchQuery,
-    // Estados de paginación (legacy)
+    // Estados de paginaciÃ³n (legacy)
     currentPage,
     totalCount,
     // Estados para control inteligente de scroll
@@ -50,7 +49,7 @@ export default function Dashboard() {
   } = useConversations();
   const { agents } = useAgents();
   
-  // DESHABILITADO: No usar polling automático para evitar refrescos
+  // DESHABILITADO: No usar polling automÃ¡tico para evitar refrescos
   // const enableFallback = import.meta.env.MODE === 'production' || import.meta.env.VITE_ENABLE_POLLING === 'true';
   // useRealtimeFallback({
   //   enabled: enableFallback,
@@ -59,9 +58,9 @@ export default function Dashboard() {
   //   selectedConversationId
   // });
 
-  // Eliminado: No refrescar automáticamente al recuperar foco
+  // Eliminado: No refrescar automÃ¡ticamente al recuperar foco
 
-  // Las conversaciones se actualizan automáticamente vía tiempo real
+  // Las conversaciones se actualizan automÃ¡ticamente vÃ­a tiempo real
 
   // Keep selectedConversation synchronized with conversations updates
   const selectedConversation = selectedConversationId 
@@ -69,7 +68,7 @@ export default function Dashboard() {
     : null;
 
   const handleSelectConversation = (conversationId: string) => {
-    console.log('🖱️ Conversation selected:', conversationId);
+    console.log('ðŸ–±ï¸ Conversation selected:', conversationId);
     selectConversation(conversationId);
     // sincronizar URL para deep-linking
     const params = new URLSearchParams(location.search);
@@ -77,15 +76,15 @@ export default function Dashboard() {
     navigate({ pathname: '/dashboard', search: params.toString() }, { replace: true });
   };
 
-  // seleccionar conversación desde query param ?conv=
+  // seleccionar conversaciÃ³n desde query param ?conv=
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const conv = params.get('conv');
     if (conv && conv !== selectedConversationId) {
-      console.log('🔗 Dashboard: seleccionando conversación desde query param:', conv);
+      console.log('ðŸ”— Dashboard: seleccionando conversaciÃ³n desde query param:', conv);
       selectConversation(conv);
     } else if (!conv && selectedConversationId) {
-      // Si se elimina el query param, limpiar selección (útil en móvil al pulsar volver)
+      // Si se elimina el query param, limpiar selecciÃ³n (Ãºtil en mÃ³vil al pulsar volver)
       clearSelectedConversation();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -127,98 +126,53 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      {/* Main Content */}
-      <div className="flex-1 min-h-0 p-3 xl:p-6 pt-3 xl:pt-6 overflow-hidden">
-        <div className="flex h-full gap-3 xl:gap-6">
-          {/* Conversations List */}
-          <div 
-            className="hidden xl:flex flex-col h-full min-h-0 flex-shrink-0"
-            style={{ width: `${conversationsPanelWidth}px` }}
-          >
-            <ConversationTabs
-              selectedConversationId={selectedConversationId || undefined}
-              onSelectConversation={handleSelectConversation}
-              conversations={conversations}
-              loading={loading || refreshing}
-              fetchConversations={fetchConversations}
-              selectById={(id) => handleSelectConversation(id)}
-              // Props de scroll infinito y búsqueda
-              loadMore={loadMore}
-              loadingMore={loadingMore}
-              hasMore={hasMore}
-              searchConversations={searchConversations}
-              isSearching={isSearching}
-              searchQuery={searchQuery}
-              // Props de paginación (legacy)
-              currentPage={currentPage}
-              totalCount={totalCount}
-              // Props para control inteligente de scroll
-              onScrollStateChange={handleScrollStateChange}
-              isUserScrolling={isUserScrolling}
-              newConversationIds={newConversationIds}
-            />
-          </div>
+    <div className="h-full w-full">
+      {/* CSS Grid Layout Responsive */}
+      <div className="h-full grid grid-cols-1 tablet:grid-cols-[1fr] desktop:grid-cols-[320px_1px_1fr] transition-all duration-300">
+        
+        {/* Conversations Panel - Oculto en mÃ³vil */}
+        <aside className="
+          hidden desktop:block desktop:col-start-1 desktop:col-end-2 desktop:row-span-full
+          flex flex-col h-full min-h-0 overflow-hidden
+        ">
+          <ConversationTabs
+            selectedConversationId={selectedConversationId || undefined}
+            onSelectConversation={handleSelectConversation}
+            conversations={conversations}
+            loading={loading || refreshing}
+            fetchConversations={fetchConversations}
+            selectById={(id) => handleSelectConversation(id)}
+            loadMore={loadMore}
+            loadingMore={loadingMore}
+            hasMore={hasMore}
+            searchConversations={searchConversations}
+            isSearching={isSearching}
+            searchQuery={searchQuery}
+            currentPage={currentPage}
+            totalCount={totalCount}
+            onScrollStateChange={handleScrollStateChange}
+            isUserScrolling={isUserScrolling}
+            newConversationIds={newConversationIds}
+          />
+        </aside>
 
-          {/* Resize Handle */}
-          <div 
-            className="hidden xl:flex w-1 cursor-col-resize bg-border hover:bg-primary/50 transition-colors relative group"
-            onMouseDown={handleResizeStart}
-          >
-            <div className="absolute inset-0 -mx-1" /> {/* Área de click más grande */}
-            <div className="w-full bg-current opacity-50 group-hover:opacity-100 transition-opacity" />
-          </div>
-
-          {/* Chat Window */}
-          <div className="flex flex-col h-full min-h-0 overflow-hidden flex-1">
-            <Card className="h-full flex flex-col">
-              <CardContent className="p-0 h-full flex-1 overflow-hidden">
-                {selectedConversation ? (
-                  <ChatWindow
-                    conversationId={selectedConversationId || undefined}
-                    messages={messages}
-                    loading={loading}
-                    onSendMessage={(conversationId, content, senderRole) => sendMessage(conversationId, content, senderRole as 'user' | 'ai' | 'agent')}
-                    onSelectConversation={selectConversation}
-                    onUpdateConversationStatus={updateConversationStatus}
-                    onAssignAgent={(conversationId, agentId) => assignAgent(conversationId, agentId)}
-                    conversations={conversations}
-                    showContextToggle={!contextPanelOpen}
-                    onToggleContext={() => setContextPanelOpen(true)}
-                    onMobileBack={() => {
-                      const params = new URLSearchParams(location.search)
-                      params.delete('conv')
-                      navigate({ pathname: '/dashboard', search: params.toString() }, { replace: true })
-                    }}
-                  />
-                ) : (
-                  <div className="flex items-center justify-center h-full text-muted-foreground">
-                    <div className="text-center">
-                      <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <p>Selecciona una conversación para ver los mensajes</p>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Context Panel */}
-          {contextPanelOpen && (
-            <div className="hidden xl:block w-80 h-full min-h-0 flex-shrink-0">
-              <ChatContextPanel 
-                conversation={selectedConversation} 
-                onToggleVisibility={() => setContextPanelOpen(false)}
-                onUpdateUserName={updateUserDisplayName}
-              />
-            </div>
-          )}
+        {/* Resize Handle - Solo en desktop */}
+        <div className="
+          hidden desktop:block desktop:col-start-2 desktop:col-end-3 desktop:row-span-full
+          w-1 cursor-col-resize bg-border hover:bg-primary/50 transition-colors relative group
+        " onMouseDown={handleResizeStart}>
+          <div className="absolute inset-0 -mx-1" />
+          <div className="w-full bg-current opacity-50 group-hover:opacity-100 transition-opacity" />
         </div>
 
-        {/* Mobile Layout - Mantener el original para móviles */}
-        <div className="xl:hidden h-full">
-          {!selectedConversation ? (
-            <div className="flex flex-col h-full min-h-0">
+        {/* Chat Area */}
+        <main className="
+          col-span-full tablet:col-span-full desktop:col-start-3 desktop:col-end-4 desktop:row-span-full
+          flex flex-col h-full min-h-0 overflow-hidden
+        ">
+          {/* Mobile: Show conversations list or chat */}
+          <div className="desktop:hidden h-full">
+            {!selectedConversation ? (
               <ConversationTabs
                 selectedConversationId={selectedConversationId || undefined}
                 onSelectConversation={handleSelectConversation}
@@ -226,42 +180,74 @@ export default function Dashboard() {
                 loading={loading || refreshing}
                 fetchConversations={fetchConversations}
                 selectById={(id) => handleSelectConversation(id)}
-                // Props de scroll infinito y búsqueda
                 loadMore={loadMore}
                 loadingMore={loadingMore}
                 hasMore={hasMore}
                 searchConversations={searchConversations}
                 isSearching={isSearching}
                 searchQuery={searchQuery}
-                // Props de paginación (legacy)
                 currentPage={currentPage}
                 totalCount={totalCount}
-                // Props para control inteligente de scroll
                 onScrollStateChange={handleScrollStateChange}
                 isUserScrolling={isUserScrolling}
                 newConversationIds={newConversationIds}
               />
-            </div>
-          ) : (
-            <div className="flex flex-col h-full min-h-0 overflow-hidden">
-              <Card className="h-full flex flex-col">
-                <CardContent className="p-0 h-full flex-1 overflow-hidden">
-                  <ChatWindow
-                    conversationId={selectedConversationId || undefined}
-                    messages={messages}
-                    loading={loading}
-                    onSendMessage={(conversationId, content, senderRole) => sendMessage(conversationId, content, senderRole as 'user' | 'ai' | 'agent')}
-                    onSelectConversation={selectConversation}
-                    onUpdateConversationStatus={updateConversationStatus}
-                    onAssignAgent={(conversationId, agentId) => assignAgent(conversationId, agentId)}
-                    conversations={conversations}
-                  />
-                </CardContent>
-              </Card>
-            </div>
-          )}
-        </div>
+            ) : (
+              <ChatWindow
+                conversationId={selectedConversationId || undefined}
+                messages={messages}
+                loading={loading}
+                onSendMessage={(conversationId, content, senderRole) => sendMessage(conversationId, content, senderRole as 'user' | 'ai' | 'agent')}
+                onSelectConversation={selectConversation}
+                onUpdateConversationStatus={updateConversationStatus}
+                onAssignAgent={(conversationId, agentId) => assignAgent(conversationId, agentId)}
+                conversations={conversations}
+                onMobileBack={() => {
+                  const params = new URLSearchParams(location.search)
+                  params.delete('conv')
+                  navigate({ pathname: '/dashboard', search: params.toString() }, { replace: true })
+                }}
+              />
+            )}
+          </div>
+
+          {/* Desktop: Always show chat */}
+          <div className="hidden desktop:flex flex-col h-full min-h-0 overflow-hidden">
+            {selectedConversation ? (
+              <ChatWindow
+                conversationId={selectedConversationId || undefined}
+                messages={messages}
+                loading={loading}
+                onSendMessage={(conversationId, content, senderRole) => sendMessage(conversationId, content, senderRole as 'user' | 'ai' | 'agent')}
+                onSelectConversation={selectConversation}
+                onUpdateConversationStatus={updateConversationStatus}
+                onAssignAgent={(conversationId, agentId) => assignAgent(conversationId, agentId)}
+                conversations={conversations}
+                showContextToggle={!contextPanelOpen}
+                onToggleContext={() => setContextPanelOpen(true)}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full text-muted-foreground">
+                <div className="text-center">
+                  <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>Selecciona una conversaciÃ³n para ver los mensajes</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </main>
       </div>
+
+      {/* Context Panel - Solo en desktop */}
+      {contextPanelOpen && (
+        <div className="hidden desktop:block fixed right-0 top-12 bottom-0 w-80 bg-background border-l z-40">
+          <ChatContextPanel 
+            conversation={selectedConversation} 
+            onToggleVisibility={() => setContextPanelOpen(false)}
+            onUpdateUserName={updateUserDisplayName}
+          />
+        </div>
+      )}
       
       {/* Panel de Debug para Realtime - Solo en staging/dev */}
       {(import.meta.env.MODE !== 'production' || import.meta.env.VITE_ENABLE_DEBUG === 'true') && (

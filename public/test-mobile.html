@@ -1,0 +1,175 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test MÃ³vil - TrueBlue</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        .container {
+            max-width: 400px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            width: 100%;
+            font-size: 16px;
+            margin: 5px 0;
+        }
+        .logs {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ðŸ” Test MÃ³vil TrueBlue</h1>
+        
+        <div id="status" class="status info">
+            Iniciando diagnÃ³stico...
+        </div>
+        
+        <div id="device-info" class="status info">
+            Cargando informaciÃ³n del dispositivo...
+        </div>
+        
+        <button onclick="testSupabase()">Probar Supabase</button>
+        <button onclick="testMainApp()">Probar App Principal</button>
+        
+        <div id="logs" class="logs">
+            <strong>Logs:</strong><br>
+        </div>
+    </div>
+
+    <script>
+        const logsDiv = document.getElementById('logs');
+        const statusDiv = document.getElementById('status');
+        const deviceDiv = document.getElementById('device-info');
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            logsDiv.innerHTML += `[${timestamp}] ${message}<br>`;
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+            console.log(`[MOBILE TEST] ${message}`);
+        }
+        
+        // InformaciÃ³n del dispositivo
+        function getDeviceInfo() {
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            const isTouch = 'ontouchstart' in window;
+            const screenSize = `${window.innerWidth}x${window.innerHeight}`;
+            
+            deviceDiv.innerHTML = `
+                ðŸ“± <strong>Dispositivo:</strong> ${isMobile ? 'MÃ³vil' : 'Escritorio'}<br>
+                ðŸ‘† <strong>TÃ¡ctil:</strong> ${isTouch ? 'SÃ­' : 'No'}<br>
+                ðŸ“ <strong>Pantalla:</strong> ${screenSize}
+            `;
+            
+            log(`Dispositivo: ${isMobile ? 'MÃ³vil' : 'Escritorio'}, Pantalla: ${screenSize}`);
+        }
+        
+        // Test de Supabase
+        async function testSupabase() {
+            log('Probando conexiÃ³n a Supabase...');
+            
+            try {
+                const response = await fetch('https://avkpyghymnxotwqzkz.supabase.co/rest/v1/', {
+                    method: 'HEAD',
+                    headers: {
+                        'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF2a3B5Z2h5bW54b3R3cXpreiIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNzM5MzQ4MzI0LCJleHAiOjIwNTQ5MjQzMjR9.kv4qQ4Kj8cJj8cJj8cJj8cJj8cJj8cJj8cJj8cJj8cJ'
+                    }
+                });
+                
+                if (response.ok) {
+                    log('âœ… Supabase: ConexiÃ³n exitosa');
+                    statusDiv.className = 'status success';
+                    statusDiv.innerHTML = 'âœ… Supabase: OK';
+                } else {
+                    log(`âŒ Supabase: Error ${response.status}`);
+                    statusDiv.className = 'status error';
+                    statusDiv.innerHTML = `âŒ Supabase: Error ${response.status}`;
+                }
+            } catch (error) {
+                log(`âŒ Supabase: Error - ${error.message}`);
+                statusDiv.className = 'status error';
+                statusDiv.innerHTML = `âŒ Supabase: Error`;
+            }
+        }
+        
+        // Test de la app principal
+        async function testMainApp() {
+            log('Probando carga de la app principal...');
+            
+            try {
+                const response = await fetch('/');
+                if (response.ok) {
+                    log('âœ… App principal: HTML cargado');
+                    
+                    // Probar si los assets cargan
+                    const jsResponse = await fetch('/src/main.tsx');
+                    if (jsResponse.ok) {
+                        log('âœ… App principal: JS disponible');
+                        statusDiv.className = 'status success';
+                        statusDiv.innerHTML = 'âœ… App principal: OK';
+                    } else {
+                        log('âŒ App principal: JS no disponible');
+                        statusDiv.className = 'status error';
+                        statusDiv.innerHTML = 'âŒ App principal: JS error';
+                    }
+                } else {
+                    log(`âŒ App principal: Error ${response.status}`);
+                    statusDiv.className = 'status error';
+                    statusDiv.innerHTML = `âŒ App principal: Error ${response.status}`;
+                }
+            } catch (error) {
+                log(`âŒ App principal: Error - ${error.message}`);
+                statusDiv.className = 'status error';
+                statusDiv.innerHTML = `âŒ App principal: Error`;
+            }
+        }
+        
+        // InicializaciÃ³n
+        window.addEventListener('load', function() {
+            log('PÃ¡gina de test cargada');
+            getDeviceInfo();
+            
+            // Test automÃ¡tico
+            setTimeout(() => {
+                testSupabase();
+            }, 1000);
+        });
+        
+        log('Test mÃ³vil iniciado');
+    </script>
+</body>
+</html>
