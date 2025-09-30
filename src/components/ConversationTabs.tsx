@@ -28,6 +28,10 @@ interface ConversationTabsProps {
   // Props de paginación (legacy)
   currentPage?: number
   totalCount?: number
+  // Props para control inteligente de scroll
+  onScrollStateChange?: (isScrolling: boolean) => void
+  isUserScrolling?: boolean
+  newConversationIds?: Set<string>
 }
 
 export function ConversationTabs({ 
@@ -44,7 +48,10 @@ export function ConversationTabs({
   isSearching,
   searchQuery,
   currentPage = 1,
-  totalCount = 0
+  totalCount = 0,
+  onScrollStateChange,
+  isUserScrolling = false,
+  newConversationIds = new Set()
 }: ConversationTabsProps) {
   const { profile } = useAuth()
   const { getClientDisplayName } = useClient()
@@ -170,6 +177,10 @@ Quedamos súper pendientes.`
           // Props de paginación (legacy)
           currentPage={currentPage}
           totalCount={totalCount}
+          // Props para control inteligente de scroll
+          onScrollStateChange={onScrollStateChange}
+          isUserScrolling={isUserScrolling}
+          newConversationIds={newConversationIds}
         />
       </div>
 

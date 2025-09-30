@@ -129,3 +129,6 @@ ON tb_conversations USING gin(
 
 -- Verificar que la función funciona
 SELECT 'Función search_conversations_ordered creada exitosamente' as resultado;
+
+
+

@@ -42,7 +42,11 @@ export default function Dashboard() {
     searchQuery,
     // Estados de paginación (legacy)
     currentPage,
-    totalCount
+    totalCount,
+    // Estados para control inteligente de scroll
+    isUserScrolling,
+    newConversationIds,
+    handleScrollStateChange
   } = useConversations();
   const { agents } = useAgents();
   
@@ -149,6 +153,10 @@ export default function Dashboard() {
               // Props de paginación (legacy)
               currentPage={currentPage}
               totalCount={totalCount}
+              // Props para control inteligente de scroll
+              onScrollStateChange={handleScrollStateChange}
+              isUserScrolling={isUserScrolling}
+              newConversationIds={newConversationIds}
             />
           </div>
 
@@ -228,6 +236,10 @@ export default function Dashboard() {
                 // Props de paginación (legacy)
                 currentPage={currentPage}
                 totalCount={totalCount}
+                // Props para control inteligente de scroll
+                onScrollStateChange={handleScrollStateChange}
+                isUserScrolling={isUserScrolling}
+                newConversationIds={newConversationIds}
               />
             </div>
           ) : (

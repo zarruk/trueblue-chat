@@ -44,3 +44,6 @@ Write-Host "- Cada scroll: +30 conversaciones más" -ForegroundColor White
 Write-Host "- Búsqueda: 50 mejores resultados (sin scroll)" -ForegroundColor White
 Write-Host "- Filtros locales: funcionan con scroll infinito" -ForegroundColor White
 Write-Host "`n=== Proceso completado ===" -ForegroundColor Cyan
+
+
+
