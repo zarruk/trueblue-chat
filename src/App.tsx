@@ -19,6 +19,7 @@ import { checkAndAddChannelColumn } from "@/utils/databaseStructureCheck";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DynamicTitle } from "@/components/DynamicTitle";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -100,17 +101,18 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 }
 
 const App = () => (
-  <ThemeProvider
-    attribute="class"
-    defaultTheme="system"
-    enableSystem
-    disableTransitionOnChange
-  >
-    <AuthProvider>
-      <TooltipProvider>
-        {/* Notificaciones deshabilitadas por requerimiento */}
-        <BrowserRouter>
-          <Routes>
+  <ErrorBoundary>
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="system"
+      enableSystem
+      disableTransitionOnChange
+    >
+      <AuthProvider>
+        <TooltipProvider>
+          {/* Notificaciones deshabilitadas por requerimiento */}
+          <BrowserRouter>
+            <Routes>
             <Route path="/" element={
               <ProtectedRoute>
                 <AppLayout>
@@ -167,11 +169,12 @@ const App = () => (
             } />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
-    </AuthProvider>
-  </ThemeProvider>
+            </Routes>
+          </BrowserRouter>
+        </TooltipProvider>
+      </AuthProvider>
+    </ThemeProvider>
+  </ErrorBoundary>
 );
 
 export default App;
