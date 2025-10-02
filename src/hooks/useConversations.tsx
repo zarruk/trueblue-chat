@@ -71,6 +71,7 @@ export function useConversations() {
   const [refreshing, setRefreshing] = useState(false)
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
+  const [isSelectingConversation, setIsSelectingConversation] = useState(false)
   const { user, profile } = useAuth()
   const p = profile as any
 
@@ -575,11 +576,24 @@ export function useConversations() {
 
   // Select a conversation
   const selectConversation = useCallback(async (conversationId: string) => {
+    // 🔧 FIX: Evitar loops infinitos
+    if (isSelectingConversation || selectedConversationId === conversationId) {
+      console.log('🚫 selectConversation: Ya en proceso o misma conversación')
+      return
+    }
+    
+    setIsSelectingConversation(true)
     console.log('🎯 selectConversation called with:', conversationId)
-    setSelectedConversationId(conversationId)
-    console.log('📨 Fetching messages for conversation:', conversationId)
-    await fetchMessages(conversationId)
-  }, [fetchMessages])
+    
+    try {
+      // 🔧 FIX: Volver al orden original para evitar loops
+      setSelectedConversationId(conversationId)
+      console.log('📨 Fetching messages for conversation:', conversationId)
+      await fetchMessages(conversationId)
+    } finally {
+      setIsSelectingConversation(false)
+    }
+  }, [fetchMessages, isSelectingConversation, selectedConversationId])
 
   const clearSelectedConversation = useCallback(() => {
     console.log('🧹 Cleared selected conversation')
