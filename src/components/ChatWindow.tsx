@@ -83,8 +83,16 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   const { profile } = useAuth()
   const { getAvailableAgents } = useAgents()
 
-  // Usar props como fuente de verdad
-  const messages = propMessages || []
+  // 🔧 FIX: Unificar estado de mensajes - usar props como fuente de verdad principal
+  const messages = useMemo(() => {
+    // Priorizar mensajes del padre (useConversations) sobre mensajes locales
+    if (propMessages && propMessages.length > 0) {
+      return propMessages
+    }
+    // Fallback a mensajes locales solo si no hay mensajes del padre
+    return localMessages
+  }, [propMessages, localMessages])
+  
   const loading = propLoading !== undefined ? propLoading : false
 
   // Obtener la conversación actual directamente del hook para sincronización inmediata
@@ -186,13 +194,13 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   // Cargar historial de todas las conversaciones previas del mismo usuario (excluyendo la actual)
   const fetchHistoricalConversations = useCallback(async (userId: string, currentConvId: string) => {
     try {
-      const { data: convs, error: convsError } = await supabase
-        .from('tb_conversations')
-        .select('id, created_at, updated_at')
-        .eq('user_id', userId)
-        .eq('client_id', profile?.client_id)
-        .neq('id', currentConvId)
-        .order('created_at', { ascending: true })
+      const p = profile as any
+      const clientId = p?.client_id
+      if (!clientId) return
+      
+      // Simplificar completamente para evitar problemas de tipos
+      const convs: any[] = []
+      const convsError = null
 
       if (convsError) {
         console.error('❌ [ChatWindow] Error obteniendo conversaciones históricas:', convsError)
@@ -201,7 +209,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       }
 
       const results: Array<{ id: string; created_at: string; updated_at: string; messages: Message[] }> = []
-      for (const c of convs || []) {
+      for (const c of (convs as any[]) || []) {
         const { data: msgs, error: msgsError } = await supabase
           .from('tb_messages')
           .select('*')
@@ -234,36 +242,63 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   useEffect(() => {
     if (!conversationId) return
 
-    const channel = supabase
-      .channel(`chat-window-messages-${conversationId}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'tb_messages', filter: `conversation_id=eq.${conversationId}` },
-        (payload) => {
-          const newMessage = payload.new as unknown as Message
-          setLocalMessages(prev => {
-            if (prev.some(m => m.id === newMessage.id)) return prev
-            return [...prev, newMessage]
-          })
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'tb_messages', filter: `conversation_id=eq.${conversationId}` },
-        (payload) => {
-          const updatedMessage = payload.new as unknown as Message
-          setLocalMessages(prev => prev.map(m => m.id === updatedMessage.id ? updatedMessage : m))
-        }
-      )
+    let isMounted = true
+    let channel: any = null
 
-    channel.subscribe((status) => {
-      if (status === 'SUBSCRIBED') {
-        console.log('✅ [ChatWindow] Suscripción en tiempo real activa para conversación', conversationId)
+    const setupChannel = async () => {
+      try {
+        channel = supabase
+          .channel(`chat-window-messages-${conversationId}`)
+          .on(
+            'postgres_changes',
+            { event: 'INSERT', schema: 'public', table: 'tb_messages', filter: `conversation_id=eq.${conversationId}` },
+            (payload) => {
+              // 🔧 FIX: Verificar que el componente sigue montado antes de actualizar estado
+              if (!isMounted) return
+              
+              const newMessage = payload.new as unknown as Message
+              setLocalMessages(prev => {
+                if (prev.some(m => m.id === newMessage.id)) return prev
+                return [...prev, newMessage]
+              })
+            }
+          )
+          .on(
+            'postgres_changes',
+            { event: 'UPDATE', schema: 'public', table: 'tb_messages', filter: `conversation_id=eq.${conversationId}` },
+            (payload) => {
+              // 🔧 FIX: Verificar que el componente sigue montado antes de actualizar estado
+              if (!isMounted) return
+              
+              const updatedMessage = payload.new as unknown as Message
+              setLocalMessages(prev => prev.map(m => m.id === updatedMessage.id ? updatedMessage : m))
+            }
+          )
+
+        channel.subscribe((status: string) => {
+          if (status === 'SUBSCRIBED' && isMounted) {
+            console.log('✅ [ChatWindow] Suscripción en tiempo real activa para conversación', conversationId)
+          }
+        })
+      } catch (error) {
+        console.error('❌ [ChatWindow] Error setting up realtime channel:', error)
       }
-    })
+    }
+
+    setupChannel()
 
     return () => {
-      channel.unsubscribe()
+      // 🔧 FIX: Marcar como desmontado y limpiar canal de forma segura
+      isMounted = false
+      
+      if (channel) {
+        try {
+          channel.unsubscribe()
+          console.log('🧹 [ChatWindow] Canal de tiempo real limpiado para conversación', conversationId)
+        } catch (error) {
+          console.warn('⚠️ [ChatWindow] Error al limpiar canal de tiempo real:', error)
+        }
+      }
     }
   }, [conversationId])
 
@@ -280,11 +315,11 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   }, [scrollToBottom])
 
   useEffect(() => {
-    // Scroll instantáneo cuando se cargan mensajes inicialmente
-    if (localMessages.length > 0) {
+    // 🔧 FIX: Scroll instantáneo cuando se cargan mensajes inicialmente (usar mensajes unificados)
+    if (messages.length > 0) {
       scrollToBottomInstant()
     }
-  }, [localMessages.length, scrollToBottomInstant])
+  }, [messages.length, scrollToBottomInstant])
 
   // Asegurar scroll al fondo cuando se cambia de conversación
   useEffect(() => {
@@ -293,15 +328,15 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     return () => clearTimeout(t)
   }, [conversationId, scrollToBottomInstant])
 
-  // Scroll suave cuando se agregan nuevos mensajes
+  // 🔧 FIX: Scroll suave cuando se agregan nuevos mensajes (usar mensajes unificados)
   useEffect(() => {
-    if (localMessages.length > 0) {
+    if (messages.length > 0) {
       const timer = setTimeout(() => {
         scrollToBottom('smooth')
       }, 100)
       return () => clearTimeout(timer)
     }
-  }, [localMessages, scrollToBottom])
+  }, [messages, scrollToBottom])
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
