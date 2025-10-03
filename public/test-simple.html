@@ -1,0 +1,39 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Simple</title>
+    <style>
+        body { font-family: Arial; padding: 20px; background: #f0f0f0; }
+        .container { max-width: 400px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; font-weight: bold; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ðŸ§ª Test Simple</h1>
+        <div id="status" class="status info">Cargando...</div>
+        <div id="info" class="status info">InformaciÃ³n del dispositivo</div>
+    </div>
+
+    <script>
+        document.getElementById('status').innerHTML = 'âœ… PÃ¡gina cargada correctamente';
+        document.getElementById('status').className = 'status success';
+        
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        const screenSize = window.innerWidth + 'x' + window.innerHeight;
+        
+        document.getElementById('info').innerHTML = `
+            ðŸ“± <strong>Dispositivo:</strong> ${isMobile ? 'MÃ³vil' : 'Escritorio'}<br>
+            ðŸ“ <strong>Pantalla:</strong> ${screenSize}<br>
+            ðŸŒ <strong>URL:</strong> ${window.location.href}
+        `;
+        
+        console.log('Test simple ejecutado correctamente');
+    </script>
+</body>
+</html>

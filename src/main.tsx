@@ -7,6 +7,12 @@ import { Toaster } from 'sonner'
 import App from './App.tsx'
 import './index.css'
 
+// Logs para diagnóstico móvil
+console.log('🔍 MOBILE DEBUG - main.tsx started');
+console.log('🔍 MOBILE DEBUG - React version:', React.version);
+console.log('🔍 MOBILE DEBUG - Document ready state:', document.readyState);
+console.log('🔍 MOBILE DEBUG - Root element found:', !!document.getElementById('root'));
+
 // Create a client
 const queryClient = new QueryClient({
   defaultOptions: {

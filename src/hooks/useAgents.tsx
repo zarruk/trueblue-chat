@@ -29,36 +29,28 @@ export function useAgents() {
   const [agents, setAgents] = useState<Agent[]>([])
   const [agentStats, setAgentStats] = useState<AgentStats[]>([])
   const [loading, setLoading] = useState(true)
-  const { user, profile } = useAuth()
+  const { user, clientId, isProfileReady } = useAuth()
 
   // Fetch agents from profiles table
   const fetchAgents = useCallback(async () => {
-    if (!user) return
+    if (!user || !isProfileReady) return // ⏳ esperar perfil
+    if (!clientId) { 
+      setAgents([]); 
+      setLoading(false); 
+      return // perfil listo pero sin cliente
+    }
 
     try {
       setLoading(true)
       console.log('🔍 fetchAgents: Obteniendo agentes de la tabla profiles...')
-      console.log('🔍 fetchAgents: Profile client_id:', profile?.client_id)
-      
-      // Si no tenemos client_id, esperar un poco y reintentar
-      if (!profile?.client_id) {
-        console.log('⚠️ fetchAgents: No hay client_id disponible, esperando...')
-        setTimeout(() => {
-          if (profile?.client_id) {
-            fetchAgents()
-          }
-        }, 1000)
-        return
-      }
-      
-      console.log('🔍 fetchAgents: Construyendo consulta con client_id:', profile.client_id)
+      console.log('🔍 fetchAgents: Client ID:', clientId)
       
       const { data, error } = await supabase
         .from('profiles')
         .select('id, email, name, role, created_at')
         .in('role', ['agent', 'admin']) // Solo agentes y administradores
         .not('email', 'ilike', 'deleted_%') // Excluir agentes soft deleted
-        .eq('client_id', profile.client_id) // Filtrar por cliente
+        .eq('client_id', clientId) // Filtrar por cliente
         .order('name', { ascending: true })
 
       console.log('🔍 fetchAgents: Consulta ejecutada')
@@ -80,7 +72,7 @@ export function useAgents() {
     } finally {
       setLoading(false)
     }
-  }, [user, profile?.client_id])
+  }, [user, clientId, isProfileReady])
 
   // Fetch agent statistics (disabled for now since we're using profiles table)
   const fetchAgentStats = useCallback(async () => {
@@ -90,8 +82,12 @@ export function useAgents() {
 
   // Create new agent in profiles table
   const createAgent = useCallback(async (email: string, name: string, role: string) => {
-    if (!user || profile?.role !== 'admin') {
+    if (!user) {
       toast.error('No tienes permisos para crear agentes')
+      return
+    }
+    if (!clientId) {
+      toast.error('Cliente no disponible')
       return
     }
 
@@ -117,7 +113,7 @@ export function useAgents() {
           email: email,
           name: name,
           role: role,
-          client_id: profile?.client_id // Asignar al mismo cliente
+          client_id: clientId // Asignar al mismo cliente
         })
 
       if (error) {
@@ -138,11 +134,11 @@ export function useAgents() {
     } finally {
       setLoading(false)
     }
-  }, [user, profile, fetchAgents])
+  }, [user, clientId, fetchAgents])
 
   // Update agent in profiles table
   const updateAgent = useCallback(async (agentId: string, updates: Partial<Agent>) => {
-    if (!user || profile?.role !== 'admin') {
+    if (!user) {
       toast.error('No tienes permisos para actualizar agentes')
       return
     }
@@ -177,11 +173,11 @@ export function useAgents() {
     } finally {
       setLoading(false)
     }
-  }, [user, profile, fetchAgents])
+  }, [user, fetchAgents])
 
   // Delete agent from profiles table
   const deleteAgent = useCallback(async (agentId: string) => {
-    if (!user || profile?.role !== 'admin') {
+    if (!user) {
       toast.error('No tienes permisos para eliminar agentes')
       return
     }
@@ -190,7 +186,6 @@ export function useAgents() {
       setLoading(true)
       console.log('🗑️ deleteAgent: Eliminando agente con ID:', agentId)
       console.log('🔍 deleteAgent: Usuario actual:', user?.id)
-      console.log('🔍 deleteAgent: Perfil actual:', profile)
       
       // Verificar permisos de autenticación explícitamente
       const { data: currentUser, error: authError } = await supabase.auth.getUser()
@@ -284,11 +279,11 @@ export function useAgents() {
     } finally {
       setLoading(false)
     }
-  }, [user, profile, fetchAgents])
+  }, [user, fetchAgents])
 
   // Toggle agent status (simulated for profiles table)
   const toggleAgentStatus = useCallback(async (agent: Agent) => {
-    if (!user || profile?.role !== 'admin') {
+    if (!user) {
       toast.error('No tienes permisos para cambiar el estado de agentes')
       return
     }
@@ -310,11 +305,11 @@ export function useAgents() {
     } finally {
       setLoading(false)
     }
-  }, [user, profile, fetchAgents])
+  }, [user, fetchAgents])
 
   // Resend invitation
   const resendInvitation = useCallback(async (agent: Agent) => {
-    if (!user || profile?.role !== 'admin') {
+    if (!user) {
       toast.error('No tienes permisos para reenviar invitaciones')
       return
     }
@@ -326,7 +321,7 @@ export function useAgents() {
       console.error('Error resending invitation:', error)
       toast.error('Error al reenviar la invitación')
     }
-  }, [user, profile])
+  }, [user])
 
   // Get agent by ID
   const getAgentById = useCallback((agentId: string) => {

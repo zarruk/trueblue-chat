@@ -7,7 +7,14 @@ import path from "path";
 export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
-    port: 8080,
+    port: 3080,
+    allowedHosts: [
+      "localhost",
+      "127.0.0.1",
+      "192.168.1.45",
+      "46e8ed2e1a96.ngrok-free.app",
+      ".ngrok-free.app",
+    ],
     proxy: {
       // Proxy para evitar CORS al llamar al webhook de n8n desde el navegador en desarrollo
       "/api/n8n-webhook": {
