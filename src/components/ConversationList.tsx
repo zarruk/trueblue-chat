@@ -383,7 +383,7 @@ export function ConversationList({
                           </h4>
                           {conversation.channel && (
                             <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium shadow-sm ring-1 ${
-                              isSelected ? 'bg-white/15 text:white ring-white/30' : `${ch.className} ring-black/0`
+                              isSelected ? 'bg-white/15 text-white ring-white/30' : `${ch.className} ring-black/0`
                             }`}>
                               <ChannelIcon className="h-3 w-3" />
                               {ch.label}
@@ -449,7 +449,6 @@ export function ConversationList({
                         )}
                       </div>
                     </div>
-                  </div>
                   </div>
                 </SwipeableRow>
               )
