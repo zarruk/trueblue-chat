@@ -364,3 +364,36 @@
     display: none;
   }
 }
+
+/* Estilos específicos para el chat móvil */
+@layer components {
+  /* Contenido de mensajes del chat */
+  .chat-message-content {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+  
+  .chat-message-content img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 0.5rem;
+    object-fit: contain;
+  }
+  
+  .chat-message-content video {
+    max-width: 100%;
+    height: auto;
+    border-radius: 0.5rem;
+  }
+  
+  /* Mejorar touch targets en móvil */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  /* Prevenir scroll horizontal en contenedores de chat */
+  .chat-messages-scroll {
+    overflow-x: hidden;
+    word-wrap: break-word;
+  }
+}

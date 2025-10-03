@@ -1,5 +1,6 @@
 
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
+import { RefObject } from 'react'
 import { Search, Filter, MessageSquare, Clock, CheckCircle, AlertCircle, Users, MessageCircle, Send } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -7,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Conversation } from '@/hooks/useConversations'
+import { SwipeableRow } from '@/components/mobile/SwipeableRow'
 
 interface ConversationListProps {
   onSelectConversation: (conversationId: string) => void
@@ -27,6 +29,10 @@ interface ConversationListProps {
   onScrollStateChange?: (isScrolling: boolean) => void
   isUserScrolling?: boolean
   newConversationIds?: Set<string>
+  // Nueva prop para scroll externo (sheet móvil)
+  externalScrollContainerRef?: RefObject<HTMLElement>
+  // Props para acciones de swipe
+  onArchiveConversation?: (conversationId: string) => void
 }
 
 type ConversationStatus = 'active_ai' | 'active_human' | 'closed' | 'pending_human' | 'pending_response'
@@ -89,7 +95,9 @@ export function ConversationList({
   totalCount = 0,
   onScrollStateChange,
   isUserScrolling = false,
-  newConversationIds = new Set()
+  newConversationIds = new Set(),
+  externalScrollContainerRef,
+  onArchiveConversation
 }: ConversationListProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<ConversationStatus | 'all' | 'abierta'>('all')
@@ -147,7 +155,7 @@ export function ConversationList({
         }
       },
       {
-        root: scrollContainerRef.current,
+        root: externalScrollContainerRef?.current || scrollContainerRef.current,
         rootMargin: '100px', // Cargar cuando falten 100px para el final
         threshold: 0.1
       }
@@ -332,28 +340,32 @@ export function ConversationList({
               const ChannelIcon = ch.icon
 
               return (
-                <div
+                <SwipeableRow
                   key={conversation.id}
-                  className={`
-                    conversation-card relative p-2 rounded-lg cursor-pointer transition-all duration-200 border dark:border-slate-700 overflow-hidden
-                    ${isSelected 
-                      ? 'selected text-primary-foreground border-transparent shadow-lg bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 dark:from-indigo-500 dark:via-violet-500 dark:to-fuchsia-500' 
-                      : 'hover:bg-accent/60 dark:hover:bg-slate-800/60 hover:border-accent-foreground/20 hover:shadow-md'
-                    }
-                    ${urgencyType === 'unassigned'
-                      ? 'urgent-unassigned border-l-4 border-l-red-500 bg-red-50 dark:border-l-red-400 dark:bg-red-950/40'
-                      : urgencyType === 'awaiting_response'
-                      ? 'urgent-awaiting border-l-4 border-l-orange-500 bg-orange-50 dark:border-l-orange-400 dark:bg-orange-950/40'
-                      : urgencyType === 'pending_response'
-                      ? 'urgent-pending-response border-l-4 border-l-yellow-500 bg-yellow-50 dark:border-l-yellow-400 dark:bg-yellow-950/40'
-                      : ''
-                    }
-                  `}
-                  onClick={(e) => {
-                    e.preventDefault()
-                    onSelectConversation(conversation.id)
-                  }}
+                  onSwipeAction={onArchiveConversation ? () => onArchiveConversation(conversation.id) : undefined}
+                  actionLabel="Archivar"
                 >
+                  <div
+                    className={`
+                      conversation-card relative px-4 py-3 tablet:px-3 tablet:py-2 rounded-lg cursor-pointer transition-all duration-200 border dark:border-slate-700 overflow-hidden min-h-[72px] tablet:min-h-0 touch-manipulation
+                      ${isSelected 
+                        ? 'selected text-primary-foreground border-transparent shadow-lg bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 dark:from-indigo-500 dark:via-violet-500 dark:to-fuchsia-500' 
+                        : 'hover:bg-accent/60 dark:hover:bg-slate-800/60 hover:border-accent-foreground/20 hover:shadow-md'
+                      }
+                      ${urgencyType === 'unassigned'
+                        ? 'urgent-unassigned border-l-4 border-l-red-500 bg-red-50 dark:border-l-red-400 dark:bg-red-950/40'
+                        : urgencyType === 'awaiting_response'
+                        ? 'urgent-awaiting border-l-4 border-l-orange-500 bg-orange-50 dark:border-l-orange-400 dark:bg-orange-950/40'
+                        : urgencyType === 'pending_response'
+                        ? 'urgent-pending-response border-l-4 border-l-yellow-500 bg-yellow-50 dark:border-l-yellow-400 dark:bg-yellow-950/40'
+                        : ''
+                      }
+                    `}
+                    onClick={(e) => {
+                      e.preventDefault()
+                      onSelectConversation(conversation.id)
+                    }}
+                  >
                   <div className="flex items-start space-x-2">
                     <Avatar className="h-8 w-8 flex-shrink-0">
                       <AvatarFallback>
@@ -364,7 +376,7 @@ export function ConversationList({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-0.5">
                         <div className="flex items-center space-x-2 flex-1 min-w-0">
-                          <h4 className={`font-medium truncate text-sm ${
+                          <h4 className={`font-medium truncate text-[15px] tablet:text-sm ${
                             isSelected ? 'text-primary-foreground' : 'text-foreground'
                           }`}>
                             {conversation.username || conversation.user_id}
@@ -438,7 +450,8 @@ export function ConversationList({
                       </div>
                     </div>
                   </div>
-                </div>
+                  </div>
+                </SwipeableRow>
               )
             })}
             

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { AppSidebar } from './AppSidebar';
 import { Button } from '@/components/ui/button';
 import { Menu } from 'lucide-react';
@@ -12,29 +12,32 @@ interface ResponsiveLayoutProps {
 export function ResponsiveLayout({ children }: ResponsiveLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const hasInitialized = useRef(false);
   const { getClientDisplayName } = useClient();
 
-  // Detectar cambios de tamaÃ±o de pantalla
+  // Detectar cambios de tamaño de pantalla
   useEffect(() => {
     const checkMobile = () => {
       const mobile = window.innerWidth < 768; // breakpoint tablet
+      const wasMobile = isMobile;
       setIsMobile(mobile);
       
-      // En desktop, mantener sidebar abierto por defecto
-      if (!mobile && !sidebarOpen) {
-        setSidebarOpen(true);
+      // Solo cerrar sidebar si cambiamos de desktop a móvil
+      if (mobile && !wasMobile && sidebarOpen) {
+        setSidebarOpen(false);
       }
       
-      // En mÃ³vil, cerrar sidebar al cambiar a mÃ³vil
-      if (mobile && sidebarOpen) {
-        setSidebarOpen(false);
+      // Solo abrir sidebar en desktop la primera vez
+      if (!mobile && !sidebarOpen && !hasInitialized.current) {
+        setSidebarOpen(true);
+        hasInitialized.current = true;
       }
     };
 
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
-  }, [sidebarOpen]);
+  }, [isMobile]); // Removido sidebarOpen de las dependencias
 
   const toggleSidebar = () => {
     setSidebarOpen(!sidebarOpen);
@@ -52,7 +55,7 @@ export function ResponsiveLayout({ children }: ResponsiveLayoutProps) {
               variant="ghost" 
               size="icon" 
               onClick={toggleSidebar}
-              className="mr-2"
+              className="mr-2 flex desktop:flex"
               title={sidebarOpen ? "Ocultar sidebar" : "Mostrar sidebar"}
             >
               <Menu className="h-5 w-5" />
@@ -65,12 +68,11 @@ export function ResponsiveLayout({ children }: ResponsiveLayoutProps) {
         </header>
 
         {/* Sidebar - Solo visible en tablet+ */}
-        <aside className={`
+        <aside className="
           hidden tablet:flex tablet:flex-col tablet:col-start-1 tablet:col-end-2 tablet:row-start-2 tablet:row-end-3
           desktop:col-start-1 desktop:col-end-2 desktop:row-start-2 desktop:row-end-3
           transition-all duration-300 ease-in-out
-          ${sidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}
-        `}>
+        ">
           <AppSidebar isOpen={true} onToggle={toggleSidebar} />
         </aside>
 

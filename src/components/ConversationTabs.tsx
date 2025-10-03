@@ -153,7 +153,7 @@ Quedamos súper pendientes.`
   }
 
   return (
-    <div className="h-full flex flex-col overflow-hidden rounded-lg border bg-card text-card-foreground shadow-sm">
+    <div className="h-full flex flex-col overflow-hidden">
       <div className="p-4 border-b flex items-center justify-between">
         <h2 className="text-xl font-semibold tracking-tight">Conversaciones</h2>
         <Button size="sm" onClick={() => setOpen(true)} className="inline-flex items-center gap-1">

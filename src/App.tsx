@@ -25,6 +25,11 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   
+  // Bypass authentication for E2E tests
+  if (import.meta.env.VITE_E2E === '1') {
+    return <>{children}</>;
+  }
+  
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -74,37 +79,18 @@ function AppLayout({ children }: { children: React.ReactNode }) {
   );
 }
 
-<<<<<<< HEAD
-const App = () => {
-  // Logs para diagnÃ³stico mÃ³vil
-  console.log('ðŸ” MOBILE DEBUG - App component started');
-  console.log('ðŸ” MOBILE DEBUG - Window dimensions:', window.innerWidth, 'x', window.innerHeight);
-  console.log('ðŸ” MOBILE DEBUG - Is touch device:', 'ontouchstart' in window);
-  
-  return (
-=======
 const App = () => (
-  <ErrorBoundary>
->>>>>>> main
-    <ThemeProvider
-      attribute="class"
-      defaultTheme="system"
-      enableSystem
-      disableTransitionOnChange
-    >
-<<<<<<< HEAD
+  <ThemeProvider
+    attribute="class"
+    defaultTheme="system"
+    enableSystem
+    disableTransitionOnChange
+  >
     <AuthProvider>
       <TooltipProvider>
         {/* Notificaciones deshabilitadas por requerimiento */}
         <BrowserRouter>
           <Routes>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-=======
-      <AuthProvider>
-        <TooltipProvider>
-          {/* Notificaciones deshabilitadas por requerimiento */}
-          <BrowserRouter>
-            <Routes>
             <Route path="/" element={
               <ProtectedRoute>
                 <AppLayout>
@@ -112,7 +98,6 @@ const App = () => (
                 </AppLayout>
               </ProtectedRoute>
             } />
->>>>>>> main
             <Route path="/dashboard" element={
               <ProtectedRoute>
                 <AppLayout>
@@ -160,24 +145,23 @@ const App = () => (
                 <Auth />
               </PublicRoute>
             } />
+            {/* E2E Testing Route - Only available when VITE_E2E=1 */}
+            {import.meta.env.VITE_E2E === '1' && (
+              <Route path="/__e2e__/responsive" element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <Dashboard />
+                  </AppLayout>
+                </ProtectedRoute>
+              } />
+            )}
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
-<<<<<<< HEAD
           </Routes>
         </BrowserRouter>
       </TooltipProvider>
     </AuthProvider>
-    </ThemeProvider>
-  );
-};
-=======
-            </Routes>
-          </BrowserRouter>
-        </TooltipProvider>
-      </AuthProvider>
-    </ThemeProvider>
-  </ErrorBoundary>
+  </ThemeProvider>
 );
->>>>>>> main
 
 export default App;
