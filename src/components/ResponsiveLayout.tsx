@@ -46,16 +46,20 @@ export function ResponsiveLayout({ children }: ResponsiveLayoutProps) {
   return (
     <div className="h-screen w-full overflow-hidden">
       {/* CSS Grid Layout */}
-      <div className="h-full grid grid-cols-1 grid-rows-[auto_1fr] tablet:grid-cols-[256px_1fr] tablet:grid-rows-[auto_1fr] desktop:grid-cols-[256px_1fr_0] desktop:grid-rows-[auto_1fr] transition-all duration-300">
+      <div className={`h-full grid grid-cols-1 grid-rows-[auto_1fr] transition-all duration-300 ${
+        sidebarOpen
+          ? "tablet:grid-cols-[256px_1fr] tablet:grid-rows-[auto_1fr] desktop:grid-cols-[256px_1fr_0] desktop:grid-rows-[auto_1fr]"
+          : "tablet:grid-cols-[0px_1fr] tablet:grid-rows-[auto_1fr] desktop:grid-cols-[0px_1fr_0] desktop:grid-rows-[auto_1fr]"
+      }`}>
         
         {/* Header - Ocupa toda la fila */}
-        <header className="col-span-full tablet:col-span-2 desktop:col-span-3 h-12 flex items-center justify-between border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex-shrink-0 px-4">
+        <header className="col-span-full tablet:col-span-2 desktop:col-span-3 h-12 flex items-center justify-between border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex-shrink-0 px-4 z-40">
           <div className="flex items-center">
             <Button 
               variant="ghost" 
               size="icon" 
               onClick={toggleSidebar}
-              className="mr-2 flex desktop:flex"
+              className="mr-2 inline-flex"
               title={sidebarOpen ? "Ocultar sidebar" : "Mostrar sidebar"}
             >
               <Menu className="h-5 w-5" />
@@ -73,7 +77,7 @@ export function ResponsiveLayout({ children }: ResponsiveLayoutProps) {
           desktop:col-start-1 desktop:col-end-2 desktop:row-start-2 desktop:row-end-3
           transition-all duration-300 ease-in-out
         ">
-          <AppSidebar isOpen={true} onToggle={toggleSidebar} />
+          <AppSidebar isOpen={sidebarOpen} onToggle={toggleSidebar} />
         </aside>
 
         {/* Main Content */}
@@ -81,7 +85,7 @@ export function ResponsiveLayout({ children }: ResponsiveLayoutProps) {
           col-span-full row-start-2 row-end-3
           tablet:col-start-2 tablet:col-end-3 tablet:row-start-2 tablet:row-end-3
           desktop:col-start-2 desktop:col-end-3 desktop:row-start-2 desktop:row-end-3
-          overflow-hidden flex flex-col
+          overflow-hidden flex flex-col min-h-0
         ">
           {children}
         </main>

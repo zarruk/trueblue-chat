@@ -597,7 +597,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   }
 
   return (
-    <div className="h-full flex flex-col bg-background overflow-hidden">
+    <div className="h-full min-h-0 flex flex-col bg-background overflow-hidden">
       {/* Chat Header */}
       <div className="border-b dark:border-slate-700 px-4 xl:px-6 py-3 xl:py-4 flex-shrink-0">
         <div className="flex items-center justify-between gap-2">

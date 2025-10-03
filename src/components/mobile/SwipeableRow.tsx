@@ -8,6 +8,8 @@ interface SwipeableRowProps {
   actionLabel?: string;
   actionIcon?: React.ReactNode;
   actionClassName?: string;
+  enableSwipe?: boolean;
+  showAction?: boolean;
 }
 
 export function SwipeableRow({ 
@@ -15,7 +17,9 @@ export function SwipeableRow({
   onSwipeAction, 
   actionLabel = "Archivar",
   actionIcon = <Archive className="h-4 w-4" />,
-  actionClassName = "bg-red-500 hover:bg-red-600"
+  actionClassName = "bg-red-500 hover:bg-red-600",
+  enableSwipe = true,
+  showAction = true
 }: SwipeableRowProps) {
   const [translateX, setTranslateX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -75,28 +79,30 @@ export function SwipeableRow({
         className={`relative transition-transform duration-200 ease-out ${
           isDragging ? 'transition-none' : ''
         }`}
-        style={{ transform: `translateX(${translateX}px)` }}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
+        style={{ transform: `translateX(${enableSwipe ? translateX : 0}px)` }}
+        onTouchStart={enableSwipe ? handleTouchStart : undefined}
+        onTouchMove={enableSwipe ? handleTouchMove : undefined}
+        onTouchEnd={enableSwipe ? handleTouchEnd : undefined}
       >
         {children}
       </div>
       
       {/* Swipe action */}
-      <div 
-        className="absolute inset-y-0 right-0 flex items-center px-4"
-        style={{ transform: `translateX(${MAX_TRANSLATE + 100}px)` }}
-      >
-        <Button
-          onClick={onSwipeAction}
-          className={`h-full px-4 ${actionClassName} rounded-none`}
-          size="sm"
+      {showAction && (
+        <div 
+          className="absolute inset-y-0 right-0 flex items-center px-4"
+          style={{ transform: `translateX(${MAX_TRANSLATE + 100}px)` }}
         >
-          {actionIcon}
-          <span className="ml-2 hidden">{actionLabel}</span>
-        </Button>
-      </div>
+          <Button
+            onClick={onSwipeAction}
+            className={`h-full px-4 ${actionClassName} rounded-none`}
+            size="sm"
+          >
+            {actionIcon}
+            <span className="ml-2 hidden">{actionLabel}</span>
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

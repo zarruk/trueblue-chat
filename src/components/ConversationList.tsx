@@ -342,8 +342,8 @@ export function ConversationList({
               return (
                 <SwipeableRow
                   key={conversation.id}
-                  onSwipeAction={onArchiveConversation ? () => onArchiveConversation(conversation.id) : undefined}
-                  actionLabel="Archivar"
+                  enableSwipe={false}
+                  showAction={false}
                 >
                   <div
                     className={`
