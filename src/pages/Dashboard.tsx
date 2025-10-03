@@ -173,7 +173,7 @@ export default function Dashboard() {
           {/* Mobile: Show conversations list or chat */}
           <div className="desktop:hidden h-full">
             {!selectedConversation ? (
-              {/* En móvil, mostrar placeholder ya que usamos MobileConversationSheet */}
+              // En móvil, mostrar placeholder ya que usamos MobileConversationSheet
               <div className="flex items-center justify-center h-full text-center p-4">
                 <div>
                   <div className="w-16 h-16 mx-auto mb-4 bg-muted rounded-full flex items-center justify-center">

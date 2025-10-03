@@ -450,6 +450,7 @@ export function ConversationList({
                       </div>
                     </div>
                   </div>
+                </div>
                 </SwipeableRow>
               )
             })}
