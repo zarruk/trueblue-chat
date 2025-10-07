@@ -1,9 +1,10 @@
-import { TooltipProvider } from "@/components/ui/tooltip";
+﻿import { TooltipProvider } from "@/components/ui/tooltip";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { useClient } from "@/hooks/useClient";
 import { AppSidebar } from "@/components/AppSidebar";
+import { ResponsiveLayout } from "@/components/ResponsiveLayout";
 import Dashboard from "./pages/Dashboard";
 import Agents from "./pages/Agents";
 import Settings from "./pages/Settings";
@@ -23,6 +24,11 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
+  
+  // Bypass authentication for E2E tests
+  if (import.meta.env.VITE_E2E === '1') {
+    return <>{children}</>;
+  }
   
   if (loading) {
     return (
@@ -51,16 +57,13 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
   }
   
   if (user) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
   
   return <>{children}</>;
 }
 
 function AppLayout({ children }: { children: React.ReactNode }) {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { getClientDisplayName } = useClient();
-  
   useEffect(() => {
     // Verificar y agregar la columna channel si es necesario
     checkAndAddChannelColumn();
@@ -69,50 +72,25 @@ function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
       <DynamicTitle />
-      <div className="h-screen flex w-full overflow-hidden">
-      <AppSidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
-      <main className={`flex-1 flex flex-col min-h-0 overflow-hidden transition-all duration-300 ease-in-out ${
-        sidebarOpen ? 'ml-64' : 'ml-0'
-      }`}>
-        <header className="h-12 flex items-center justify-between border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex-shrink-0">
-          <div className="flex items-center">
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="mr-2"
-              title={sidebarOpen ? "Ocultar sidebar" : "Mostrar sidebar"}
-            >
-              <Menu className="h-5 w-5" />
-            </Button>
-            <div className="text-lg font-semibold">{getClientDisplayName()}</div>
-          </div>
-          <div className="mr-4">
-            <ThemeToggle />
-          </div>
-        </header>
-        <div className="flex-1 overflow-y-auto">
-          {children}
-        </div>
-      </main>
-      </div>
+      <ResponsiveLayout>
+        {children}
+      </ResponsiveLayout>
     </>
   );
 }
 
 const App = () => (
-  <ErrorBoundary>
-    <ThemeProvider
-      attribute="class"
-      defaultTheme="system"
-      enableSystem
-      disableTransitionOnChange
-    >
-      <AuthProvider>
-        <TooltipProvider>
-          {/* Notificaciones deshabilitadas por requerimiento */}
-          <BrowserRouter>
-            <Routes>
+  <ThemeProvider
+    attribute="class"
+    defaultTheme="system"
+    enableSystem
+    disableTransitionOnChange
+  >
+    <AuthProvider>
+      <TooltipProvider>
+        {/* Notificaciones deshabilitadas por requerimiento */}
+        <BrowserRouter>
+          <Routes>
             <Route path="/" element={
               <ProtectedRoute>
                 <AppLayout>
@@ -167,14 +145,23 @@ const App = () => (
                 <Auth />
               </PublicRoute>
             } />
+            {/* E2E Testing Route - Only available when VITE_E2E=1 */}
+            {import.meta.env.VITE_E2E === '1' && (
+              <Route path="/__e2e__/responsive" element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <Dashboard />
+                  </AppLayout>
+                </ProtectedRoute>
+              } />
+            )}
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
-        </TooltipProvider>
-      </AuthProvider>
-    </ThemeProvider>
-  </ErrorBoundary>
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </AuthProvider>
+  </ThemeProvider>
 );
 
 export default App;

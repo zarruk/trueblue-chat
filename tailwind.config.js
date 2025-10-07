@@ -17,6 +17,28 @@ module.exports = {
       },
     },
     extend: {
+      // Breakpoints específicos para mobile responsive
+      screens: {
+        'mobile': '320px',
+        'mobile-lg': '425px', 
+        'tablet': '768px',
+        'desktop': '1024px',
+        'wide': '1440px'
+      },
+      // Espaciado específico para componentes móviles
+      spacing: {
+        'sidebar': '256px',
+        'chat-input': '60px',
+        'mobile-nav': '56px',
+        'touch-target': '44px',
+        'message-bubble': '12px'
+      },
+      // Grid templates para layout responsive
+      gridTemplateColumns: {
+        'mobile': '1fr',
+        'tablet': '256px 1fr',
+        'desktop': '256px 400px 1fr'
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -66,10 +88,27 @@ module.exports = {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
+        // Animaciones específicas para mobile
+        "slide-up": {
+          from: { transform: "translateY(100%)" },
+          to: { transform: "translateY(0)" },
+        },
+        "slide-down": {
+          from: { transform: "translateY(-100%)" },
+          to: { transform: "translateY(0)" },
+        },
+        "fade-in": {
+          from: { opacity: "0" },
+          to: { opacity: "1" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        // Animaciones móviles con timing optimizado
+        "slide-up": "slide-up 0.3s ease-out",
+        "slide-down": "slide-down 0.3s ease-out",
+        "fade-in": "fade-in 0.3s ease-out",
       },
     },
   },

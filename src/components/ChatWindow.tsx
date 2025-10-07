@@ -518,7 +518,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
 
     return (
       <div key={msg.id} className={`flex ${alignment}`}>
-        <div className={`flex items-start space-x-3 max-w-[70%] ${alignment === 'justify-end' ? 'flex-row-reverse space-x-reverse' : ''}`}>
+        <div className={`flex items-start space-x-3 max-w-[86%] tablet:max-w-[75%] desktop:max-w-[70%] ${alignment === 'justify-end' ? 'flex-row-reverse space-x-reverse' : ''}`}>
           {msg.sender_role === 'user' && (
             <Avatar className="h-8 w-8 flex-shrink-0">
               <AvatarImage src={senderInfo.avatar} />
@@ -527,7 +527,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
               </AvatarFallback>
             </Avatar>
           )}
-          <div className={`rounded-lg px-4 py-2 ${
+          <div className={`rounded-2xl px-4 py-3 tablet:rounded-lg tablet:px-4 tablet:py-2 ${
             msg.sender_role === 'user'
               ? 'bg-muted'
               : 'bg-gradient-to-br from-indigo-50 via-violet-50 to-fuchsia-50 text-slate-900 border border-indigo-100 dark:from-indigo-500 dark:via-violet-500 dark:to-fuchsia-500 dark:text-white'
@@ -538,7 +538,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                   key={`${msg.id}-${idx}`}
                   src={imageUrl} 
                   alt="imagen adjunta" 
-                  className="rounded-md cursor-zoom-in max-w-full h-auto max-h-72 object-contain w-auto"
+                  className="chat-message-content rounded-md cursor-zoom-in max-w-full h-auto max-h-72 object-contain w-auto"
                   loading="lazy"
                   crossOrigin="anonymous"
                   referrerPolicy="no-referrer"
@@ -560,7 +560,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
               </div>
             )}
             {msg.content && (
-              <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
+              <p className="chat-message-content text-[15px] leading-6 tablet:text-sm tablet:leading-5 whitespace-pre-wrap break-words">{msg.content}</p>
             )}
             <p className={`text-xs mt-1 ${
               msg.sender_role === 'user'
@@ -597,7 +597,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   }
 
   return (
-    <div className="h-full flex flex-col bg-background overflow-hidden">
+    <div className="h-full min-h-0 flex flex-col bg-background overflow-hidden">
       {/* Chat Header */}
       <div className="border-b dark:border-slate-700 px-4 xl:px-6 py-3 xl:py-4 flex-shrink-0">
         <div className="flex items-center justify-between gap-2">
@@ -711,6 +711,73 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
         </div>
       </div>
 
+      {/* Mobile Controls - Visible solo en móvil */}
+      <div className="xl:hidden border-b dark:border-slate-700 px-4 py-3 flex-shrink-0 bg-muted/20">
+        <div className="space-y-3">
+          {/* Estado de la conversación */}
+          {(() => {
+            const isClosed = conversation?.status === 'closed'
+            return (
+          <div className="flex flex-col space-y-1">
+            <label className="text-xs text-muted-foreground font-medium">
+              Estado de la conversación
+            </label>
+            <div className="flex items-center space-x-2">
+              <Select 
+                onValueChange={handleStatusChange} 
+                value={conversation?.status || 'closed'}
+                disabled={updatingStatus || isClosed}
+              >
+                <SelectTrigger className="h-11 min-h-[44px] w-full text-[15px] touch-manipulation">
+                  <SelectValue placeholder="Cambiar estado" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending_human">⏳ Pendiente</SelectItem>
+                  <SelectItem value="pending_response">⏳ Esperando Respuesta</SelectItem>
+                  <SelectItem value="active_ai">🤖 IA Activa</SelectItem>
+                  <SelectItem value="active_human">👤 Agente Activo</SelectItem>
+                  <SelectItem value="closed">🔒 Cerrada</SelectItem>
+                </SelectContent>
+              </Select>
+              {updatingStatus && (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary flex-shrink-0"></div>
+              )}
+            </div>
+          </div>
+            )
+          })()}
+
+          {/* Asignación de agente */}
+          {(() => {
+            const isClosed = conversation?.status === 'closed'
+            return (
+          <div className="flex flex-col space-y-1">
+            <label className="text-xs text-muted-foreground font-medium">
+              Agente asignado
+            </label>
+            <Select
+              onValueChange={(value) => handleAssignAgent(value)}
+              value={conversation?.assigned_agent_id || 'none'}
+              disabled={isClosed}
+            >
+              <SelectTrigger className="h-11 min-h-[44px] w-full text-[15px] touch-manipulation">
+                <SelectValue placeholder="Selecciona agente" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Sin asignar (volver a IA)</SelectItem>
+                {availableAgents.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    {a.name} · {a.email}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+            )
+          })()}
+        </div>
+      </div>
+
       {/* Messages */}
       <div className="flex-1 flex flex-col min-h-0 relative">
         {/* Botón para tomar conversación (solo cuando está en IA activa) */}
@@ -754,7 +821,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
         
         <div 
           ref={messagesContainerRef} 
-          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain p-6 space-y-4 chat-messages-scroll dark:[&>.message-sep]:border-slate-700"
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain px-3 py-3 tablet:px-4 tablet:py-4 desktop:px-6 desktop:py-6 space-y-3 tablet:space-y-2 desktop:space-y-2 chat-messages-scroll dark:[&>.message-sep]:border-slate-700"
         >
           {loading ? (
             <div className="flex items-center justify-center h-full">
@@ -803,12 +870,12 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
           }}
         />
         <form onSubmit={handleSendMessage} className="flex items-end space-x-2">
-          <Button type="button" variant="ghost" size="icon" className="flex-shrink-0">
+          <Button type="button" variant="ghost" size="icon" className="flex-shrink-0 h-11 w-11 min-w-[44px] min-h-[44px] touch-manipulation">
             <Paperclip className="h-4 w-4" />
           </Button>
           <Popover open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
             <PopoverTrigger asChild>
-              <Button type="button" variant="ghost" size="icon">
+              <Button type="button" variant="ghost" size="icon" className="h-11 w-11 min-w-[44px] min-h-[44px] touch-manipulation">
                 <Smile className="h-4 w-4" />
               </Button>
             </PopoverTrigger>
@@ -837,7 +904,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                     ? "Esperando respuesta del usuario..." 
                     : "Escribe un mensaje..."
             }
-            className="flex-1 min-h-[40px] max-h-[120px] resize-none"
+            className="flex-1 min-h-[44px] max-h-[120px] resize-none text-[15px] touch-manipulation"
             disabled={!conversationId || conversation?.status === 'closed' || conversation?.status === 'pending_response'}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -848,7 +915,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
             rows={1}
             style={{
               height: 'auto',
-              minHeight: '40px'
+              minHeight: '44px'
             }}
             onInput={(e) => {
               const target = e.target as HTMLTextAreaElement
@@ -866,7 +933,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
             });
             return null;
           })()}
-          <Button type="submit" size="icon" disabled={!message.trim() || !conversationId || conversation?.status === 'closed' || conversation?.status === 'pending_response'}>
+          <Button type="submit" size="icon" className="h-11 w-11 min-w-[44px] min-h-[44px] touch-manipulation" disabled={!message.trim() || !conversationId || conversation?.status === 'closed' || conversation?.status === 'pending_response'}>
             <Send className="h-4 w-4" />
           </Button>
         </form>

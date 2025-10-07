@@ -45,11 +45,11 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
   const { getClientDisplayName, getClientShortName } = useClient()
   const [isMobile, setIsMobile] = useState(false)
 
-  // Detectar si es móvil
+  // Detectar si es móvil (unificado con ResponsiveLayout: 768px)
   useEffect(() => {
     const checkMobile = () => {
-      setIsMobile(window.innerWidth < 1024)
-      if (window.innerWidth < 1024) {
+      setIsMobile(window.innerWidth < 768)
+      if (window.innerWidth < 768) {
         // En móviles, el estado se maneja desde el componente padre
       } else {
         // En desktop, mantener el estado del componente padre

@@ -72,7 +72,7 @@ export function useConversations() {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
   const [isSelectingConversation, setIsSelectingConversation] = useState(false)
-  const { user, profile } = useAuth()
+  const { user, profile, clientId, isProfileReady } = useAuth()
   const p = profile as any
 
   // Estados para scroll infinito
@@ -88,10 +88,15 @@ export function useConversations() {
   const [scrollTimeout, setScrollTimeout] = useState<NodeJS.Timeout | null>(null)
   const [newConversationIds, setNewConversationIds] = useState<Set<string>>(new Set())
 
+  // Estados para el pool de conversaciones priorizadas
+  const [conversationPool, setConversationPool] = useState<Conversation[]>([])
+  const [poolOffset, setPoolOffset] = useState(0)
+  const [poolSize] = useState(100) // Tamaño del pool inicial
+
   // Fetch conversations
   const fetchConversations = useCallback(async (options?: { background?: boolean }) => {
-    if (!user) {
-      console.log('❌ fetchConversations: No user available')
+    if (!user || !isProfileReady) {
+      console.log('❌ fetchConversations: No user available or profile not ready')
       return
     }
 
@@ -103,7 +108,7 @@ export function useConversations() {
       }
       console.log('🔍 fetchConversations: Starting fetch...')
       
-      console.log('🔍 fetchConversations: Profile client_id:', p?.client_id)
+      console.log('🔍 fetchConversations: Client ID:', clientId)
       console.log('🔍 fetchConversations: Profile role:', p?.role)
       
       let query = supabase
@@ -113,10 +118,8 @@ export function useConversations() {
         .limit(poolSize) // Cargar un pool inicial más grande para priorizar
 
       // Aplicar filtro por cliente solo si existe en el perfil (RLS hace el resto)
-      // Tipado defensivo: algunos perfiles antiguos podrían no tener client_id explícito
-      const clientIdUnsafe = p?.client_id as string | undefined
-      if (clientIdUnsafe) {
-        query = (query as any).eq('client_id', clientIdUnsafe)
+      if (clientId) {
+        query = (query as any).eq('client_id', clientId)
       }
 
       // If user is not admin, only show conversations assigned to them or pending
@@ -135,7 +138,7 @@ export function useConversations() {
       }
 
       console.log('🔍 fetchConversations: Query construida, ejecutando...')
-      console.log('🔍 fetchConversations: Profile client_id:', p?.client_id)
+      console.log('🔍 fetchConversations: Client ID:', clientId)
       console.log('🔍 fetchConversations: Profile role:', p?.role)
       const { data, error } = await (query as any)
       console.log('🔍 fetchConversations: Query ejecutada')
@@ -256,7 +259,7 @@ export function useConversations() {
         setLoading(false)
       }
     }
-  }, [user, profile, p?.client_id, p?.id, p?.role])
+  }, [user, clientId, isProfileReady, p?.id, p?.role, poolSize])
 
   // Fetch messages for a conversation
   const fetchMessages = useCallback(async (conversationId: string) => {
@@ -601,11 +604,6 @@ export function useConversations() {
     setMessages([])
   }, [])
 
-  // Estados para el pool de conversaciones priorizadas
-  const [conversationPool, setConversationPool] = useState<Conversation[]>([])
-  const [poolOffset, setPoolOffset] = useState(0)
-  const [poolSize, setPoolSize] = useState(100) // Tamaño del pool inicial
-
   // Función para manejar cambios de estado de scroll
   const handleScrollStateChange = useCallback((isScrolling: boolean) => {
     console.log('📜 Scroll state changed:', isScrolling)
@@ -671,9 +669,8 @@ export function useConversations() {
         .range(poolOffset + poolSize, poolOffset + poolSize + poolSize - 1) // Siguiente lote
 
       // Aplicar filtro por cliente
-      const clientIdUnsafe = p?.client_id as string | undefined
-      if (clientIdUnsafe) {
-        query = (query as any).eq('client_id', clientIdUnsafe)
+      if (clientId) {
+        query = (query as any).eq('client_id', clientId)
       }
 
       // Aplicar filtro por rol
@@ -750,7 +747,7 @@ export function useConversations() {
       console.error('❌ Error loading more conversations from DB:', error)
       setHasMore(false)
     }
-  }, [poolOffset, poolSize, p?.client_id, p?.role, p?.id])
+  }, [poolOffset, poolSize, clientId, p?.role, p?.id])
 
   // Función principal para cargar más conversaciones (scroll infinito)
   const loadMore = useCallback(async () => {
@@ -1092,7 +1089,7 @@ export function useConversations() {
     onConversationInsert: handleConversationInsert,
     onConversationUpdate: handleConversationUpdate,
     userId: (p?.id as string | undefined),
-    clientId: (p?.client_id as string | undefined)
+    clientId: clientId
   })
   console.log('🔌 [REALTIME] Hook useRealtimeConversations configurado')
 
@@ -1101,18 +1098,20 @@ export function useConversations() {
     console.log('🚀 useEffect initial fetch triggered')
     console.log('👤 User:', user)
     console.log('👤 Profile:', profile)
+    console.log('👤 isProfileReady:', isProfileReady)
+    console.log('👤 clientId:', clientId)
     console.log('🔄 isInitialized:', isInitialized)
     
-    if (user && profile && !isInitialized) {
-      console.log('✅ User and profile available, fetching conversations (first time)')
+    if (user && isProfileReady && !isInitialized) {
+      console.log('✅ User and profile ready, fetching conversations (first time)')
       fetchConversations()
-    } else if (!user || !profile) {
-      console.log('❌ User or profile not available yet')
+    } else if (!user || !isProfileReady) {
+      console.log('❌ User or profile not ready yet')
       setIsInitialized(false)
     } else if (isInitialized) {
       console.log('⏭️ Already initialized, skipping fetch')
     }
-  }, [user, profile, isInitialized, fetchConversations])
+  }, [user, isProfileReady, clientId, isInitialized, fetchConversations])
 
   return {
     conversations,
