@@ -21,6 +21,12 @@ export function SwipeableRow({
   enableSwipe = true,
   showAction = true
 }: SwipeableRowProps) {
+  // 🔧 FIX: Si el swipe está deshabilitado, renderizar solo los children sin wrappers
+  // Esto evita problemas de clics desalineados por capas extra de divs
+  if (!enableSwipe) {
+    return <>{children}</>;
+  }
+  
   const [translateX, setTranslateX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [startX, setStartX] = useState(0);
@@ -79,10 +85,10 @@ export function SwipeableRow({
         className={`relative transition-transform duration-200 ease-out ${
           isDragging ? 'transition-none' : ''
         }`}
-        style={{ transform: `translateX(${enableSwipe ? translateX : 0}px)` }}
-        onTouchStart={enableSwipe ? handleTouchStart : undefined}
-        onTouchMove={enableSwipe ? handleTouchMove : undefined}
-        onTouchEnd={enableSwipe ? handleTouchEnd : undefined}
+        style={{ transform: `translateX(${translateX}px)` }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       >
         {children}
       </div>

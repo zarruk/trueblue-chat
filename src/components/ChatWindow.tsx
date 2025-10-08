@@ -847,12 +847,12 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
               ))}
 
               {/* Mensajes de la conversación actual */}
-              {localMessages.length === 0 ? (
+              {messages.length === 0 ? (
                 <div className="text-center text-muted-foreground">
                   <p>No hay mensajes aún. Sé el primero en escribir.</p>
                 </div>
               ) : (
-                localMessages.map((msg) => renderMessageBubble(msg, false))
+                messages.map((msg) => renderMessageBubble(msg, false))
               )}
             </>
           )}
