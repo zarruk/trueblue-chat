@@ -210,22 +210,38 @@ export function useConversations() {
       const conversationsWithLastMessage = await Promise.all(
         (data || []).map(async (conversation: any) => {
           try {
-            const { data: lastMessage } = await supabase
+            let query: any = supabase
               .from('tb_messages')
               .select('sender_role, content, created_at')
               .eq('conversation_id', conversation.id)
-              // .eq('client_id', profile?.client_id) // Filtrar mensajes por cliente también
               .order('created_at', { ascending: false })
               .limit(1)
-              .maybeSingle()
 
-            return {
+            // Aplicar filtro por cliente si está disponible
+            if (clientId) {
+              query = query.eq('client_id', clientId)
+            }
+
+            const { data: lastMessage, error: messageError } = await query.maybeSingle()
+
+            if (messageError) {
+              console.warn('⚠️ Error obteniendo último mensaje para conversación:', conversation.id, messageError)
+            }
+
+            const result = {
               ...conversation,
               last_message_sender_role: lastMessage?.sender_role || null,
               last_message_at: lastMessage?.created_at || null,
               last_message_content: lastMessage?.content || null
             }
+
+            if (!lastMessage) {
+              console.log('📭 No hay mensajes para conversación:', conversation.id, conversation.username || conversation.user_id)
+            }
+
+            return result
           } catch (error) {
+            console.warn('⚠️ Excepción obteniendo último mensaje para conversación:', conversation.id, error)
             // Si no hay mensajes o hay error, devolver la conversación sin el campo
             return {
               ...conversation,
@@ -321,12 +337,18 @@ export function useConversations() {
     }
 
     try {
-      // console.log('🔍 fetchMessages: Fetching messages for conversation:', conversationId)
-      const { data, error } = await supabase
+      console.log('🔍 fetchMessages: Fetching messages for conversation:', conversationId)
+      
+      let query: any = supabase
         .from('tb_messages')
         .select('*')
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: true })
+
+      // NOTA: No aplicamos filtro por client_id aquí porque los mensajes ya están filtrados
+      // indirectamente a través de la relación conversation_id -> tb_conversations.client_id
+
+      const { data, error } = await query
 
       if (error) {
         console.error('❌ Error fetching messages:', error)
@@ -334,13 +356,13 @@ export function useConversations() {
         return
       }
 
-      // console.log('✅ Messages fetched successfully:', data)
+      console.log('✅ Messages fetched successfully:', data?.length || 0, 'messages for conversation:', conversationId)
       setMessages((data as any) || [])
     } catch (error) {
       console.error('❌ Exception fetching messages:', error)
       toast.error('Error al cargar los mensajes')
     }
-  }, [])
+  }, [clientId])
 
   // Send a message
   const sendMessage = useCallback(async (
@@ -643,7 +665,7 @@ export function useConversations() {
     try {
       // 🔧 FIX: Volver al orden original para evitar loops
       setSelectedConversationId(conversationId)
-      // console.log('📨 Fetching messages for conversation:', conversationId)
+      console.log('📨 selectConversation: About to fetch messages for conversation:', conversationId)
       await fetchMessages(conversationId)
     } finally {
       setIsSelectingConversation(false)
@@ -686,14 +708,15 @@ export function useConversations() {
       console.log('🔄 loadMore: Cargando desde el pool, página', currentPage + 1)
       
       // Calcular cuántas conversaciones mostrar del pool
-      const conversationsToShow = (currentPage + 1) * 20
+      const nextPage = currentPage + 1
+      const conversationsToShow = nextPage * 20
       const conversationsToDisplay = conversationPool.slice(0, conversationsToShow)
       
       console.log('🔄 loadMore: Mostrando', conversationsToDisplay.length, 'de', conversationPool.length, 'conversaciones del pool')
       
       // Actualizar la lista con las conversaciones del pool
       setConversations(conversationsToDisplay)
-      setCurrentPage(prev => prev + 1)
+      setCurrentPage(nextPage)
 
       // Si ya mostramos todas las conversaciones del pool, necesitamos cargar más
       if (conversationsToDisplay.length >= conversationPool.length) {
@@ -793,6 +816,12 @@ export function useConversations() {
       
       // Actualizar el offset para el siguiente lote
       setPoolOffset(prev => prev + poolSize)
+      
+      // Actualizar hasMore basándose en si se cargaron menos conversaciones de las esperadas
+      if (newPrioritizedConversations.length < poolSize) {
+        console.log('🔄 loadMoreConversationsFromDB: hasMore cambiado a FALSE - Menos conversaciones de las esperadas')
+        setHasMore(false)
+      }
       
       console.log('✅ loadMoreConversationsFromDB: Agregadas', newPrioritizedConversations.length, 'conversaciones al pool')
     } catch (error) {
