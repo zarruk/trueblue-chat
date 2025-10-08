@@ -58,7 +58,29 @@ export default function Dashboard() {
   //   selectedConversationId
   // });
 
-  // Eliminado: No refrescar automÃ¡ticamente al recuperar foco
+  // Page Visibility API: Recargar conversaciones al regresar a la pestaña
+  useEffect(() => {
+    let lastVisibilityChange = 0
+    
+    const handleVisibilityChange = () => {
+      const now = Date.now()
+      
+      // Throttle: solo permitir una recarga cada 5 segundos
+      if (now - lastVisibilityChange < 5000) {
+        console.log('⏭️ [PAGE VISIBILITY] Throttled - muy reciente')
+        return
+      }
+      
+      if (!document.hidden && conversations.length > 0) {
+        lastVisibilityChange = now
+        console.log('👁️ [PAGE VISIBILITY] Pestaña visible, recargando conversaciones...')
+        fetchConversations({ background: true })
+      }
+    }
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [fetchConversations, conversations.length])
 
   // Las conversaciones se actualizan automÃ¡ticamente vÃ­a tiempo real
 
@@ -90,7 +112,7 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search]);
 
-  if (loading) {
+  if (loading && conversations.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, useRef } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { Profile } from '@/types/database';
@@ -23,9 +23,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(true);
+  const profileLoadedRef = useRef(false);
 
-  const loadProfile = async (u: User) => {
-    setProfileLoading(true);
+  const loadProfile = async (u: User, skipLoadingState = false) => {
+    // Si ya tenemos un perfil y no queremos cambiar el loading state, usar modo silencioso
+    if (!skipLoadingState) {
+      setProfileLoading(true);
+    }
     try {
       const email = u.email || '';
       const name = (u.user_metadata as any)?.name || email?.split('@')[0] || 'Agente';
@@ -113,11 +117,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('🏁 Perfil final cargado en Auth:', finalProfile);
       console.log('🏁 Client ID del perfil:', finalProfile?.client_id);
       setProfile(finalProfile || null);
+      
+      if (finalProfile) {
+        profileLoadedRef.current = true;
+      }
     } catch (e) {
       console.error('❌ Excepción resolviendo perfil:', e);
       setProfile(null);
     } finally {
-      setProfileLoading(false);
+      if (!skipLoadingState) {
+        setProfileLoading(false);
+      }
     }
   };
 
@@ -140,12 +150,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(u);
         
         if (u) {
-          // ✅ Cargar perfil en TODOS los eventos con usuario (INITIAL_SESSION, TOKEN_REFRESHED, SIGNED_IN)
-          await loadProfile(u);
+          // ✅ Solo recargar perfil en eventos específicos (INITIAL_SESSION, SIGNED_IN)
+          // NO recargar en TOKEN_REFRESHED para evitar desmontar componentes
+          if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
+            // Si ya cargamos el perfil anteriormente, usar modo silencioso para no desmontar componentes
+            const hasLoadedBefore = profileLoadedRef.current;
+            console.log('🔍 Perfil ya cargado anteriormente:', hasLoadedBefore);
+            await loadProfile(u, hasLoadedBefore);
+          } else {
+            console.log('⏭️ Evento de auth no requiere recarga de perfil:', event);
+            setAuthLoading(false);
+          }
         } else {
           console.log('👤 Usuario no autenticado');
           setProfile(null);
           setProfileLoading(false);
+          profileLoadedRef.current = false;
         }
         
         setAuthLoading(false);

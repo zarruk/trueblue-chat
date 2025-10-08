@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/integrations/supabase/client'
 import { useAuth } from './useAuth'
 // Notificaciones deshabilitadas
@@ -74,6 +74,9 @@ export function useConversations() {
   const [isSelectingConversation, setIsSelectingConversation] = useState(false)
   const { user, profile, clientId, isProfileReady } = useAuth()
   const p = profile as any
+  
+  // Cola simple para evitar llamadas simultáneas a fetchConversations
+  const isFetchingRef = useRef(false)
 
   // Estados para scroll infinito
   const [currentPage, setCurrentPage] = useState(0)
@@ -100,13 +103,26 @@ export function useConversations() {
       return
     }
 
+    // Cola simple: si ya hay una llamada en progreso, ignorar esta
+    if (isFetchingRef.current) {
+      console.log('⏭️ fetchConversations: Ya hay una llamada en progreso, ignorando...')
+      return
+    }
+
     try {
+      isFetchingRef.current = true
+      
       if (options?.background) {
         setRefreshing(true)
       } else {
         setLoading(true)
       }
       console.log('🔍 fetchConversations: Starting fetch...')
+      
+      // Timeout para evitar que se cuelgue indefinidamente
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('fetchConversations timeout')), 30000) // 30 segundos
+      })
       
       console.log('🔍 fetchConversations: Client ID:', clientId)
       console.log('🔍 fetchConversations: Profile role:', p?.role)
@@ -140,7 +156,12 @@ export function useConversations() {
       console.log('🔍 fetchConversations: Query construida, ejecutando...')
       console.log('🔍 fetchConversations: Client ID:', clientId)
       console.log('🔍 fetchConversations: Profile role:', p?.role)
-      const { data, error } = await (query as any)
+      
+      // Usar Promise.race para timeout
+      const { data, error } = await Promise.race([
+        (query as any),
+        timeoutPromise
+      ]) as any
       console.log('🔍 fetchConversations: Query ejecutada')
       console.log('🔍 fetchConversations: Error:', error)
       console.log('🔍 fetchConversations: Data length:', data?.length)
@@ -154,6 +175,35 @@ export function useConversations() {
       }
 
       console.log('✅ fetchConversations: Conversations fetched successfully:', data?.length || 0)
+      
+      // Para recargas en background, usar datos más simples para evitar timeout
+      if (options?.background) {
+        console.log('🔄 fetchConversations: Modo background - usando datos básicos sin último mensaje')
+        const basicConversations = (data || []).map((conversation: any) => ({
+          ...conversation,
+          last_message_sender_role: null,
+          last_message_at: null,
+          last_message_content: null
+        }))
+        
+        // Aplicar priorización básica
+        const prioritizedPool = sortConversationsByPriority(basicConversations)
+        setConversationPool(prioritizedPool)
+        setPoolOffset(0)
+        
+        const initialConversations = prioritizedPool.slice(0, 20)
+        setConversations(initialConversations)
+        
+        if (!options?.background) {
+          setCurrentPage(0)
+          setHasMore(prioritizedPool.length > 20)
+          setTotalCount(prioritizedPool.length)
+        }
+        
+        setIsInitialized(true)
+        return
+      }
+      
       console.log('🔍 fetchConversations: Obteniendo último mensaje de cada conversación...')
 
       // Obtener el último mensaje de cada conversación para determinar urgencia y previsualización
@@ -253,6 +303,8 @@ export function useConversations() {
       console.error('❌ Exception fetching conversations:', error)
       toast.error('Error al cargar las conversaciones')
     } finally {
+      isFetchingRef.current = false
+      
       if (options?.background) {
         setRefreshing(false)
       } else {
