@@ -247,13 +247,16 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
 
     const setupChannel = async () => {
       try {
+        // ✅ FIX: Usar nombre único y específico para este canal
+        const channelName = `chat-window-${conversationId}-${Date.now()}`
+        
         channel = supabase
-          .channel(`chat-window-messages-${conversationId}`)
+          .channel(channelName)
           .on(
             'postgres_changes',
             { event: 'INSERT', schema: 'public', table: 'tb_messages', filter: `conversation_id=eq.${conversationId}` },
             (payload) => {
-              // 🔧 FIX: Verificar que el componente sigue montado antes de actualizar estado
+              // ✅ FIX: Verificar que el componente sigue montado antes de actualizar estado
               if (!isMounted) return
               
               const newMessage = payload.new as unknown as Message
@@ -267,7 +270,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
             'postgres_changes',
             { event: 'UPDATE', schema: 'public', table: 'tb_messages', filter: `conversation_id=eq.${conversationId}` },
             (payload) => {
-              // 🔧 FIX: Verificar que el componente sigue montado antes de actualizar estado
+              // ✅ FIX: Verificar que el componente sigue montado antes de actualizar estado
               if (!isMounted) return
               
               const updatedMessage = payload.new as unknown as Message
@@ -288,19 +291,23 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     setupChannel()
 
     return () => {
-      // 🔧 FIX: Marcar como desmontado y limpiar canal de forma segura
+      // ✅ FIX: Marcar como desmontado primero para prevenir actualizaciones de estado
       isMounted = false
       
+      // ✅ FIX: Limpiar solo el canal específico de este componente
       if (channel) {
         try {
           channel.unsubscribe()
-          // console.log('🧹 [ChatWindow] Canal de tiempo real limpiado para conversación', conversationId)
+          console.log('🧹 [ChatWindow] Canal limpiado para conversación', conversationId)
         } catch (error) {
-          console.warn('⚠️ [ChatWindow] Error al limpiar canal de tiempo real:', error)
+          console.warn('⚠️ [ChatWindow] Error al limpiar canal:', error)
         }
       }
+      
+      // ✅ FIX: NO buscar canales huérfanos - confiar en que cada instancia limpia su propio canal
+      // Esto evita interferencia con otros componentes y race conditions
     }
-  }, [conversationId])
+  }, []) // ✅ FIX: NO re-crear canales automáticamente
 
   // ELIMINADO: No usar polling automático para evitar refrescos
 

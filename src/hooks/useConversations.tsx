@@ -119,11 +119,6 @@ export function useConversations() {
       }
       console.log('🔍 fetchConversations: Starting fetch...')
       
-      // Timeout para evitar que se cuelgue indefinidamente
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('fetchConversations timeout')), 30000) // 30 segundos
-      })
-      
       console.log('🔍 fetchConversations: Client ID:', clientId)
       console.log('🔍 fetchConversations: Profile role:', p?.role)
       
@@ -154,19 +149,13 @@ export function useConversations() {
       }
 
       console.log('🔍 fetchConversations: Query construida, ejecutando...')
-      console.log('🔍 fetchConversations: Client ID:', clientId)
-      console.log('🔍 fetchConversations: Profile role:', p?.role)
       
-      // Usar Promise.race para timeout
-      const { data, error } = await Promise.race([
-        (query as any),
-        timeoutPromise
-      ]) as any
-      console.log('🔍 fetchConversations: Query ejecutada')
-      console.log('🔍 fetchConversations: Error:', error)
-      console.log('🔍 fetchConversations: Data length:', data?.length)
-      console.log('🔍 fetchConversations: Data sample:', data?.slice(0, 2))
-      // console.log('🔍 fetchConversations: Data client_ids:', (data as any)?.map((c: any) => c.client_id))
+      // ✅ FIX: Ejecutar la query correctamente sin Promise.race problemático
+      const { data, error } = await (query as any)
+      
+      console.log('✅ fetchConversations: Query ejecutada')
+      console.log('📊 fetchConversations: Data length:', data?.length)
+      console.log('📊 fetchConversations: Error:', error)
 
       if (error) {
         console.error('❌ Error fetching conversations:', error)
@@ -192,6 +181,7 @@ export function useConversations() {
         setPoolOffset(0)
         
         const initialConversations = prioritizedPool.slice(0, 20)
+        console.log('🔄 fetchConversations: Setting conversations in background mode:', initialConversations.length)
         setConversations(initialConversations)
         
         if (!options?.background) {
@@ -201,6 +191,7 @@ export function useConversations() {
         }
         
         setIsInitialized(true)
+        console.log('✅ fetchConversations: Background mode completed, isInitialized = true')
         return
       }
       
@@ -267,7 +258,9 @@ export function useConversations() {
       console.log('🔍 fetchConversations: Mostrando primeras', initialConversations.length, 'conversaciones del pool')
       
       console.log('🔍 fetchConversations: Setting conversations in state...')
+      console.log('🔍 fetchConversations: initialConversations.length =', initialConversations.length)
       setConversations(initialConversations)
+      console.log('✅ fetchConversations: setConversations called with', initialConversations.length, 'conversations')
       
       // Resetear estados de paginación en la carga inicial
       if (!options?.background) {
@@ -277,52 +270,65 @@ export function useConversations() {
         console.log('🔄 fetchConversations: hasMore =', prioritizedPool.length > 20, 'poolSize =', prioritizedPool.length)
       }
 
-      // Auto-cierre de conversaciones cuyo último mensaje del usuario tiene >24h
-      try {
-        const role = (profile as any)?.role as string | undefined
-        if (role === 'admin') {
-          const now = Date.now()
-          const dayMs = 24 * 60 * 60 * 1000
-          const toClose = (conversationsWithLastMessage || []).filter((c: any) => {
-            if (!c || c.status === 'closed') return false
-            if (!c.last_message_at) return false
-            const age = now - new Date(c.last_message_at).getTime()
-            return age >= dayMs
-          })
+      // ✅ FIX: Resetear loading ANTES de la sección de auto-cierre que puede colgarse
+      if (!options?.background) {
+        setLoading(false)
+        console.log('🧹 fetchConversations: setLoading(false) called BEFORE auto-cierre')
+      }
+      setIsInitialized(true)
+      console.log('✅ fetchConversations: setIsInitialized(true) called')
 
-          if (toClose.length > 0) {
-            console.log(`🕒 Auto-cierre: cerrando ${toClose.length} conversación(es) por inactividad >24h`)
-            for (const conv of toClose) {
-              try {
-                const { error } = await supabase
-                  .from('tb_conversations')
-                  .update({ status: 'closed', updated_at: new Date().toISOString() })
-                  .eq('id', conv.id)
-                if (!error) {
-                  setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, status: 'closed', updated_at: new Date().toISOString() } : c))
-                } else {
-                  console.warn('⚠️ Auto-cierre: fallo al cerrar conversación', conv.id, error)
+      // ✅ FIX: Auto-cierre en background para no bloquear la UI
+      setTimeout(async () => {
+        try {
+          const role = (profile as any)?.role as string | undefined
+          if (role === 'admin') {
+            const now = Date.now()
+            const dayMs = 24 * 60 * 60 * 1000
+            const toClose = (conversationsWithLastMessage || []).filter((c: any) => {
+              if (!c || c.status === 'closed') return false
+              if (!c.last_message_at) return false
+              const age = now - new Date(c.last_message_at).getTime()
+              return age >= dayMs
+            })
+
+            if (toClose.length > 0) {
+              console.log(`🕒 Auto-cierre: cerrando ${toClose.length} conversación(es) por inactividad >24h`)
+              for (const conv of toClose) {
+                try {
+                  const { error } = await supabase
+                    .from('tb_conversations')
+                    .update({ status: 'closed', updated_at: new Date().toISOString() })
+                    .eq('id', conv.id)
+                  if (!error) {
+                    setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, status: 'closed', updated_at: new Date().toISOString() } : c))
+                  } else {
+                    console.warn('⚠️ Auto-cierre: fallo al cerrar conversación', conv.id, error)
+                  }
+                } catch (e) {
+                  console.warn('⚠️ Auto-cierre: excepción cerrando conversación', conv.id, e)
                 }
-              } catch (e) {
-                console.warn('⚠️ Auto-cierre: excepción cerrando conversación', conv.id, e)
               }
             }
           }
+        } catch (e) {
+          console.warn('⚠️ Auto-cierre: error general', e)
         }
-      } catch (e) {
-        console.warn('⚠️ Auto-cierre: error general', e)
-      }
-      setIsInitialized(true)
+      }, 0) // Ejecutar en el siguiente tick del event loop
     } catch (error) {
       console.error('❌ Exception fetching conversations:', error)
       toast.error('Error al cargar las conversaciones')
     } finally {
+      console.log('🧹 fetchConversations: Finally block executing')
       isFetchingRef.current = false
+      console.log('🧹 fetchConversations: isFetchingRef.current = false')
       
       if (options?.background) {
         setRefreshing(false)
+        console.log('🧹 fetchConversations: setRefreshing(false) called')
       } else {
-        setLoading(false)
+        // ✅ FIX: setLoading(false) ya se ejecutó antes, solo loggear
+        console.log('🧹 fetchConversations: setLoading(false) already called before auto-cierre')
       }
     }
   }, [user, clientId, isProfileReady, p?.id, p?.role, poolSize])
@@ -651,24 +657,36 @@ export function useConversations() {
 
   // Select a conversation
   const selectConversation = useCallback(async (conversationId: string) => {
-    // 🔧 FIX: Evitar loops infinitos
-    if (isSelectingConversation || selectedConversationId === conversationId) {
-      console.log('🚫 selectConversation: Ya en proceso o misma conversación')
+    console.log('🎯 selectConversation called with:', conversationId)
+    console.log('🎯 selectConversation: isSelectingConversation =', isSelectingConversation)
+    console.log('🎯 selectConversation: selectedConversationId =', selectedConversationId)
+    
+    // ✅ FIX: Evitar loops infinitos con verificación más simple
+    if (isSelectingConversation) {
+      console.log('🚫 selectConversation: Ya en proceso, ignorando...')
+      return
+    }
+    
+    if (selectedConversationId === conversationId) {
+      console.log('🚫 selectConversation: Misma conversación, ignorando...')
       return
     }
     
     setIsSelectingConversation(true)
-    console.log('🎯 selectConversation called with:', conversationId)
+    console.log('🎯 selectConversation: Iniciando selección...')
     
     try {
-      // 🔧 FIX: Volver al orden original para evitar loops
       setSelectedConversationId(conversationId)
       console.log('📨 selectConversation: About to fetch messages for conversation:', conversationId)
       await fetchMessages(conversationId)
+      console.log('✅ selectConversation: Completado exitosamente')
+    } catch (error) {
+      console.error('❌ selectConversation: Error:', error)
     } finally {
+      console.log('🧹 selectConversation: Reseteando isSelectingConversation')
       setIsSelectingConversation(false)
     }
-  }, [fetchMessages, isSelectingConversation, selectedConversationId])
+  }, [fetchMessages]) // ✅ FIX: Solo depender de fetchMessages, no de los estados
 
   const clearSelectedConversation = useCallback(() => {
     console.log('🧹 Cleared selected conversation')

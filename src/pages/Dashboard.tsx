@@ -10,6 +10,7 @@ import { MessageSquare } from 'lucide-react';
 import { RealtimeDebugPanel } from '@/components/RealtimeDebugPanel';
 import { useRealtimeFallback } from '@/hooks/useRealtimeFallback';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
 
 
 export default function Dashboard() {
@@ -58,29 +59,20 @@ export default function Dashboard() {
   //   selectedConversationId
   // });
 
-  // Page Visibility API: Recargar conversaciones al regresar a la pestaña
+  // ✅ FIX: Page Visibility API DESHABILITADO para evitar interferencias con canales WebSocket
+  // El problema original era que al volver de otra pestaña, los canales se interferían
+  // Supabase maneja la reconexión automáticamente, no necesitamos intervenir
   useEffect(() => {
-    let lastVisibilityChange = 0
+    console.log('👁️ [PAGE VISIBILITY] Page Visibility API deshabilitado - Supabase maneja reconexión automática')
     
-    const handleVisibilityChange = () => {
-      const now = Date.now()
-      
-      // Throttle: solo permitir una recarga cada 5 segundos
-      if (now - lastVisibilityChange < 5000) {
-        console.log('⏭️ [PAGE VISIBILITY] Throttled - muy reciente')
-        return
-      }
-      
-      if (!document.hidden && conversations.length > 0) {
-        lastVisibilityChange = now
-        console.log('👁️ [PAGE VISIBILITY] Pestaña visible, recargando conversaciones...')
-        fetchConversations({ background: true })
-      }
+    // No hacer nada - dejar que Supabase maneje todo automáticamente
+    return () => {
+      console.log('👁️ [PAGE VISIBILITY] Page Visibility cleanup - no action needed')
     }
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-  }, [fetchConversations, conversations.length])
+  }, []) // Sin dependencias - solo se ejecuta una vez
+
+  // ✅ FIX: NO necesitamos cleanup global - cada componente maneja sus propios canales
+  // Supabase limpiará automáticamente los canales cuando el cliente se desconecte
 
   // Las conversaciones se actualizan automÃ¡ticamente vÃ­a tiempo real
 

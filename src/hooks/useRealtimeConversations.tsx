@@ -378,14 +378,35 @@ export function useRealtimeConversations({
         conversationsChannel.unsubscribe()
       }
     }
-  }, [clientId]) // Re-configurar solo cuando cambie el clientId
+  }, []) // ✅ FIX: NO re-configurar automáticamente - solo cuando se monte el hook
 
   useEffect(() => {
     console.log('🔌 [REALTIME] useEffect ejecutándose, configurando suscripciones...')
+    
+    // ✅ FIX: Verificar si ya hay canales activos para evitar duplicados (React Strict Mode)
+    const existingChannels = supabase.getChannels()
+    const hasActiveChannels = existingChannels.some(ch => 
+      ch.topic.includes('messages-changes') || ch.topic.includes('conversations-changes')
+    )
+    
+    if (hasActiveChannels) {
+      console.log('🔌 [REALTIME] Canales ya existen, saltando configuración')
+      return
+    }
+    
     const cleanup = setupRealtimeSubscriptions()
     console.log('🔌 [REALTIME] Suscripciones configuradas, cleanup function creada')
-    return cleanup
-  }, [setupRealtimeSubscriptions]) // Depende de setupRealtimeSubscriptions que a su vez depende de clientId
+    
+    // ✅ FIX: Solo limpiar los canales específicos de este hook
+    return () => {
+      console.log('🧹 [REALTIME] Limpieza de canales de useRealtimeConversations...')
+      if (cleanup) {
+        cleanup()
+      }
+      // ✅ FIX: NO usar removeAllChannels() - la función cleanup ya limpia los canales específicos
+      // Cada componente es responsable de sus propios canales
+    }
+  }, [clientId]) // ✅ FIX: Dependencia estable - solo re-configurar cuando cambie clientId
 
   return {
     setupRealtimeSubscriptions
