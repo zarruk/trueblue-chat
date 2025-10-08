@@ -217,10 +217,8 @@ export function useConversations() {
               .order('created_at', { ascending: false })
               .limit(1)
 
-            // Aplicar filtro por cliente si está disponible
-            if (clientId) {
-              query = query.eq('client_id', clientId)
-            }
+            // NOTA: No aplicamos filtro por client_id aquí porque los mensajes ya están filtrados
+            // indirectamente a través de la relación conversation_id -> tb_conversations.client_id
 
             const { data: lastMessage, error: messageError } = await query.maybeSingle()
 
