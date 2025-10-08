@@ -42,8 +42,8 @@ export function useAgents() {
 
     try {
       setLoading(true)
-      console.log('🔍 fetchAgents: Obteniendo agentes de la tabla profiles...')
-      console.log('🔍 fetchAgents: Client ID:', clientId)
+      // console.log('🔍 fetchAgents: Obteniendo agentes de la tabla profiles...')
+      // console.log('🔍 fetchAgents: Client ID:', clientId)
       
       const { data, error } = await supabase
         .from('profiles')
@@ -53,9 +53,9 @@ export function useAgents() {
         .eq('client_id', clientId) // Filtrar por cliente
         .order('name', { ascending: true })
 
-      console.log('🔍 fetchAgents: Consulta ejecutada')
-      console.log('🔍 fetchAgents: Error:', error)
-      console.log('🔍 fetchAgents: Data:', data)
+      // console.log('🔍 fetchAgents: Consulta ejecutada')
+      // console.log('🔍 fetchAgents: Error:', error)
+      // console.log('🔍 fetchAgents: Data:', data)
 
       if (error) {
         console.error('❌ Error fetching agents from profiles:', error)
@@ -63,8 +63,8 @@ export function useAgents() {
         return
       }
 
-      console.log('✅ fetchAgents: Agentes obtenidos:', data?.length || 0)
-      console.log('✅ fetchAgents: Datos completos:', data)
+      // console.log('✅ fetchAgents: Agentes obtenidos:', data?.length || 0)
+      // console.log('✅ fetchAgents: Datos completos:', data)
       setAgents((data as any) || [])
     } catch (error) {
       console.error('❌ Exception fetching agents:', error)
@@ -351,8 +351,8 @@ export function useAgents() {
   // Initial fetch
   useEffect(() => {
     fetchAgents()
-    fetchAgentStats()
-  }, [fetchAgents, fetchAgentStats])
+    // fetchAgentStats() // Comentado: estadísticas deshabilitadas
+  }, [fetchAgents]) // Removida dependencia fetchAgentStats
 
   return {
     agents,

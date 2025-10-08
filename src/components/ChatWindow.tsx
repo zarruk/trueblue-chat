@@ -176,14 +176,15 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     }
   }
 
-  // Sincronizar conversación seleccionada y cargar mensajes cuando cambia conversationId
-  useEffect(() => {
-    if (!conversationId) return
-    if (onSelectConversation) {
-      // console.log('🔄 ChatWindow: Selecting conversation for realtime + loading messages:', conversationId)
-      onSelectConversation(conversationId)
-    }
-  }, [conversationId]) // Removida dependencia onSelectConversation para evitar loop
+  // COMENTADO: Llamada redundante a selectConversation
+  // Dashboard ya maneja la selección de conversaciones, ChatWindow solo necesita mostrar los datos
+  // useEffect(() => {
+  //   if (!conversationId) return
+  //   if (onSelectConversation) {
+  //     console.log('🔄 ChatWindow: Selecting conversation for realtime + loading messages:', conversationId)
+  //     onSelectConversation(conversationId)
+  //   }
+  // }, [conversationId])
 
   // Update local messages when propMessages change (evitar deps inestables)
   useEffect(() => {

@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useConversations } from '@/hooks/useConversations';
 import { useAgents } from '@/hooks/useAgents';
@@ -89,14 +89,14 @@ export default function Dashboard() {
     ? conversations.find(conv => conv.id === selectedConversationId) || null
     : null;
 
-  const handleSelectConversation = (conversationId: string) => {
+  const handleSelectConversation = useCallback((conversationId: string) => {
     console.log('ðŸ–±ï¸ Conversation selected:', conversationId);
     selectConversation(conversationId);
     // sincronizar URL para deep-linking
     const params = new URLSearchParams(location.search);
     params.set('conv', conversationId);
     navigate({ pathname: '/dashboard', search: params.toString() }, { replace: true });
-  };
+  }, [selectConversation, location.search, navigate]);
 
   // seleccionar conversaciÃ³n desde query param ?conv=
   useEffect(() => {

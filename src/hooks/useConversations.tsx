@@ -321,7 +321,7 @@ export function useConversations() {
     }
 
     try {
-      console.log('🔍 fetchMessages: Fetching messages for conversation:', conversationId)
+      // console.log('🔍 fetchMessages: Fetching messages for conversation:', conversationId)
       const { data, error } = await supabase
         .from('tb_messages')
         .select('*')
@@ -334,7 +334,7 @@ export function useConversations() {
         return
       }
 
-      console.log('✅ Messages fetched successfully:', data)
+      // console.log('✅ Messages fetched successfully:', data)
       setMessages((data as any) || [])
     } catch (error) {
       console.error('❌ Exception fetching messages:', error)
@@ -643,7 +643,7 @@ export function useConversations() {
     try {
       // 🔧 FIX: Volver al orden original para evitar loops
       setSelectedConversationId(conversationId)
-      console.log('📨 Fetching messages for conversation:', conversationId)
+      // console.log('📨 Fetching messages for conversation:', conversationId)
       await fetchMessages(conversationId)
     } finally {
       setIsSelectingConversation(false)
@@ -658,7 +658,7 @@ export function useConversations() {
 
   // Función para manejar cambios de estado de scroll
   const handleScrollStateChange = useCallback((isScrolling: boolean) => {
-    console.log('📜 Scroll state changed:', isScrolling)
+    // console.log('📜 Scroll state changed:', isScrolling)
     setIsUserScrolling(isScrolling)
     
     if (isScrolling) {
@@ -669,7 +669,7 @@ export function useConversations() {
       
       // Después de 2 segundos sin scroll, volver a modo normal
       const newTimeout = setTimeout(() => {
-        console.log('📜 Returning to normal mode after scroll timeout')
+        // console.log('📜 Returning to normal mode after scroll timeout')
         setIsUserScrolling(false)
         // Limpiar indicadores de nuevas conversaciones
         setNewConversationIds(new Set())
@@ -825,12 +825,13 @@ export function useConversations() {
   }, [])
 
   // Effect to fetch messages when selectedConversationId changes
-  useEffect(() => {
-    if (selectedConversationId) {
-      console.log('🔄 useEffect: selectedConversationId changed, fetching messages for:', selectedConversationId)
-      fetchMessages(selectedConversationId)
-    }
-  }, [selectedConversationId, fetchMessages])
+  // COMENTADO: fetchMessages ya se ejecuta desde selectConversation, evitar duplicación
+  // useEffect(() => {
+  //   if (selectedConversationId) {
+  //     console.log('🔄 useEffect: selectedConversationId changed, fetching messages for:', selectedConversationId)
+  //     fetchMessages(selectedConversationId)
+  //   }
+  // }, [selectedConversationId, fetchMessages])
 
   // Configurar suscripciones de tiempo real
   const handleMessageInsert = useCallback((message: Message) => {
