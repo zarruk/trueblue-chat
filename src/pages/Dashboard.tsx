@@ -275,7 +275,10 @@ export default function Dashboard() {
       
       {/* Panel de Debug para Realtime - Solo en staging/dev */}
       {(import.meta.env.MODE !== 'production' || import.meta.env.VITE_ENABLE_DEBUG === 'true') && (
-        <RealtimeDebugPanel />
+        <RealtimeDebugPanel 
+          conversations={conversations}
+          updateConversationStatus={updateConversationStatus}
+        />
       )}
     </div>
   );

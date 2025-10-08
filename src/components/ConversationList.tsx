@@ -124,12 +124,12 @@ export function ConversationList({
   }, [handleScroll, onScrollStateChange])
 
   // Log para debugging de re-renderizado
-  console.log('🔄 ConversationList: Re-renderizando con conversaciones:', conversations.length)
-  console.log('🔍 ConversationList: Array de conversaciones completo:', conversations)
-  if (selectedConversationId) {
-    const selectedConv = conversations.find(c => c.id === selectedConversationId)
-    console.log('🔍 ConversationList: Conversación seleccionada:', selectedConv)
-  }
+  // console.log('🔄 ConversationList: Re-renderizando con conversaciones:', conversations.length)
+  // console.log('🔍 ConversationList: Array de conversaciones completo:', conversations)
+  // if (selectedConversationId) {
+  //   const selectedConv = conversations.find(c => c.id === selectedConversationId)
+  //   console.log('🔍 ConversationList: Conversación seleccionada:', selectedConv)
+  // }
   
   // Debounce para búsqueda
   useEffect(() => {

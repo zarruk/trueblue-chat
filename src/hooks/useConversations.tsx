@@ -1135,7 +1135,7 @@ export function useConversations() {
   }, [fetchMessages, selectedConversationId, isUserScrolling])
 
   // Usar el hook de tiempo real
-  console.log('🔌 [REALTIME] Configurando hook useRealtimeConversations...')
+  // console.log('🔌 [REALTIME] Configurando hook useRealtimeConversations...')
   useRealtimeConversations({
     onMessageInsert: handleMessageInsert,
     onConversationInsert: handleConversationInsert,
@@ -1143,7 +1143,7 @@ export function useConversations() {
     userId: (p?.id as string | undefined),
     clientId: clientId
   })
-  console.log('🔌 [REALTIME] Hook useRealtimeConversations configurado')
+  // console.log('🔌 [REALTIME] Hook useRealtimeConversations configurado')
 
   // Initial fetch
   useEffect(() => {

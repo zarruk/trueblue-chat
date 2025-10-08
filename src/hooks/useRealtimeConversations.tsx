@@ -378,14 +378,14 @@ export function useRealtimeConversations({
         conversationsChannel.unsubscribe()
       }
     }
-  }, [clientId]) // Array vacío porque usamos useRef para los callbacks
+  }, [clientId]) // Re-configurar solo cuando cambie el clientId
 
   useEffect(() => {
     console.log('🔌 [REALTIME] useEffect ejecutándose, configurando suscripciones...')
     const cleanup = setupRealtimeSubscriptions()
     console.log('🔌 [REALTIME] Suscripciones configuradas, cleanup function creada')
     return cleanup
-  }, [setupRealtimeSubscriptions])
+  }, [setupRealtimeSubscriptions]) // Depende de setupRealtimeSubscriptions que a su vez depende de clientId
 
   return {
     setupRealtimeSubscriptions

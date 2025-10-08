@@ -179,12 +179,11 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   // Sincronizar conversación seleccionada y cargar mensajes cuando cambia conversationId
   useEffect(() => {
     if (!conversationId) return
-    const selectFn = onSelectConversation
-    if (selectFn) {
-      console.log('🔄 ChatWindow: Selecting conversation for realtime + loading messages:', conversationId)
-      selectFn(conversationId)
+    if (onSelectConversation) {
+      // console.log('🔄 ChatWindow: Selecting conversation for realtime + loading messages:', conversationId)
+      onSelectConversation(conversationId)
     }
-  }, [conversationId, onSelectConversation])
+  }, [conversationId]) // Removida dependencia onSelectConversation para evitar loop
 
   // Update local messages when propMessages change (evitar deps inestables)
   useEffect(() => {
@@ -294,7 +293,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       if (channel) {
         try {
           channel.unsubscribe()
-          console.log('🧹 [ChatWindow] Canal de tiempo real limpiado para conversación', conversationId)
+          // console.log('🧹 [ChatWindow] Canal de tiempo real limpiado para conversación', conversationId)
         } catch (error) {
           console.warn('⚠️ [ChatWindow] Error al limpiar canal de tiempo real:', error)
         }
@@ -924,6 +923,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
             }}
           />
           {/* Debug logs en consola */}
+          {/* COMENTADO: Causa loop infinito de re-renders
           {conversationId && (() => {
             console.log('🔍 ChatWindow Debug:', {
               conversationId,
@@ -933,6 +933,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
             });
             return null;
           })()}
+          */}
           <Button type="submit" size="icon" className="h-11 w-11 min-w-[44px] min-h-[44px] touch-manipulation" disabled={!message.trim() || !conversationId || conversation?.status === 'closed' || conversation?.status === 'pending_response'}>
             <Send className="h-4 w-4" />
           </Button>
