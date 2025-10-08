@@ -752,6 +752,7 @@ export function useConversations() {
   const loadMoreConversationsFromDB = useCallback(async () => {
     try {
       console.log('🗄️ loadMoreConversationsFromDB: Cargando más conversaciones de la BD')
+      console.log('🗄️ loadMoreConversationsFromDB: poolOffset =', poolOffset, 'poolSize =', poolSize)
       
       let query = supabase
         .from('tb_conversations')
@@ -775,7 +776,9 @@ export function useConversations() {
         }
       }
 
+      console.log('🗄️ loadMoreConversationsFromDB: Ejecutando query...')
       const { data, error } = await (query as any)
+      console.log('🗄️ loadMoreConversationsFromDB: Query ejecutada. Data length:', data?.length, 'Error:', error)
 
       if (error) {
         console.error('❌ Error loading more conversations from DB:', error)
@@ -791,38 +794,24 @@ export function useConversations() {
         return
       }
 
-      // Obtener último mensaje de cada conversación
-      const newConversationsWithLastMessage = await Promise.all(
-        (data || []).map(async (conversation: any) => {
-          try {
-            const { data: lastMessage } = await supabase
-              .from('tb_messages')
-              .select('sender_role, content, created_at')
-              .eq('conversation_id', conversation.id)
-              .order('created_at', { ascending: false })
-              .limit(1)
-              .maybeSingle()
-
-            return {
-              ...conversation,
-              last_message_sender_role: lastMessage?.sender_role || null,
-              last_message_at: lastMessage?.created_at || null,
-              last_message_content: lastMessage?.content || null
-            }
-          } catch (error) {
-            return {
-              ...conversation,
-              last_message_sender_role: null,
-              last_message_at: null,
-              last_message_content: null
-            }
-          }
-        })
-      )
-
-      // Aplicar priorización a las nuevas conversaciones
-      const newPrioritizedConversations = sortConversationsByPriority(newConversationsWithLastMessage)
+      console.log('🗄️ loadMoreConversationsFromDB: Obteniendo últimos mensajes de', data.length, 'conversaciones...')
       
+      // ✅ OPTIMIZACIÓN: Cargar en background sin bloquear, simplemente agregar al pool sin último mensaje
+      // Los últimos mensajes se pueden cargar después de forma lazy o en segundo plano
+      console.log('⚡ loadMoreConversationsFromDB: Modo rápido - agregando conversaciones sin último mensaje')
+      
+      const newConversations = (data || []).map((conversation: any) => ({
+        ...conversation,
+        last_message_sender_role: null,
+        last_message_at: null,
+        last_message_content: null
+      }))
+
+      console.log('🗄️ loadMoreConversationsFromDB: Aplicando priorización...')
+      // Aplicar priorización a las nuevas conversaciones
+      const newPrioritizedConversations = sortConversationsByPriority(newConversations)
+      
+      console.log('🗄️ loadMoreConversationsFromDB: Agregando al pool...')
       // Agregar las nuevas conversaciones al pool existente
       setConversationPool(prev => {
         const combined = [...prev, ...newPrioritizedConversations]
@@ -830,6 +819,7 @@ export function useConversations() {
         return sortConversationsByPriority(combined)
       })
       
+      console.log('🗄️ loadMoreConversationsFromDB: Actualizando offset...')
       // Actualizar el offset para el siguiente lote
       setPoolOffset(prev => prev + poolSize)
       
@@ -840,6 +830,54 @@ export function useConversations() {
       }
       
       console.log('✅ loadMoreConversationsFromDB: Agregadas', newPrioritizedConversations.length, 'conversaciones al pool')
+      
+      // ✅ OPTIMIZACIÓN: Cargar los últimos mensajes en background sin bloquear la UI
+      console.log('⚡ loadMoreConversationsFromDB: Cargando últimos mensajes en background...')
+      setTimeout(async () => {
+        try {
+          const conversationsWithLastMessage = await Promise.all(
+            (data || []).map(async (conversation: any) => {
+              try {
+                const { data: lastMessage } = await supabase
+                  .from('tb_messages')
+                  .select('sender_role, content, created_at')
+                  .eq('conversation_id', conversation.id)
+                  .order('created_at', { ascending: false })
+                  .limit(1)
+                  .maybeSingle()
+
+                return {
+                  ...conversation,
+                  last_message_sender_role: lastMessage?.sender_role || null,
+                  last_message_at: lastMessage?.created_at || null,
+                  last_message_content: lastMessage?.content || null
+                }
+              } catch (error) {
+                return {
+                  ...conversation,
+                  last_message_sender_role: null,
+                  last_message_at: null,
+                  last_message_content: null
+                }
+              }
+            })
+          )
+          
+          console.log('✅ loadMoreConversationsFromDB: Últimos mensajes cargados en background')
+          
+          // Actualizar el pool con los últimos mensajes
+          setConversationPool(prev => {
+            // Reemplazar las conversaciones que acabamos de actualizar
+            const updated = prev.map(conv => {
+              const withMessage = conversationsWithLastMessage.find(c => c.id === conv.id)
+              return withMessage || conv
+            })
+            return sortConversationsByPriority(updated)
+          })
+        } catch (error) {
+          console.warn('⚠️ loadMoreConversationsFromDB: Error cargando últimos mensajes en background:', error)
+        }
+      }, 0) // Ejecutar en el siguiente tick
     } catch (error) {
       console.error('❌ Error loading more conversations from DB:', error)
       setHasMore(false)
