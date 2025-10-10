@@ -15,7 +15,7 @@ import {
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { useAuth } from '@/hooks/useAuth'
 import { useAgents } from '@/hooks/useAgents'
-import { format } from 'date-fns'
+import { format, isToday, isYesterday, isSameDay } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { supabase } from '@/integrations/supabase/client'
 import { MessageTemplatesSuggestions } from '@/components/MessageTemplatesSuggestions'
@@ -24,6 +24,17 @@ import data from '@emoji-mart/data'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 // Notificaciones deshabilitadas
 const toast = { success: (..._args: any[]) => {}, error: (..._args: any[]) => {}, info: (..._args: any[]) => {} } as const
+
+// Helper para formatear separadores de fecha
+function formatDateSeparator(date: Date): string {
+  if (isToday(date)) {
+    return 'Hoy'
+  }
+  if (isYesterday(date)) {
+    return 'Ayer'
+  }
+  return format(date, "d 'de' MMMM", { locale: es })
+}
 
 interface ChatWindowProps {
   conversationId?: string
@@ -859,7 +870,29 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                   <p>No hay mensajes aún. Sé el primero en escribir.</p>
                 </div>
               ) : (
-                messages.map((msg) => renderMessageBubble(msg, false))
+                messages.map((msg, idx) => {
+                  // Verificar si necesitamos mostrar un separador de fecha
+                  const showDateSeparator = idx === 0 || 
+                    !isSameDay(new Date(messages[idx - 1].created_at), new Date(msg.created_at))
+                  
+                  return (
+                    <React.Fragment key={msg.id}>
+                      {showDateSeparator && (
+                        <div className="relative my-4">
+                          <div className="absolute inset-0 flex items-center">
+                            <span className="w-full border-t border-muted-foreground/20" />
+                          </div>
+                          <div className="relative flex justify-center text-xs">
+                            <span className="bg-background px-3 py-1 text-muted-foreground font-medium rounded-full">
+                              {formatDateSeparator(new Date(msg.created_at))}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                      {renderMessageBubble(msg, false)}
+                    </React.Fragment>
+                  )
+                })
               )}
             </>
           )}
