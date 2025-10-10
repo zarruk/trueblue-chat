@@ -122,36 +122,37 @@ export function useConversations() {
       console.log('🔍 fetchConversations: Client ID:', clientId)
       console.log('🔍 fetchConversations: Profile role:', p?.role)
       
-      let query = supabase
-        .from('tb_conversations')
-        .select('*')
-        .order('updated_at', { ascending: false })
-        .limit(poolSize) // Cargar un pool inicial más grande para priorizar
-
-      // Aplicar filtro por cliente solo si existe en el perfil (RLS hace el resto)
-      if (clientId) {
-        query = (query as any).eq('client_id', clientId)
-      }
-
-      // If user is not admin, only show conversations assigned to them or pending
+      // 🎯 NUEVO: Usar RPC para traer conversaciones ya ordenadas por prioridad
       const role = p?.role as string | undefined
       const profileId = p?.id as string | undefined
+      
       if (role !== 'admin') {
         if (profileId) {
           console.log('🔒 Non-admin user, filtering conversations')
-          query = (query as any).or(`assigned_agent_id.eq.${profileId},status.eq.pending_human,status.eq.active_ai`)
         } else {
           console.log('🔒 No profile ID, showing only pending')
-          query = query.eq('status', 'pending_human')
         }
       } else {
         console.log('👑 Admin user, showing all conversations')
       }
 
-      console.log('🔍 fetchConversations: Query construida, ejecutando...')
+      console.log('🔍 fetchConversations: Ejecutando RPC get_prioritized_conversations...')
+      console.log('🔍 fetchConversations: Parámetros:', {
+        p_client_id: clientId || null,
+        p_agent_id: profileId || null,
+        p_is_admin: role === 'admin',
+        p_limit: poolSize,
+        p_offset: 0
+      })
       
-      // ✅ FIX: Ejecutar la query correctamente sin Promise.race problemático
-      const { data, error } = await (query as any)
+      // ✅ Usar función RPC para ordenamiento por prioridad en BD
+      const { data, error } = await (supabase.rpc as any)('get_prioritized_conversations', {
+        p_client_id: clientId || null,
+        p_agent_id: profileId || null,
+        p_is_admin: role === 'admin',
+        p_limit: poolSize,
+        p_offset: 0
+      })
       
       console.log('✅ fetchConversations: Query ejecutada')
       console.log('📊 fetchConversations: Data length:', data?.length)
@@ -754,30 +755,27 @@ export function useConversations() {
       console.log('🗄️ loadMoreConversationsFromDB: Cargando más conversaciones de la BD')
       console.log('🗄️ loadMoreConversationsFromDB: poolOffset =', poolOffset, 'poolSize =', poolSize)
       
-      let query = supabase
-        .from('tb_conversations')
-        .select('*')
-        .order('updated_at', { ascending: false })
-        .range(poolOffset + poolSize, poolOffset + poolSize + poolSize - 1) // Siguiente lote
-
-      // Aplicar filtro por cliente
-      if (clientId) {
-        query = (query as any).eq('client_id', clientId)
-      }
-
-      // Aplicar filtro por rol
+      // 🎯 NUEVO: Usar RPC con offset para mantener ordenamiento por prioridad
       const role = p?.role as string | undefined
       const profileId = p?.id as string | undefined
-      if (role !== 'admin') {
-        if (profileId) {
-          query = (query as any).or(`assigned_agent_id.eq.${profileId},status.eq.pending_human,status.eq.active_ai`)
-        } else {
-          query = query.eq('status', 'pending_human')
-        }
-      }
 
-      console.log('🗄️ loadMoreConversationsFromDB: Ejecutando query...')
-      const { data, error } = await (query as any)
+      console.log('🗄️ loadMoreConversationsFromDB: Ejecutando RPC get_prioritized_conversations...')
+      console.log('🗄️ loadMoreConversationsFromDB: Parámetros:', {
+        p_client_id: clientId || null,
+        p_agent_id: profileId || null,
+        p_is_admin: role === 'admin',
+        p_limit: poolSize,
+        p_offset: poolOffset + poolSize
+      })
+      
+      const { data, error } = await (supabase.rpc as any)('get_prioritized_conversations', {
+        p_client_id: clientId || null,
+        p_agent_id: profileId || null,
+        p_is_admin: role === 'admin',
+        p_limit: poolSize,
+        p_offset: poolOffset + poolSize
+      })
+      
       console.log('🗄️ loadMoreConversationsFromDB: Query ejecutada. Data length:', data?.length, 'Error:', error)
 
       if (error) {

@@ -1,6 +1,9 @@
 -- Función para obtener conversaciones ordenadas por prioridad
 -- Ejecutar en SQL Editor de Supabase
 
+-- Eliminar la función anterior si existe (necesario al cambiar tipos de datos)
+DROP FUNCTION IF EXISTS get_prioritized_conversations(uuid,uuid,boolean,integer,integer);
+
 CREATE OR REPLACE FUNCTION get_prioritized_conversations(
   p_client_id uuid DEFAULT NULL,
   p_agent_id uuid DEFAULT NULL,
@@ -13,7 +16,7 @@ RETURNS TABLE (
   user_id text,
   username text,
   phone_number text,
-  status text,
+  status conversation_status,
   assigned_agent_id uuid,
   assigned_agent_email text,
   assigned_agent_name text,
@@ -53,8 +56,8 @@ BEGIN
     -- 🎯 PRIORIDAD: Ordenar primero por status usando CASE
     CASE c.status
       WHEN 'pending_human' THEN 1
-      WHEN 'pending_response' THEN 2
-      WHEN 'active_human' THEN 3
+      WHEN 'active_human' THEN 2
+      WHEN 'pending_response' THEN 3
       WHEN 'active_ai' THEN 4
       WHEN 'closed' THEN 5
       ELSE 6
@@ -69,4 +72,3 @@ $$ LANGUAGE plpgsql STABLE;
 -- Otorgar permisos
 GRANT EXECUTE ON FUNCTION get_prioritized_conversations TO authenticated;
 GRANT EXECUTE ON FUNCTION get_prioritized_conversations TO anon;
-

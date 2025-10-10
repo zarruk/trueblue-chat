@@ -21,8 +21,8 @@ Las conversaciones se ordenan por **prioridad** primero, luego por fecha:
 
 ```
 1. pending_human       🔥 MÁXIMA PRIORIDAD (cliente esperando agente)
-2. pending_response    ⏳ Esperando respuesta del usuario
-3. active_human        👤 Agente activo en conversación
+2. active_human        👤 Agente activo en conversación
+3. pending_response    ⏳ Esperando respuesta del usuario
 4. active_ai          🤖 IA manejando conversación
 5. closed             🔒 MÍNIMA PRIORIDAD (conversación cerrada)
 ```
@@ -35,9 +35,9 @@ Query RPC → ORDER BY prioridad ASC, updated_at DESC → LIMIT 100
 
 Ejemplo de resultado:
 ├─ 15 pending_human (todas las que existan)
+├─ 35 active_human (las 35 más recientes)
 ├─ 8 pending_response (todas las que existan)
-├─ 45 active_human (las 45 más recientes)
-├─ 32 active_ai (las 32 más recientes)
+├─ 42 active_ai (las 42 más recientes)
 └─ 0 closed (no caben en las 100)
 ```
 
