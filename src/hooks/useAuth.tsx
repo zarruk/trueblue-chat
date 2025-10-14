@@ -36,6 +36,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('🔍 Buscando/creando perfil para usuario:', email);
       
       // 1) Buscar perfil existente por email (más reciente)
+      console.log('🔍 Ejecutando consulta a tabla profiles...');
       const { data: initialProfile, error: selectErr } = await supabase
         .from('profiles')
         .select('*')
@@ -43,6 +44,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
+      
+      console.log('🔍 Consulta profiles completada. Data:', initialProfile, 'Error:', selectErr);
 
       let finalProfile = initialProfile as Profile | null;
 
