@@ -192,8 +192,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     );
 
-    // ✅ ELIMINADO: getSession() es redundante porque onAuthStateChange dispara INITIAL_SESSION automáticamente
-    // Esto evita las 3 llamadas simultáneas a loadProfile que causaban el bug
+    // ✅ NECESARIO: getSession() procesa el token de la URL del magic link
+    // La bandera isLoadingProfileRef evita las llamadas duplicadas a loadProfile
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      console.log('🔍 getSession: Procesando sesión inicial');
+      setSession(session);
+      const u = session?.user ?? null;
+      setUser(u);
+      
+      if (u) {
+        console.log('🔍 getSession: Usuario encontrado, cargando perfil');
+        await loadProfile(u);
+      } else {
+        console.log('🔍 getSession: No hay usuario, reseteando estados');
+        setProfile(null);
+        setProfileLoading(false);
+      }
+      
+      setAuthLoading(false);
+    });
 
     return () => subscription.unsubscribe();
   }, []);

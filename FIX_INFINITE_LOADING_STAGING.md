@@ -57,38 +57,35 @@ const loadProfile = async (u: User, skipLoadingState = false) => {
 }
 ```
 
-### 2️⃣ Eliminación de Código Redundante
+### 2️⃣ Mantenimiento de Ambos Flujos con Protección
 
-Eliminé la llamada redundante a `getSession()` porque:
-- `onAuthStateChange` ya dispara automáticamente el evento `INITIAL_SESSION` al montarse
-- Tener ambas llamadas causaba las 3 ejecuciones simultáneas
+Mantuve ambas llamadas (`onAuthStateChange` y `getSession()`) porque:
+- `getSession()` es **NECESARIO** para procesar el token de la URL del magic link
+- `onAuthStateChange` maneja los eventos de autenticación (SIGNED_IN, TOKEN_REFRESHED, etc.)
+- La **bandera de protección** `isLoadingProfileRef` evita que se ejecuten simultáneamente
 
-**ANTES:**
+**SOLUCIÓN:**
 ```typescript
-// ❌ Dos flujos paralelos
+// ✅ Dos flujos pero con protección
 supabase.auth.onAuthStateChange(async (event, session) => {
   if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
-    await loadProfile(u);
+    await loadProfile(u); // ← Protegido por bandera
   }
 });
 
+// ✅ NECESARIO: Procesa el token del magic link
 supabase.auth.getSession().then(async ({ data: { session } }) => {
   if (u) {
-    await loadProfile(u); // ← REDUNDANTE!
-  }
-});
-```
-
-**DESPUÉS:**
-```typescript
-// ✅ Un solo flujo
-supabase.auth.onAuthStateChange(async (event, session) => {
-  if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
-    await loadProfile(u);
+    await loadProfile(u); // ← Protegido por bandera
   }
 });
 
-// ✅ ELIMINADO: getSession() redundante
+// 🛡️ La bandera evita ejecuciones simultáneas
+const loadProfile = async (u: User) => {
+  if (isLoadingProfileRef.current) return; // ← PROTECCIÓN
+  isLoadingProfileRef.current = true;
+  // ... lógica de carga ...
+}
 ```
 
 ### 3️⃣ Reseteo Seguro de Estados
