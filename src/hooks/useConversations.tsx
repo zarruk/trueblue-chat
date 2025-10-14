@@ -343,17 +343,25 @@ export function useConversations() {
 
     try {
       console.log('🔍 fetchMessages: Fetching messages for conversation:', conversationId)
+      console.log('🔍 fetchMessages: Starting query to tb_messages table...')
       
-      let query: any = supabase
+      // ✅ TIMEOUT: Agregar timeout de 8 segundos para evitar cuelgues silenciosos
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('fetchMessages timeout after 8s')), 8000)
+      );
+      
+      const queryPromise = supabase
         .from('tb_messages')
         .select('*')
         .eq('conversation_id', conversationId)
-        .order('created_at', { ascending: true })
+        .order('created_at', { ascending: true });
 
-      // NOTA: No aplicamos filtro por client_id aquí porque los mensajes ya están filtrados
-      // indirectamente a través de la relación conversation_id -> tb_conversations.client_id
-
-      const { data, error } = await query
+      console.log('🔍 fetchMessages: Executing query with timeout...')
+      
+      // Competencia: la que termine primero gana
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
+      
+      console.log('🔍 fetchMessages: Query completed. Data length:', data?.length, 'Error:', error)
 
       if (error) {
         console.error('❌ Error fetching messages:', error)
@@ -362,6 +370,19 @@ export function useConversations() {
       }
 
       console.log('✅ Messages fetched successfully:', data?.length || 0, 'messages for conversation:', conversationId)
+      
+      // Log detallado de los primeros 3 mensajes para debugging
+      if (data && data.length > 0) {
+        console.log('📨 fetchMessages: Primeros mensajes:', data.slice(0, 3).map((m: any) => ({
+          id: m.id,
+          sender: m.sender_role,
+          preview: m.content?.substring(0, 30) + '...',
+          time: m.created_at
+        })))
+      } else {
+        console.log('📭 fetchMessages: No hay mensajes en esta conversación')
+      }
+      
       setMessages((data as any) || [])
     } catch (error) {
       console.error('❌ Exception fetching messages:', error)
