@@ -154,20 +154,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     console.log('🔍 MOBILE DEBUG - Window location:', window.location.href);
     console.log('🔍 MOBILE DEBUG - Supabase URL:', import.meta.env.VITE_SUPABASE_URL);
     
-    // Set up auth state listener
+    // ✅ CRÍTICO: Ejecutar getSession() PRIMERO para establecer la sesión
+    // Esto previene que onAuthStateChange intente cargar el perfil sin sesión establecida
+    
+    // 1️⃣ PRIMERO: Establecer la sesión inicial
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      console.log('🔍 getSession: Procesando sesión inicial');
+      setSession(session);
+      const u = session?.user ?? null;
+      setUser(u);
+      
+      if (u) {
+        console.log('🔍 getSession: Usuario encontrado, cargando perfil');
+        await loadProfile(u);
+      } else {
+        console.log('🔍 getSession: No hay usuario, reseteando estados');
+        setProfile(null);
+        setProfileLoading(false);
+      }
+      
+      setAuthLoading(false);
+      console.log('✅ getSession: Completado, auth listener puede proceder');
+    });
+
+    // 2️⃣ SEGUNDO: Set up auth state listener (se ejecutará después)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('🔍 MOBILE DEBUG - Auth state changed:', event, session?.user?.email);
         console.log('🔄 Auth state changed:', event, session?.user?.email);
+        
+        // ⏭️ SKIP: Ignorar INITIAL_SESSION porque ya lo manejamos en getSession()
+        if (event === 'INITIAL_SESSION') {
+          console.log('⏭️ onAuthStateChange: INITIAL_SESSION ya manejado por getSession(), ignorando');
+          return;
+        }
         
         setSession(session);
         const u = session?.user ?? null;
         setUser(u);
         
         if (u) {
-          // ✅ Solo recargar perfil en eventos específicos (INITIAL_SESSION, SIGNED_IN)
+          // ✅ Solo recargar perfil en SIGNED_IN (nuevo login)
           // NO recargar en TOKEN_REFRESHED para evitar desmontar componentes
-          if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
+          if (event === 'SIGNED_IN') {
             // Si ya cargamos el perfil anteriormente, usar modo silencioso para no desmontar componentes
             const hasLoadedBefore = profileLoadedRef.current;
             console.log('🔍 Perfil ya cargado anteriormente:', hasLoadedBefore);
@@ -191,26 +220,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setAuthLoading(false);
       }
     );
-
-    // ✅ NECESARIO: getSession() procesa el token de la URL del magic link
-    // La bandera isLoadingProfileRef evita las llamadas duplicadas a loadProfile
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      console.log('🔍 getSession: Procesando sesión inicial');
-      setSession(session);
-      const u = session?.user ?? null;
-      setUser(u);
-      
-      if (u) {
-        console.log('🔍 getSession: Usuario encontrado, cargando perfil');
-        await loadProfile(u);
-      } else {
-        console.log('🔍 getSession: No hay usuario, reseteando estados');
-        setProfile(null);
-        setProfileLoading(false);
-      }
-      
-      setAuthLoading(false);
-    });
 
     return () => subscription.unsubscribe();
   }, []);

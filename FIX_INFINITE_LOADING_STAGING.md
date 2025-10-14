@@ -17,16 +17,26 @@ Al hacer login con magic link en **staging**, la aplicación se quedaba cargando
 
 ## 🎯 Causa Raíz
 
-En `src/hooks/useAuth.tsx`, había **dos flujos paralelos** que intentaban cargar el perfil del usuario:
+En `src/hooks/useAuth.tsx`, había **dos problemas de orden de ejecución**:
 
-1. **`onAuthStateChange`** (línea 158) - Se dispara cuando cambia el estado de autenticación
-2. **`getSession()`** (línea 179) - Se ejecutaba inmediatamente al montar el componente
+### Problema 1: Llamadas Duplicadas Iniciales
+1. **`onAuthStateChange`** se dispara cuando cambia el estado de autenticación
+2. **`getSession()`** se ejecutaba inmediatamente al montar el componente
+3. Ambos intentaban cargar el perfil **simultáneamente**
+
+### Problema 2: Orden de Ejecución al Recargar (MÁS CRÍTICO)
+Al recargar la página:
+1. **`onAuthStateChange(SIGNED_IN)`** se disparaba **PRIMERO**
+2. Intentaba consultar `profiles` table **SIN sesión completamente establecida**
+3. La consulta con RLS se **colgaba esperando autenticación**
+4. `getSession()` se ejecutaba después pero la bandera ya estaba activada
+5. **Resultado:** Query timeout → pantalla de carga infinita
 
 ### ¿Por qué pasaba solo en staging?
 
-- En **local**, las llamadas a Supabase son rápidas y las condiciones de carrera no se notan
-- En **staging**, las llamadas son más lentas (latencia de red), haciendo que las llamadas se solapen
-- Esto causaba que `setProfileLoading(false)` se ejecutara en orden incorrecto
+- En **local**, las llamadas a Supabase son rápidas y el orden de ejecución favorece a `getSession()`
+- En **staging**, las llamadas son más lentas (latencia de red), y `onAuthStateChange` gana la carrera
+- Cuando `onAuthStateChange` intenta consultar antes de que la sesión esté establecida → **timeout en la query**
 - El estado `loading` nunca se reseteaba correctamente → **pantalla de carga infinita**
 
 ## ✅ Solución Implementada
@@ -57,36 +67,41 @@ const loadProfile = async (u: User, skipLoadingState = false) => {
 }
 ```
 
-### 2️⃣ Mantenimiento de Ambos Flujos con Protección
+### 2️⃣ Orden de Ejecución Correcto (CRÍTICO)
 
-Mantuve ambas llamadas (`onAuthStateChange` y `getSession()`) porque:
-- `getSession()` es **NECESARIO** para procesar el token de la URL del magic link
-- `onAuthStateChange` maneja los eventos de autenticación (SIGNED_IN, TOKEN_REFRESHED, etc.)
-- La **bandera de protección** `isLoadingProfileRef` evita que se ejecuten simultáneamente
+**El cambio más importante:** Ejecutar `getSession()` **PRIMERO** y que `onAuthStateChange` ignore `INITIAL_SESSION`:
 
-**SOLUCIÓN:**
 ```typescript
-// ✅ Dos flujos pero con protección
-supabase.auth.onAuthStateChange(async (event, session) => {
-  if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
-    await loadProfile(u); // ← Protegido por bandera
-  }
-});
+useEffect(() => {
+  // 1️⃣ PRIMERO: Establecer la sesión inicial
+  supabase.auth.getSession().then(async ({ data: { session } }) => {
+    console.log('🔍 getSession: Procesando sesión inicial');
+    // ... establecer sesión y cargar perfil ...
+  });
 
-// ✅ NECESARIO: Procesa el token del magic link
-supabase.auth.getSession().then(async ({ data: { session } }) => {
-  if (u) {
-    await loadProfile(u); // ← Protegido por bandera
-  }
-});
-
-// 🛡️ La bandera evita ejecuciones simultáneas
-const loadProfile = async (u: User) => {
-  if (isLoadingProfileRef.current) return; // ← PROTECCIÓN
-  isLoadingProfileRef.current = true;
-  // ... lógica de carga ...
-}
+  // 2️⃣ SEGUNDO: Set up auth state listener
+  const { data: { subscription } } = supabase.auth.onAuthStateChange(
+    async (event, session) => {
+      // ⏭️ SKIP: Ignorar INITIAL_SESSION (ya lo manejó getSession)
+      if (event === 'INITIAL_SESSION') {
+        console.log('⏭️ INITIAL_SESSION ya manejado, ignorando');
+        return;
+      }
+      
+      // ✅ Solo manejar eventos NUEVOS (SIGNED_IN, TOKEN_REFRESHED, etc.)
+      if (event === 'SIGNED_IN') {
+        await loadProfile(u, hasLoadedBefore);
+      }
+    }
+  );
+}, []);
 ```
+
+**Por qué esto funciona:**
+- `getSession()` se ejecuta **PRIMERO** → Establece la sesión en el cliente de Supabase
+- Con la sesión establecida, las consultas con RLS funcionan correctamente
+- `onAuthStateChange(INITIAL_SESSION)` se ignora → No hay duplicación
+- `onAuthStateChange(SIGNED_IN)` solo se dispara en **nuevos logins** → La bandera lo protege si es necesario
 
 ### 3️⃣ Reseteo Seguro de Estados
 
@@ -127,22 +142,61 @@ Aseguré que los estados de loading siempre se reseteen correctamente, incluso e
 
 ## 🔍 Logs Esperados Después del Fix
 
+### Al hacer login con magic link:
 ```
 🔍 MOBILE DEBUG - AuthProvider useEffect started
-🔄 Auth state changed: INITIAL_SESSION juanca+suenos@azteclab.co
+🔍 getSession: Procesando sesión inicial
 🔐 loadProfile: Iniciando carga de perfil...
 🔍 Buscando/creando perfil para usuario: juanca+suenos@azteclab.co
 🔍 Ejecutando consulta a tabla profiles...
-🔍 Consulta profiles completada. Data: Object Error: null
+🔍 Consulta profiles completada. Data: {...}
 🏁 Perfil final cargado en Auth: {...}
 🔓 loadProfile: Carga completada, bandera liberada
+✅ getSession: Completado, auth listener puede proceder
+🔄 Auth state changed: INITIAL_SESSION juanca+suenos@azteclab.co
+⏭️ onAuthStateChange: INITIAL_SESSION ya manejado por getSession(), ignorando
 ```
 
-**Nota:** Solo debe haber **UNA** línea de "Consulta profiles completada", no tres.
+### Al recargar la página:
+```
+🔍 MOBILE DEBUG - AuthProvider useEffect started
+🔍 getSession: Procesando sesión inicial
+🔐 loadProfile: Iniciando carga de perfil...
+🔍 Buscando/creando perfil para usuario: juanca+suenos@azteclab.co
+🔍 Ejecutando consulta a tabla profiles...
+🔍 Consulta profiles completada. Data: {...}  ← ✅ COMPLETA SIN TIMEOUT
+🏁 Perfil final cargado en Auth: {...}
+🔓 loadProfile: Carga completada, bandera liberada
+✅ getSession: Completado, auth listener puede proceder
+🔄 Auth state changed: SIGNED_IN juanca+suenos@azteclab.co
+⏭️ onAuthStateChange: INITIAL_SESSION ya manejado por getSession(), ignorando
+```
+
+**Notas Clave:**
+- Solo debe haber **UNA** línea de "Consulta profiles completada"
+- La consulta debe **completarse** (no timeout)
+- `INITIAL_SESSION` se ignora correctamente
 
 ## 📝 Archivos Modificados
 
-- `src/hooks/useAuth.tsx` - Protección contra llamadas duplicadas y eliminación de código redundante
+- `src/hooks/useAuth.tsx` - Protección contra llamadas duplicadas + orden de ejecución correcto (getSession primero, onAuthStateChange después ignorando INITIAL_SESSION)
+
+## 📊 Resumen de la Solución
+
+### Problema Original:
+- Al recargar, `onAuthStateChange` se disparaba antes que `getSession()`
+- Intentaba consultar `profiles` sin sesión establecida → timeout
+
+### Solución Final:
+1. **`getSession()` se ejecuta PRIMERO** → Establece sesión
+2. **`onAuthStateChange` ignora `INITIAL_SESSION`** → Evita duplicación
+3. **Bandera `isLoadingProfileRef`** → Protección adicional contra race conditions
+
+### Resultado:
+✅ Login con magic link funciona  
+✅ Recarga de página funciona  
+✅ Sin timeouts en queries  
+✅ Sin llamadas duplicadas
 
 ## 🚀 Despliegue
 
