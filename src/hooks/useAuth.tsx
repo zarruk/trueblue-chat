@@ -154,8 +154,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     console.log('🔍 MOBILE DEBUG - Window location:', window.location.href);
     console.log('🔍 MOBILE DEBUG - Supabase URL:', import.meta.env.VITE_SUPABASE_URL);
     
-    // ✅ CRÍTICO: Ejecutar getSession() PRIMERO para establecer la sesión
-    // Esto previene que onAuthStateChange intente cargar el perfil sin sesión establecida
+    // ✅ CRÍTICO: Bandera para evitar que onAuthStateChange actúe antes de getSession
+    let sessionInitialized = false;
     
     // 1️⃣ PRIMERO: Establecer la sesión inicial
     supabase.auth.getSession().then(async ({ data: { session } }) => {
@@ -174,6 +174,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       
       setAuthLoading(false);
+      sessionInitialized = true; // 🔓 Permitir que onAuthStateChange actúe ahora
       console.log('✅ getSession: Completado, auth listener puede proceder');
     });
 
@@ -183,9 +184,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.log('🔍 MOBILE DEBUG - Auth state changed:', event, session?.user?.email);
         console.log('🔄 Auth state changed:', event, session?.user?.email);
         
-        // ⏭️ SKIP: Ignorar INITIAL_SESSION porque ya lo manejamos en getSession()
-        if (event === 'INITIAL_SESSION') {
-          console.log('⏭️ onAuthStateChange: INITIAL_SESSION ya manejado por getSession(), ignorando');
+        // 🛡️ CRÍTICO: No hacer NADA hasta que getSession() complete
+        if (!sessionInitialized) {
+          console.log('⏭️ onAuthStateChange: Esperando a que getSession() complete, ignorando evento:', event);
           return;
         }
         
@@ -194,7 +195,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(u);
         
         if (u) {
-          // ✅ Solo recargar perfil en SIGNED_IN (nuevo login)
+          // ✅ Solo recargar perfil en SIGNED_IN (nuevo login después de la inicialización)
           // NO recargar en TOKEN_REFRESHED para evitar desmontar componentes
           if (event === 'SIGNED_IN') {
             // Si ya cargamos el perfil anteriormente, usar modo silencioso para no desmontar componentes
