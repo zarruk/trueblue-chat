@@ -24,8 +24,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authLoading, setAuthLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(true);
   const profileLoadedRef = useRef(false);
+  const isLoadingProfileRef = useRef(false); // 🛡️ Protección contra llamadas duplicadas
 
   const loadProfile = async (u: User, skipLoadingState = false) => {
+    // 🛡️ PROTECCIÓN: Si ya hay una carga en progreso, ignorar esta llamada
+    if (isLoadingProfileRef.current) {
+      console.log('⏭️ loadProfile: Ya hay una carga en progreso, ignorando...');
+      return;
+    }
+    
+    isLoadingProfileRef.current = true;
+    console.log('🔐 loadProfile: Iniciando carga de perfil...');
+    
     // Si ya tenemos un perfil y no queremos cambiar el loading state, usar modo silencioso
     if (!skipLoadingState) {
       setProfileLoading(true);
@@ -131,6 +141,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!skipLoadingState) {
         setProfileLoading(false);
       }
+      isLoadingProfileRef.current = false; // 🔓 Liberar la bandera siempre
+      console.log('🔓 loadProfile: Carga completada, bandera liberada');
     }
   };
 
@@ -162,6 +174,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             await loadProfile(u, hasLoadedBefore);
           } else {
             console.log('⏭️ Evento de auth no requiere recarga de perfil:', event);
+            // Asegurar que loading se resetee incluso si no cargamos perfil
+            if (!profileLoadedRef.current) {
+              setProfileLoading(false);
+            }
             setAuthLoading(false);
           }
         } else {
@@ -169,27 +185,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setProfile(null);
           setProfileLoading(false);
           profileLoadedRef.current = false;
+          isLoadingProfileRef.current = false; // Resetear la bandera
         }
         
         setAuthLoading(false);
       }
     );
 
-    // Get initial session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session);
-      const u = session?.user ?? null;
-      setUser(u);
-      
-      if (u) {
-        await loadProfile(u);
-      } else {
-        setProfile(null);
-        setProfileLoading(false);
-      }
-      
-      setAuthLoading(false);
-    });
+    // ✅ ELIMINADO: getSession() es redundante porque onAuthStateChange dispara INITIAL_SESSION automáticamente
+    // Esto evita las 3 llamadas simultáneas a loadProfile que causaban el bug
 
     return () => subscription.unsubscribe();
   }, []);
