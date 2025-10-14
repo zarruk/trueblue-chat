@@ -67,28 +67,32 @@ const loadProfile = async (u: User, skipLoadingState = false) => {
 }
 ```
 
-### 2️⃣ Orden de Ejecución Correcto (CRÍTICO)
+### 2️⃣ Orden de Ejecución Correcto con Bandera (CRÍTICO)
 
-**El cambio más importante:** Ejecutar `getSession()` **PRIMERO** y que `onAuthStateChange` ignore `INITIAL_SESSION`:
+**El cambio más importante:** Usar bandera `sessionInitialized` para que `onAuthStateChange` **NO actúe** hasta que `getSession()` complete:
 
 ```typescript
 useEffect(() => {
+  // ✅ CRÍTICO: Bandera para evitar que onAuthStateChange actúe antes de getSession
+  let sessionInitialized = false;
+  
   // 1️⃣ PRIMERO: Establecer la sesión inicial
   supabase.auth.getSession().then(async ({ data: { session } }) => {
     console.log('🔍 getSession: Procesando sesión inicial');
     // ... establecer sesión y cargar perfil ...
+    sessionInitialized = true; // 🔓 Permitir que onAuthStateChange actúe ahora
   });
 
   // 2️⃣ SEGUNDO: Set up auth state listener
   const { data: { subscription } } = supabase.auth.onAuthStateChange(
     async (event, session) => {
-      // ⏭️ SKIP: Ignorar INITIAL_SESSION (ya lo manejó getSession)
-      if (event === 'INITIAL_SESSION') {
-        console.log('⏭️ INITIAL_SESSION ya manejado, ignorando');
-        return;
+      // 🛡️ CRÍTICO: No hacer NADA hasta que getSession() complete
+      if (!sessionInitialized) {
+        console.log('⏭️ Esperando a que getSession() complete, ignorando:', event);
+        return; // ← Ignora TODOS los eventos (INITIAL_SESSION, SIGNED_IN, etc.)
       }
       
-      // ✅ Solo manejar eventos NUEVOS (SIGNED_IN, TOKEN_REFRESHED, etc.)
+      // ✅ Solo manejar eventos DESPUÉS de que la sesión esté establecida
       if (event === 'SIGNED_IN') {
         await loadProfile(u, hasLoadedBefore);
       }
@@ -99,9 +103,10 @@ useEffect(() => {
 
 **Por qué esto funciona:**
 - `getSession()` se ejecuta **PRIMERO** → Establece la sesión en el cliente de Supabase
+- `onAuthStateChange` recibe eventos (INITIAL_SESSION, SIGNED_IN, etc.) → **IGNORA TODO** hasta que `sessionInitialized = true`
+- Solo cuando `getSession()` completa, se setea `sessionInitialized = true`
 - Con la sesión establecida, las consultas con RLS funcionan correctamente
-- `onAuthStateChange(INITIAL_SESSION)` se ignora → No hay duplicación
-- `onAuthStateChange(SIGNED_IN)` solo se dispara en **nuevos logins** → La bandera lo protege si es necesario
+- **Soluciona el bug:** En staging, `onAuthStateChange(SIGNED_IN)` llegaba primero al recargar → Ahora se ignora hasta que la sesión esté lista
 
 ### 3️⃣ Reseteo Seguro de Estados
 
@@ -145,37 +150,40 @@ Aseguré que los estados de loading siempre se reseteen correctamente, incluso e
 ### Al hacer login con magic link:
 ```
 🔍 MOBILE DEBUG - AuthProvider useEffect started
+🔄 Auth state changed: SIGNED_IN juanca+suenos@azteclab.co  ← Llega PRIMERO
+⏭️ onAuthStateChange: Esperando a que getSession() complete, ignorando: SIGNED_IN  ← BLOQUEADO
 🔍 getSession: Procesando sesión inicial
 🔐 loadProfile: Iniciando carga de perfil...
 🔍 Buscando/creando perfil para usuario: juanca+suenos@azteclab.co
 🔍 Ejecutando consulta a tabla profiles...
-🔍 Consulta profiles completada. Data: {...}
+🔍 Consulta profiles completada. Data: {...}  ← ✅ COMPLETA
 🏁 Perfil final cargado en Auth: {...}
 🔓 loadProfile: Carga completada, bandera liberada
 ✅ getSession: Completado, auth listener puede proceder
 🔄 Auth state changed: INITIAL_SESSION juanca+suenos@azteclab.co
-⏭️ onAuthStateChange: INITIAL_SESSION ya manejado por getSession(), ignorando
+⏭️ onAuthStateChange: Esperando a que getSession() complete, ignorando: INITIAL_SESSION
 ```
 
 ### Al recargar la página:
 ```
 🔍 MOBILE DEBUG - AuthProvider useEffect started
+🔄 Auth state changed: SIGNED_IN juanca+suenos@azteclab.co  ← Llega PRIMERO (problema original)
+⏭️ onAuthStateChange: Esperando a que getSession() complete, ignorando: SIGNED_IN  ← ✅ BLOQUEADO (solución)
 🔍 getSession: Procesando sesión inicial
 🔐 loadProfile: Iniciando carga de perfil...
 🔍 Buscando/creando perfil para usuario: juanca+suenos@azteclab.co
 🔍 Ejecutando consulta a tabla profiles...
-🔍 Consulta profiles completada. Data: {...}  ← ✅ COMPLETA SIN TIMEOUT
+🔍 Consulta profiles completada. Data: {...}  ← ✅ COMPLETA SIN TIMEOUT (clave del fix)
 🏁 Perfil final cargado en Auth: {...}
 🔓 loadProfile: Carga completada, bandera liberada
 ✅ getSession: Completado, auth listener puede proceder
-🔄 Auth state changed: SIGNED_IN juanca+suenos@azteclab.co
-⏭️ onAuthStateChange: INITIAL_SESSION ya manejado por getSession(), ignorando
 ```
 
 **Notas Clave:**
+- ✅ **CLAVE DEL FIX:** `onAuthStateChange(SIGNED_IN)` se **BLOQUEA** hasta que `getSession()` complete
 - Solo debe haber **UNA** línea de "Consulta profiles completada"
 - La consulta debe **completarse** (no timeout)
-- `INITIAL_SESSION` se ignora correctamente
+- Todos los eventos de `onAuthStateChange` se ignoran hasta que `sessionInitialized = true`
 
 ## 📝 Archivos Modificados
 
