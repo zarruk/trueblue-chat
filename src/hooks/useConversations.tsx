@@ -768,13 +768,20 @@ export function useConversations() {
         p_offset: poolOffset + poolSize
       })
       
-      const { data, error } = await (supabase.rpc as any)('get_prioritized_conversations', {
+      // ✅ TIMEOUT: Agregar timeout de 10 segundos para evitar cuelgues
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Query timeout after 10s')), 10000)
+      );
+      
+      const queryPromise = (supabase.rpc as any)('get_prioritized_conversations', {
         p_client_id: clientId || null,
         p_agent_id: profileId || null,
         p_is_admin: role === 'admin',
         p_limit: poolSize,
         p_offset: poolOffset + poolSize
-      })
+      });
+      
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
       
       console.log('🗄️ loadMoreConversationsFromDB: Query ejecutada. Data length:', data?.length, 'Error:', error)
 
@@ -782,6 +789,7 @@ export function useConversations() {
         console.error('❌ Error loading more conversations from DB:', error)
         console.log('🔄 loadMoreConversationsFromDB: hasMore cambiado a FALSE por error')
         setHasMore(false)
+        setLoadingMore(false) // ✅ CRÍTICO: Resetear loading
         return
       }
 
@@ -789,6 +797,7 @@ export function useConversations() {
         console.log('✅ loadMoreConversationsFromDB: No hay más conversaciones en la BD')
         console.log('🔄 loadMoreConversationsFromDB: hasMore cambiado a FALSE - No hay más conversaciones')
         setHasMore(false)
+        setLoadingMore(false) // ✅ CRÍTICO: Resetear loading
         return
       }
 
@@ -879,6 +888,7 @@ export function useConversations() {
     } catch (error) {
       console.error('❌ Error loading more conversations from DB:', error)
       setHasMore(false)
+      setLoadingMore(false) // ✅ CRÍTICO: Resetear loading
     }
   }, [poolOffset, poolSize, clientId, p?.role, p?.id])
 
