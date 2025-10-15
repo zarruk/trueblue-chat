@@ -30,8 +30,8 @@ export function useMessageTemplates() {
 
     try {
       setLoading(true)
-      console.log('🔍 fetchTemplates: Obteniendo plantillas...')
-      console.log('🔍 fetchTemplates: Profile client_id:', profile?.client_id)
+      // console.log('🔍 fetchTemplates: Obteniendo plantillas...')
+      // console.log('🔍 fetchTemplates: Profile client_id:', profile?.client_id)
       
       // Si no tenemos client_id, esperar y reintentar
       if (!profile?.client_id) {
@@ -56,7 +56,7 @@ export function useMessageTemplates() {
         return
       }
 
-      console.log('✅ fetchTemplates: Plantillas obtenidas:', data?.length || 0)
+      // console.log('✅ fetchTemplates: Plantillas obtenidas:', data?.length || 0)
       setTemplates((data as any) || [])
     } catch (error) {
       console.error('❌ Exception fetching templates:', error)

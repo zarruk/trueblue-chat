@@ -254,31 +254,31 @@ export function useClient() {
   }
 
   // Obtener nombre del cliente para mostrar
-  const getClientDisplayName = (): string => {
-    console.log('🔍 getClientDisplayName: clientInfo:', clientInfo)
-    console.log('🔍 getClientDisplayName: loading:', loading)
+  const getClientDisplayName = useCallback((): string => {
+    // console.log('🔍 getClientDisplayName: clientInfo:', clientInfo)
+    // console.log('🔍 getClientDisplayName: loading:', loading)
     
     if (!clientInfo) {
-      console.log('🔍 getClientDisplayName: No hay clientInfo, retornando "Cargando..."')
+      // console.log('🔍 getClientDisplayName: No hay clientInfo, retornando "Cargando..."')
       return 'Cargando...'
     }
     
-    console.log('🔍 getClientDisplayName: clientInfo.name:', clientInfo.name)
-    console.log('🔍 getClientDisplayName: clientInfo.branding_config:', clientInfo.branding_config)
+    // console.log('🔍 getClientDisplayName: clientInfo.name:', clientInfo.name)
+    // console.log('🔍 getClientDisplayName: clientInfo.branding_config:', clientInfo.branding_config)
     
     // Usar configuración de branding si está disponible
     if (clientInfo.branding_config?.name) {
-      console.log('🔍 getClientDisplayName: Usando branding_config.name:', clientInfo.branding_config.name)
+      // console.log('🔍 getClientDisplayName: Usando branding_config.name:', clientInfo.branding_config.name)
       return clientInfo.branding_config.name
     }
     
     // Fallback al nombre del cliente
-    console.log('🔍 getClientDisplayName: Usando clientInfo.name:', clientInfo.name)
+    // console.log('🔍 getClientDisplayName: Usando clientInfo.name:', clientInfo.name)
     return clientInfo.name
-  }
+  }, [clientInfo])
 
   // Obtener nombre corto del cliente
-  const getClientShortName = (): string => {
+  const getClientShortName = useCallback((): string => {
     if (!clientInfo) return '...'
     
     // Usar configuración de branding si está disponible
@@ -288,10 +288,10 @@ export function useClient() {
     
     // Fallback: primeras dos letras del nombre
     return clientInfo.name.substring(0, 2).toUpperCase()
-  }
+  }, [clientInfo])
 
   // Obtener logo del cliente
-  const getClientLogo = (): string | null => {
+  const getClientLogo = useCallback((): string | null => {
     if (!clientInfo) return null
     
     // Usar configuración de branding si está disponible
@@ -301,10 +301,10 @@ export function useClient() {
     
     // Fallback al logo del cliente
     return clientInfo.logo_url
-  }
+  }, [clientInfo])
 
   // Obtener colores del cliente
-  const getClientColors = () => {
+  const getClientColors = useCallback(() => {
     if (!clientInfo) {
       return {
         primary: '#3B82F6',
@@ -316,10 +316,10 @@ export function useClient() {
       primary: clientInfo.primary_color,
       secondary: clientInfo.secondary_color
     }
-  }
+  }, [clientInfo])
 
   // Verificar si una feature está habilitada
-  const isFeatureEnabled = async (featureName: string): Promise<boolean> => {
+  const isFeatureEnabled = useCallback(async (featureName: string): Promise<boolean> => {
     try {
       const features = await getFeaturesConfig()
       return features?.[featureName] === true
@@ -327,10 +327,10 @@ export function useClient() {
       console.error(`❌ Error verificando feature ${featureName}:`, err)
       return false
     }
-  }
+  }, [getFeaturesConfig])
 
   // Obtener límite específico
-  const getLimit = async (limitName: string): Promise<number> => {
+  const getLimit = useCallback(async (limitName: string): Promise<number> => {
     try {
       const limits = await getLimitsConfig()
       return limits?.[limitName] || 0
@@ -338,7 +338,7 @@ export function useClient() {
       console.error(`❌ Error obteniendo límite ${limitName}:`, err)
       return 0
     }
-  }
+  }, [getLimitsConfig])
 
   // Cargar información del cliente al montar el hook o cuando cambie el perfil
   useEffect(() => {

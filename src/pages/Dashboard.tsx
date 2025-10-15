@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useConversations } from '@/hooks/useConversations';
 import { useAgents } from '@/hooks/useAgents';
@@ -10,6 +10,7 @@ import { MessageSquare } from 'lucide-react';
 import { RealtimeDebugPanel } from '@/components/RealtimeDebugPanel';
 import { useRealtimeFallback } from '@/hooks/useRealtimeFallback';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
 
 
 export default function Dashboard() {
@@ -58,7 +59,20 @@ export default function Dashboard() {
   //   selectedConversationId
   // });
 
-  // Eliminado: No refrescar automÃ¡ticamente al recuperar foco
+  // ✅ FIX: Page Visibility API DESHABILITADO para evitar interferencias con canales WebSocket
+  // El problema original era que al volver de otra pestaña, los canales se interferían
+  // Supabase maneja la reconexión automáticamente, no necesitamos intervenir
+  useEffect(() => {
+    console.log('👁️ [PAGE VISIBILITY] Page Visibility API deshabilitado - Supabase maneja reconexión automática')
+    
+    // No hacer nada - dejar que Supabase maneje todo automáticamente
+    return () => {
+      console.log('👁️ [PAGE VISIBILITY] Page Visibility cleanup - no action needed')
+    }
+  }, []) // Sin dependencias - solo se ejecuta una vez
+
+  // ✅ FIX: NO necesitamos cleanup global - cada componente maneja sus propios canales
+  // Supabase limpiará automáticamente los canales cuando el cliente se desconecte
 
   // Las conversaciones se actualizan automÃ¡ticamente vÃ­a tiempo real
 
@@ -67,14 +81,14 @@ export default function Dashboard() {
     ? conversations.find(conv => conv.id === selectedConversationId) || null
     : null;
 
-  const handleSelectConversation = (conversationId: string) => {
+  const handleSelectConversation = useCallback((conversationId: string) => {
     console.log('ðŸ–±ï¸ Conversation selected:', conversationId);
     selectConversation(conversationId);
     // sincronizar URL para deep-linking
     const params = new URLSearchParams(location.search);
     params.set('conv', conversationId);
     navigate({ pathname: '/dashboard', search: params.toString() }, { replace: true });
-  };
+  }, [selectConversation, location.search, navigate]);
 
   // seleccionar conversaciÃ³n desde query param ?conv=
   useEffect(() => {
@@ -90,7 +104,7 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search]);
 
-  if (loading) {
+  if (loading && conversations.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -253,7 +267,10 @@ export default function Dashboard() {
       
       {/* Panel de Debug para Realtime - Solo en staging/dev */}
       {(import.meta.env.MODE !== 'production' || import.meta.env.VITE_ENABLE_DEBUG === 'true') && (
-        <RealtimeDebugPanel />
+        <RealtimeDebugPanel 
+          conversations={conversations}
+          updateConversationStatus={updateConversationStatus}
+        />
       )}
     </div>
   );

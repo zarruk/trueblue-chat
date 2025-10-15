@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/integrations/supabase/client'
 import { useAuth } from './useAuth'
 // Notificaciones deshabilitadas
@@ -74,6 +74,9 @@ export function useConversations() {
   const [isSelectingConversation, setIsSelectingConversation] = useState(false)
   const { user, profile, clientId, isProfileReady } = useAuth()
   const p = profile as any
+  
+  // Cola simple para evitar llamadas simultáneas a fetchConversations
+  const isFetchingRef = useRef(false)
 
   // Estados para scroll infinito
   const [currentPage, setCurrentPage] = useState(0)
@@ -100,7 +103,15 @@ export function useConversations() {
       return
     }
 
+    // Cola simple: si ya hay una llamada en progreso, ignorar esta
+    if (isFetchingRef.current) {
+      console.log('⏭️ fetchConversations: Ya hay una llamada en progreso, ignorando...')
+      return
+    }
+
     try {
+      isFetchingRef.current = true
+      
       if (options?.background) {
         setRefreshing(true)
       } else {
@@ -111,41 +122,41 @@ export function useConversations() {
       console.log('🔍 fetchConversations: Client ID:', clientId)
       console.log('🔍 fetchConversations: Profile role:', p?.role)
       
-      let query = supabase
-        .from('tb_conversations')
-        .select('*')
-        .order('updated_at', { ascending: false })
-        .limit(poolSize) // Cargar un pool inicial más grande para priorizar
-
-      // Aplicar filtro por cliente solo si existe en el perfil (RLS hace el resto)
-      if (clientId) {
-        query = (query as any).eq('client_id', clientId)
-      }
-
-      // If user is not admin, only show conversations assigned to them or pending
+      // 🎯 NUEVO: Usar RPC para traer conversaciones ya ordenadas por prioridad
       const role = p?.role as string | undefined
       const profileId = p?.id as string | undefined
+      
       if (role !== 'admin') {
         if (profileId) {
           console.log('🔒 Non-admin user, filtering conversations')
-          query = (query as any).or(`assigned_agent_id.eq.${profileId},status.eq.pending_human,status.eq.active_ai`)
         } else {
           console.log('🔒 No profile ID, showing only pending')
-          query = query.eq('status', 'pending_human')
         }
       } else {
         console.log('👑 Admin user, showing all conversations')
       }
 
-      console.log('🔍 fetchConversations: Query construida, ejecutando...')
-      console.log('🔍 fetchConversations: Client ID:', clientId)
-      console.log('🔍 fetchConversations: Profile role:', p?.role)
-      const { data, error } = await (query as any)
-      console.log('🔍 fetchConversations: Query ejecutada')
-      console.log('🔍 fetchConversations: Error:', error)
-      console.log('🔍 fetchConversations: Data length:', data?.length)
-      console.log('🔍 fetchConversations: Data sample:', data?.slice(0, 2))
-      // console.log('🔍 fetchConversations: Data client_ids:', (data as any)?.map((c: any) => c.client_id))
+      console.log('🔍 fetchConversations: Ejecutando RPC get_prioritized_conversations...')
+      console.log('🔍 fetchConversations: Parámetros:', {
+        p_client_id: clientId || null,
+        p_agent_id: profileId || null,
+        p_is_admin: role === 'admin',
+        p_limit: poolSize,
+        p_offset: 0
+      })
+      
+      // ✅ Usar función RPC para ordenamiento por prioridad en BD
+      const { data, error } = await (supabase.rpc as any)('get_prioritized_conversations', {
+        p_client_id: clientId || null,
+        p_agent_id: profileId || null,
+        p_is_admin: role === 'admin',
+        p_limit: poolSize,
+        p_offset: 0
+      })
+      
+      console.log('✅ fetchConversations: Query ejecutada')
+      console.log('📊 fetchConversations: Data length:', data?.length)
+      console.log('📊 fetchConversations: Error:', error)
 
       if (error) {
         console.error('❌ Error fetching conversations:', error)
@@ -154,28 +165,73 @@ export function useConversations() {
       }
 
       console.log('✅ fetchConversations: Conversations fetched successfully:', data?.length || 0)
+      
+      // Para recargas en background, usar datos más simples para evitar timeout
+      if (options?.background) {
+        console.log('🔄 fetchConversations: Modo background - usando datos básicos sin último mensaje')
+        const basicConversations = (data || []).map((conversation: any) => ({
+          ...conversation,
+          last_message_sender_role: null,
+          last_message_at: null,
+          last_message_content: null
+        }))
+        
+        // Aplicar priorización básica
+        const prioritizedPool = sortConversationsByPriority(basicConversations)
+        setConversationPool(prioritizedPool)
+        setPoolOffset(0)
+        
+        const initialConversations = prioritizedPool.slice(0, 20)
+        console.log('🔄 fetchConversations: Setting conversations in background mode:', initialConversations.length)
+        setConversations(initialConversations)
+        
+        if (!options?.background) {
+          setCurrentPage(0)
+          setHasMore(prioritizedPool.length > 20)
+          setTotalCount(prioritizedPool.length)
+        }
+        
+        setIsInitialized(true)
+        console.log('✅ fetchConversations: Background mode completed, isInitialized = true')
+        return
+      }
+      
       console.log('🔍 fetchConversations: Obteniendo último mensaje de cada conversación...')
 
       // Obtener el último mensaje de cada conversación para determinar urgencia y previsualización
       const conversationsWithLastMessage = await Promise.all(
         (data || []).map(async (conversation: any) => {
           try {
-            const { data: lastMessage } = await supabase
+            let query: any = supabase
               .from('tb_messages')
               .select('sender_role, content, created_at')
               .eq('conversation_id', conversation.id)
-              // .eq('client_id', profile?.client_id) // Filtrar mensajes por cliente también
               .order('created_at', { ascending: false })
               .limit(1)
-              .maybeSingle()
 
-            return {
+            // NOTA: No aplicamos filtro por client_id aquí porque los mensajes ya están filtrados
+            // indirectamente a través de la relación conversation_id -> tb_conversations.client_id
+
+            const { data: lastMessage, error: messageError } = await query.maybeSingle()
+
+            if (messageError) {
+              console.warn('⚠️ Error obteniendo último mensaje para conversación:', conversation.id, messageError)
+            }
+
+            const result = {
               ...conversation,
               last_message_sender_role: lastMessage?.sender_role || null,
               last_message_at: lastMessage?.created_at || null,
               last_message_content: lastMessage?.content || null
             }
+
+            if (!lastMessage) {
+              console.log('📭 No hay mensajes para conversación:', conversation.id, conversation.username || conversation.user_id)
+            }
+
+            return result
           } catch (error) {
+            console.warn('⚠️ Excepción obteniendo último mensaje para conversación:', conversation.id, error)
             // Si no hay mensajes o hay error, devolver la conversación sin el campo
             return {
               ...conversation,
@@ -203,7 +259,9 @@ export function useConversations() {
       console.log('🔍 fetchConversations: Mostrando primeras', initialConversations.length, 'conversaciones del pool')
       
       console.log('🔍 fetchConversations: Setting conversations in state...')
+      console.log('🔍 fetchConversations: initialConversations.length =', initialConversations.length)
       setConversations(initialConversations)
+      console.log('✅ fetchConversations: setConversations called with', initialConversations.length, 'conversations')
       
       // Resetear estados de paginación en la carga inicial
       if (!options?.background) {
@@ -213,50 +271,65 @@ export function useConversations() {
         console.log('🔄 fetchConversations: hasMore =', prioritizedPool.length > 20, 'poolSize =', prioritizedPool.length)
       }
 
-      // Auto-cierre de conversaciones cuyo último mensaje del usuario tiene >24h
-      try {
-        const role = (profile as any)?.role as string | undefined
-        if (role === 'admin') {
-          const now = Date.now()
-          const dayMs = 24 * 60 * 60 * 1000
-          const toClose = (conversationsWithLastMessage || []).filter((c: any) => {
-            if (!c || c.status === 'closed') return false
-            if (!c.last_message_at) return false
-            const age = now - new Date(c.last_message_at).getTime()
-            return age >= dayMs
-          })
+      // ✅ FIX: Resetear loading ANTES de la sección de auto-cierre que puede colgarse
+      if (!options?.background) {
+        setLoading(false)
+        console.log('🧹 fetchConversations: setLoading(false) called BEFORE auto-cierre')
+      }
+      setIsInitialized(true)
+      console.log('✅ fetchConversations: setIsInitialized(true) called')
 
-          if (toClose.length > 0) {
-            console.log(`🕒 Auto-cierre: cerrando ${toClose.length} conversación(es) por inactividad >24h`)
-            for (const conv of toClose) {
-              try {
-                const { error } = await supabase
-                  .from('tb_conversations')
-                  .update({ status: 'closed', updated_at: new Date().toISOString() })
-                  .eq('id', conv.id)
-                if (!error) {
-                  setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, status: 'closed', updated_at: new Date().toISOString() } : c))
-                } else {
-                  console.warn('⚠️ Auto-cierre: fallo al cerrar conversación', conv.id, error)
+      // ✅ FIX: Auto-cierre en background para no bloquear la UI
+      setTimeout(async () => {
+        try {
+          const role = (profile as any)?.role as string | undefined
+          if (role === 'admin') {
+            const now = Date.now()
+            const dayMs = 24 * 60 * 60 * 1000
+            const toClose = (conversationsWithLastMessage || []).filter((c: any) => {
+              if (!c || c.status === 'closed') return false
+              if (!c.last_message_at) return false
+              const age = now - new Date(c.last_message_at).getTime()
+              return age >= dayMs
+            })
+
+            if (toClose.length > 0) {
+              console.log(`🕒 Auto-cierre: cerrando ${toClose.length} conversación(es) por inactividad >24h`)
+              for (const conv of toClose) {
+                try {
+                  const { error } = await supabase
+                    .from('tb_conversations')
+                    .update({ status: 'closed', updated_at: new Date().toISOString() })
+                    .eq('id', conv.id)
+                  if (!error) {
+                    setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, status: 'closed', updated_at: new Date().toISOString() } : c))
+                  } else {
+                    console.warn('⚠️ Auto-cierre: fallo al cerrar conversación', conv.id, error)
+                  }
+                } catch (e) {
+                  console.warn('⚠️ Auto-cierre: excepción cerrando conversación', conv.id, e)
                 }
-              } catch (e) {
-                console.warn('⚠️ Auto-cierre: excepción cerrando conversación', conv.id, e)
               }
             }
           }
+        } catch (e) {
+          console.warn('⚠️ Auto-cierre: error general', e)
         }
-      } catch (e) {
-        console.warn('⚠️ Auto-cierre: error general', e)
-      }
-      setIsInitialized(true)
+      }, 0) // Ejecutar en el siguiente tick del event loop
     } catch (error) {
       console.error('❌ Exception fetching conversations:', error)
       toast.error('Error al cargar las conversaciones')
     } finally {
+      console.log('🧹 fetchConversations: Finally block executing')
+      isFetchingRef.current = false
+      console.log('🧹 fetchConversations: isFetchingRef.current = false')
+      
       if (options?.background) {
         setRefreshing(false)
+        console.log('🧹 fetchConversations: setRefreshing(false) called')
       } else {
-        setLoading(false)
+        // ✅ FIX: setLoading(false) ya se ejecutó antes, solo loggear
+        console.log('🧹 fetchConversations: setLoading(false) already called before auto-cierre')
       }
     }
   }, [user, clientId, isProfileReady, p?.id, p?.role, poolSize])
@@ -270,11 +343,25 @@ export function useConversations() {
 
     try {
       console.log('🔍 fetchMessages: Fetching messages for conversation:', conversationId)
-      const { data, error } = await supabase
+      console.log('🔍 fetchMessages: Starting query to tb_messages table...')
+      
+      // ✅ TIMEOUT: Agregar timeout de 8 segundos para evitar cuelgues silenciosos
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('fetchMessages timeout after 8s')), 8000)
+      );
+      
+      const queryPromise = supabase
         .from('tb_messages')
         .select('*')
         .eq('conversation_id', conversationId)
-        .order('created_at', { ascending: true })
+        .order('created_at', { ascending: true });
+
+      console.log('🔍 fetchMessages: Executing query with timeout...')
+      
+      // Competencia: la que termine primero gana
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
+      
+      console.log('🔍 fetchMessages: Query completed. Data length:', data?.length, 'Error:', error)
 
       if (error) {
         console.error('❌ Error fetching messages:', error)
@@ -282,13 +369,26 @@ export function useConversations() {
         return
       }
 
-      console.log('✅ Messages fetched successfully:', data)
+      console.log('✅ Messages fetched successfully:', data?.length || 0, 'messages for conversation:', conversationId)
+      
+      // Log detallado de los primeros 3 mensajes para debugging
+      if (data && data.length > 0) {
+        console.log('📨 fetchMessages: Primeros mensajes:', data.slice(0, 3).map((m: any) => ({
+          id: m.id,
+          sender: m.sender_role,
+          preview: m.content?.substring(0, 30) + '...',
+          time: m.created_at
+        })))
+      } else {
+        console.log('📭 fetchMessages: No hay mensajes en esta conversación')
+      }
+      
       setMessages((data as any) || [])
     } catch (error) {
       console.error('❌ Exception fetching messages:', error)
       toast.error('Error al cargar los mensajes')
     }
-  }, [])
+  }, [clientId])
 
   // Send a message
   const sendMessage = useCallback(async (
@@ -579,24 +679,36 @@ export function useConversations() {
 
   // Select a conversation
   const selectConversation = useCallback(async (conversationId: string) => {
-    // 🔧 FIX: Evitar loops infinitos
-    if (isSelectingConversation || selectedConversationId === conversationId) {
-      console.log('🚫 selectConversation: Ya en proceso o misma conversación')
+    console.log('🎯 selectConversation called with:', conversationId)
+    console.log('🎯 selectConversation: isSelectingConversation =', isSelectingConversation)
+    console.log('🎯 selectConversation: selectedConversationId =', selectedConversationId)
+    
+    // ✅ FIX: Evitar loops infinitos con verificación más simple
+    if (isSelectingConversation) {
+      console.log('🚫 selectConversation: Ya en proceso, ignorando...')
+      return
+    }
+    
+    if (selectedConversationId === conversationId) {
+      console.log('🚫 selectConversation: Misma conversación, ignorando...')
       return
     }
     
     setIsSelectingConversation(true)
-    console.log('🎯 selectConversation called with:', conversationId)
+    console.log('🎯 selectConversation: Iniciando selección...')
     
     try {
-      // 🔧 FIX: Volver al orden original para evitar loops
       setSelectedConversationId(conversationId)
-      console.log('📨 Fetching messages for conversation:', conversationId)
+      console.log('📨 selectConversation: About to fetch messages for conversation:', conversationId)
       await fetchMessages(conversationId)
+      console.log('✅ selectConversation: Completado exitosamente')
+    } catch (error) {
+      console.error('❌ selectConversation: Error:', error)
     } finally {
+      console.log('🧹 selectConversation: Reseteando isSelectingConversation')
       setIsSelectingConversation(false)
     }
-  }, [fetchMessages, isSelectingConversation, selectedConversationId])
+  }, [fetchMessages]) // ✅ FIX: Solo depender de fetchMessages, no de los estados
 
   const clearSelectedConversation = useCallback(() => {
     console.log('🧹 Cleared selected conversation')
@@ -606,7 +718,7 @@ export function useConversations() {
 
   // Función para manejar cambios de estado de scroll
   const handleScrollStateChange = useCallback((isScrolling: boolean) => {
-    console.log('📜 Scroll state changed:', isScrolling)
+    // console.log('📜 Scroll state changed:', isScrolling)
     setIsUserScrolling(isScrolling)
     
     if (isScrolling) {
@@ -617,7 +729,7 @@ export function useConversations() {
       
       // Después de 2 segundos sin scroll, volver a modo normal
       const newTimeout = setTimeout(() => {
-        console.log('📜 Returning to normal mode after scroll timeout')
+        // console.log('📜 Returning to normal mode after scroll timeout')
         setIsUserScrolling(false)
         // Limpiar indicadores de nuevas conversaciones
         setNewConversationIds(new Set())
@@ -634,14 +746,15 @@ export function useConversations() {
       console.log('🔄 loadMore: Cargando desde el pool, página', currentPage + 1)
       
       // Calcular cuántas conversaciones mostrar del pool
-      const conversationsToShow = (currentPage + 1) * 20
+      const nextPage = currentPage + 1
+      const conversationsToShow = nextPage * 20
       const conversationsToDisplay = conversationPool.slice(0, conversationsToShow)
       
       console.log('🔄 loadMore: Mostrando', conversationsToDisplay.length, 'de', conversationPool.length, 'conversaciones del pool')
       
       // Actualizar la lista con las conversaciones del pool
       setConversations(conversationsToDisplay)
-      setCurrentPage(prev => prev + 1)
+      setCurrentPage(nextPage)
 
       // Si ya mostramos todas las conversaciones del pool, necesitamos cargar más
       if (conversationsToDisplay.length >= conversationPool.length) {
@@ -661,35 +774,43 @@ export function useConversations() {
   const loadMoreConversationsFromDB = useCallback(async () => {
     try {
       console.log('🗄️ loadMoreConversationsFromDB: Cargando más conversaciones de la BD')
+      console.log('🗄️ loadMoreConversationsFromDB: poolOffset =', poolOffset, 'poolSize =', poolSize)
       
-      let query = supabase
-        .from('tb_conversations')
-        .select('*')
-        .order('updated_at', { ascending: false })
-        .range(poolOffset + poolSize, poolOffset + poolSize + poolSize - 1) // Siguiente lote
-
-      // Aplicar filtro por cliente
-      if (clientId) {
-        query = (query as any).eq('client_id', clientId)
-      }
-
-      // Aplicar filtro por rol
+      // 🎯 NUEVO: Usar RPC con offset para mantener ordenamiento por prioridad
       const role = p?.role as string | undefined
       const profileId = p?.id as string | undefined
-      if (role !== 'admin') {
-        if (profileId) {
-          query = (query as any).or(`assigned_agent_id.eq.${profileId},status.eq.pending_human,status.eq.active_ai`)
-        } else {
-          query = query.eq('status', 'pending_human')
-        }
-      }
 
-      const { data, error } = await (query as any)
+      console.log('🗄️ loadMoreConversationsFromDB: Ejecutando RPC get_prioritized_conversations...')
+      console.log('🗄️ loadMoreConversationsFromDB: Parámetros:', {
+        p_client_id: clientId || null,
+        p_agent_id: profileId || null,
+        p_is_admin: role === 'admin',
+        p_limit: poolSize,
+        p_offset: poolOffset + poolSize
+      })
+      
+      // ✅ TIMEOUT: Agregar timeout de 10 segundos para evitar cuelgues
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Query timeout after 10s')), 10000)
+      );
+      
+      const queryPromise = (supabase.rpc as any)('get_prioritized_conversations', {
+        p_client_id: clientId || null,
+        p_agent_id: profileId || null,
+        p_is_admin: role === 'admin',
+        p_limit: poolSize,
+        p_offset: poolOffset + poolSize
+      });
+      
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
+      
+      console.log('🗄️ loadMoreConversationsFromDB: Query ejecutada. Data length:', data?.length, 'Error:', error)
 
       if (error) {
         console.error('❌ Error loading more conversations from DB:', error)
         console.log('🔄 loadMoreConversationsFromDB: hasMore cambiado a FALSE por error')
         setHasMore(false)
+        setLoadingMore(false) // ✅ CRÍTICO: Resetear loading
         return
       }
 
@@ -697,41 +818,28 @@ export function useConversations() {
         console.log('✅ loadMoreConversationsFromDB: No hay más conversaciones en la BD')
         console.log('🔄 loadMoreConversationsFromDB: hasMore cambiado a FALSE - No hay más conversaciones')
         setHasMore(false)
+        setLoadingMore(false) // ✅ CRÍTICO: Resetear loading
         return
       }
 
-      // Obtener último mensaje de cada conversación
-      const newConversationsWithLastMessage = await Promise.all(
-        (data || []).map(async (conversation: any) => {
-          try {
-            const { data: lastMessage } = await supabase
-              .from('tb_messages')
-              .select('sender_role, content, created_at')
-              .eq('conversation_id', conversation.id)
-              .order('created_at', { ascending: false })
-              .limit(1)
-              .maybeSingle()
-
-            return {
-              ...conversation,
-              last_message_sender_role: lastMessage?.sender_role || null,
-              last_message_at: lastMessage?.created_at || null,
-              last_message_content: lastMessage?.content || null
-            }
-          } catch (error) {
-            return {
-              ...conversation,
-              last_message_sender_role: null,
-              last_message_at: null,
-              last_message_content: null
-            }
-          }
-        })
-      )
-
-      // Aplicar priorización a las nuevas conversaciones
-      const newPrioritizedConversations = sortConversationsByPriority(newConversationsWithLastMessage)
+      console.log('🗄️ loadMoreConversationsFromDB: Obteniendo últimos mensajes de', data.length, 'conversaciones...')
       
+      // ✅ OPTIMIZACIÓN: Cargar en background sin bloquear, simplemente agregar al pool sin último mensaje
+      // Los últimos mensajes se pueden cargar después de forma lazy o en segundo plano
+      console.log('⚡ loadMoreConversationsFromDB: Modo rápido - agregando conversaciones sin último mensaje')
+      
+      const newConversations = (data || []).map((conversation: any) => ({
+        ...conversation,
+        last_message_sender_role: null,
+        last_message_at: null,
+        last_message_content: null
+      }))
+
+      console.log('🗄️ loadMoreConversationsFromDB: Aplicando priorización...')
+      // Aplicar priorización a las nuevas conversaciones
+      const newPrioritizedConversations = sortConversationsByPriority(newConversations)
+      
+      console.log('🗄️ loadMoreConversationsFromDB: Agregando al pool...')
       // Agregar las nuevas conversaciones al pool existente
       setConversationPool(prev => {
         const combined = [...prev, ...newPrioritizedConversations]
@@ -739,13 +847,69 @@ export function useConversations() {
         return sortConversationsByPriority(combined)
       })
       
+      console.log('🗄️ loadMoreConversationsFromDB: Actualizando offset...')
       // Actualizar el offset para el siguiente lote
       setPoolOffset(prev => prev + poolSize)
       
+      // Actualizar hasMore basándose en si se cargaron menos conversaciones de las esperadas
+      if (newPrioritizedConversations.length < poolSize) {
+        console.log('🔄 loadMoreConversationsFromDB: hasMore cambiado a FALSE - Menos conversaciones de las esperadas')
+        setHasMore(false)
+      }
+      
       console.log('✅ loadMoreConversationsFromDB: Agregadas', newPrioritizedConversations.length, 'conversaciones al pool')
+      
+      // ✅ OPTIMIZACIÓN: Cargar los últimos mensajes en background sin bloquear la UI
+      console.log('⚡ loadMoreConversationsFromDB: Cargando últimos mensajes en background...')
+      setTimeout(async () => {
+        try {
+          const conversationsWithLastMessage = await Promise.all(
+            (data || []).map(async (conversation: any) => {
+              try {
+                const { data: lastMessage } = await supabase
+                  .from('tb_messages')
+                  .select('sender_role, content, created_at')
+                  .eq('conversation_id', conversation.id)
+                  .order('created_at', { ascending: false })
+                  .limit(1)
+                  .maybeSingle()
+
+                return {
+                  ...conversation,
+                  last_message_sender_role: lastMessage?.sender_role || null,
+                  last_message_at: lastMessage?.created_at || null,
+                  last_message_content: lastMessage?.content || null
+                }
+              } catch (error) {
+                return {
+                  ...conversation,
+                  last_message_sender_role: null,
+                  last_message_at: null,
+                  last_message_content: null
+                }
+              }
+            })
+          )
+          
+          console.log('✅ loadMoreConversationsFromDB: Últimos mensajes cargados en background')
+          
+          // Actualizar el pool con los últimos mensajes
+          setConversationPool(prev => {
+            // Reemplazar las conversaciones que acabamos de actualizar
+            const updated = prev.map(conv => {
+              const withMessage = conversationsWithLastMessage.find(c => c.id === conv.id)
+              return withMessage || conv
+            })
+            return sortConversationsByPriority(updated)
+          })
+        } catch (error) {
+          console.warn('⚠️ loadMoreConversationsFromDB: Error cargando últimos mensajes en background:', error)
+        }
+      }, 0) // Ejecutar en el siguiente tick
     } catch (error) {
       console.error('❌ Error loading more conversations from DB:', error)
       setHasMore(false)
+      setLoadingMore(false) // ✅ CRÍTICO: Resetear loading
     }
   }, [poolOffset, poolSize, clientId, p?.role, p?.id])
 
@@ -773,12 +937,13 @@ export function useConversations() {
   }, [])
 
   // Effect to fetch messages when selectedConversationId changes
-  useEffect(() => {
-    if (selectedConversationId) {
-      console.log('🔄 useEffect: selectedConversationId changed, fetching messages for:', selectedConversationId)
-      fetchMessages(selectedConversationId)
-    }
-  }, [selectedConversationId, fetchMessages])
+  // COMENTADO: fetchMessages ya se ejecuta desde selectConversation, evitar duplicación
+  // useEffect(() => {
+  //   if (selectedConversationId) {
+  //     console.log('🔄 useEffect: selectedConversationId changed, fetching messages for:', selectedConversationId)
+  //     fetchMessages(selectedConversationId)
+  //   }
+  // }, [selectedConversationId, fetchMessages])
 
   // Configurar suscripciones de tiempo real
   const handleMessageInsert = useCallback((message: Message) => {
@@ -1083,7 +1248,7 @@ export function useConversations() {
   }, [fetchMessages, selectedConversationId, isUserScrolling])
 
   // Usar el hook de tiempo real
-  console.log('🔌 [REALTIME] Configurando hook useRealtimeConversations...')
+  // console.log('🔌 [REALTIME] Configurando hook useRealtimeConversations...')
   useRealtimeConversations({
     onMessageInsert: handleMessageInsert,
     onConversationInsert: handleConversationInsert,
@@ -1091,7 +1256,7 @@ export function useConversations() {
     userId: (p?.id as string | undefined),
     clientId: clientId
   })
-  console.log('🔌 [REALTIME] Hook useRealtimeConversations configurado')
+  // console.log('🔌 [REALTIME] Hook useRealtimeConversations configurado')
 
   // Initial fetch
   useEffect(() => {

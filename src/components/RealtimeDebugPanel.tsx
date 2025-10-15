@@ -4,14 +4,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Play, AlertCircle, CheckCircle, RefreshCw, Database, MessageSquare } from 'lucide-react'
 import { supabase } from '@/integrations/supabase/client'
-import { useConversations } from '@/hooks/useConversations'
+import { Conversation } from '@/hooks/useConversations'
 
-export function RealtimeDebugPanel() {
+interface RealtimeDebugPanelProps {
+  conversations: Conversation[]
+  updateConversationStatus: (conversationId: string, status: Conversation['status']) => Promise<void>
+}
+
+export function RealtimeDebugPanel({ conversations, updateConversationStatus }: RealtimeDebugPanelProps) {
   const [isVisible, setIsVisible] = useState(false)
   const [isRunning, setIsRunning] = useState(false)
   const [testResults, setTestResults] = useState<string[]>([])
   const [connectionStatus, setConnectionStatus] = useState<'unknown' | 'connected' | 'disconnected'>('unknown')
-  const { conversations, updateConversationStatus, assignAgent } = useConversations()
 
   const addResult = (message: string) => {
     setTestResults(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`])

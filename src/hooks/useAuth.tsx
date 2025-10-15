@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, useRef } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { Profile } from '@/types/database';
@@ -23,15 +23,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(true);
+  const profileLoadedRef = useRef(false);
+  const isLoadingProfileRef = useRef(false); // 🛡️ Protección contra llamadas duplicadas
 
-  const loadProfile = async (u: User) => {
-    setProfileLoading(true);
+  const loadProfile = async (u: User, skipLoadingState = false) => {
+    // 🛡️ PROTECCIÓN: Si ya hay una carga en progreso, ignorar esta llamada
+    if (isLoadingProfileRef.current) {
+      console.log('⏭️ loadProfile: Ya hay una carga en progreso, ignorando...');
+      return;
+    }
+    
+    isLoadingProfileRef.current = true;
+    console.log('🔐 loadProfile: Iniciando carga de perfil...');
+    
+    // Si ya tenemos un perfil y no queremos cambiar el loading state, usar modo silencioso
+    if (!skipLoadingState) {
+      setProfileLoading(true);
+    }
     try {
       const email = u.email || '';
       const name = (u.user_metadata as any)?.name || email?.split('@')[0] || 'Agente';
       console.log('🔍 Buscando/creando perfil para usuario:', email);
       
       // 1) Buscar perfil existente por email (más reciente)
+      console.log('🔍 Ejecutando consulta a tabla profiles...');
       const { data: initialProfile, error: selectErr } = await supabase
         .from('profiles')
         .select('*')
@@ -39,6 +54,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
+      
+      console.log('🔍 Consulta profiles completada. Data:', initialProfile, 'Error:', selectErr);
 
       let finalProfile = initialProfile as Profile | null;
 
@@ -113,11 +130,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('🏁 Perfil final cargado en Auth:', finalProfile);
       console.log('🏁 Client ID del perfil:', finalProfile?.client_id);
       setProfile(finalProfile || null);
+      
+      if (finalProfile) {
+        profileLoadedRef.current = true;
+      }
     } catch (e) {
       console.error('❌ Excepción resolviendo perfil:', e);
       setProfile(null);
     } finally {
-      setProfileLoading(false);
+      if (!skipLoadingState) {
+        setProfileLoading(false);
+      }
+      isLoadingProfileRef.current = false; // 🔓 Liberar la bandera siempre
+      console.log('🔓 loadProfile: Carga completada, bandera liberada');
     }
   };
 
@@ -129,44 +154,73 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     console.log('🔍 MOBILE DEBUG - Window location:', window.location.href);
     console.log('🔍 MOBILE DEBUG - Supabase URL:', import.meta.env.VITE_SUPABASE_URL);
     
-    // Set up auth state listener
+    // ✅ CRÍTICO: Bandera para evitar que onAuthStateChange actúe antes de getSession
+    let sessionInitialized = false;
+    
+    // 1️⃣ PRIMERO: Establecer la sesión inicial
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      console.log('🔍 getSession: Procesando sesión inicial');
+      setSession(session);
+      const u = session?.user ?? null;
+      setUser(u);
+      
+      if (u) {
+        console.log('🔍 getSession: Usuario encontrado, cargando perfil');
+        await loadProfile(u);
+      } else {
+        console.log('🔍 getSession: No hay usuario, reseteando estados');
+        setProfile(null);
+        setProfileLoading(false);
+      }
+      
+      setAuthLoading(false);
+      sessionInitialized = true; // 🔓 Permitir que onAuthStateChange actúe ahora
+      console.log('✅ getSession: Completado, auth listener puede proceder');
+    });
+
+    // 2️⃣ SEGUNDO: Set up auth state listener (se ejecutará después)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('🔍 MOBILE DEBUG - Auth state changed:', event, session?.user?.email);
         console.log('🔄 Auth state changed:', event, session?.user?.email);
+        
+        // 🛡️ CRÍTICO: No hacer NADA hasta que getSession() complete
+        if (!sessionInitialized) {
+          console.log('⏭️ onAuthStateChange: Esperando a que getSession() complete, ignorando evento:', event);
+          return;
+        }
         
         setSession(session);
         const u = session?.user ?? null;
         setUser(u);
         
         if (u) {
-          // ✅ Cargar perfil en TODOS los eventos con usuario (INITIAL_SESSION, TOKEN_REFRESHED, SIGNED_IN)
-          await loadProfile(u);
+          // ✅ Solo recargar perfil en SIGNED_IN (nuevo login después de la inicialización)
+          // NO recargar en TOKEN_REFRESHED para evitar desmontar componentes
+          if (event === 'SIGNED_IN') {
+            // Si ya cargamos el perfil anteriormente, usar modo silencioso para no desmontar componentes
+            const hasLoadedBefore = profileLoadedRef.current;
+            console.log('🔍 Perfil ya cargado anteriormente:', hasLoadedBefore);
+            await loadProfile(u, hasLoadedBefore);
+          } else {
+            console.log('⏭️ Evento de auth no requiere recarga de perfil:', event);
+            // Asegurar que loading se resetee incluso si no cargamos perfil
+            if (!profileLoadedRef.current) {
+              setProfileLoading(false);
+            }
+            setAuthLoading(false);
+          }
         } else {
           console.log('👤 Usuario no autenticado');
           setProfile(null);
           setProfileLoading(false);
+          profileLoadedRef.current = false;
+          isLoadingProfileRef.current = false; // Resetear la bandera
         }
         
         setAuthLoading(false);
       }
     );
-
-    // Get initial session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session);
-      const u = session?.user ?? null;
-      setUser(u);
-      
-      if (u) {
-        await loadProfile(u);
-      } else {
-        setProfile(null);
-        setProfileLoading(false);
-      }
-      
-      setAuthLoading(false);
-    });
 
     return () => subscription.unsubscribe();
   }, []);

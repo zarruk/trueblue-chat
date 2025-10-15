@@ -21,6 +21,8 @@ export function SwipeableRow({
   enableSwipe = true,
   showAction = true
 }: SwipeableRowProps) {
+  // ✅ FIX: Declarar TODOS los hooks ANTES de cualquier return condicional
+  // Esto cumple con las reglas de React Hooks y evita crashes
   const [translateX, setTranslateX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [startX, setStartX] = useState(0);
@@ -31,13 +33,14 @@ export function SwipeableRow({
   const MAX_TRANSLATE = -88; // Action button width
   
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (!enableSwipe) return; // Guard clause
     setIsDragging(true);
     setStartX(e.touches[0].clientX);
     setStartTranslateX(translateX);
-  }, [translateX]);
+  }, [translateX, enableSwipe]);
   
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (!isDragging) return;
+    if (!enableSwipe || !isDragging) return; // Guard clause
     
     const currentX = e.touches[0].clientX;
     const deltaX = currentX - startX;
@@ -54,9 +57,10 @@ export function SwipeableRow({
     }
     
     setTranslateX(newTranslateX);
-  }, [isDragging, startX, startTranslateX]);
+  }, [enableSwipe, isDragging, startX, startTranslateX, MAX_TRANSLATE]);
   
   const handleTouchEnd = useCallback(() => {
+    if (!enableSwipe) return; // Guard clause
     setIsDragging(false);
     
     // Determine if we should trigger the action or reset
@@ -69,7 +73,12 @@ export function SwipeableRow({
       // Snap back
       setTranslateX(0);
     }
-  }, [translateX, onSwipeAction]);
+  }, [enableSwipe, translateX, onSwipeAction, MAX_TRANSLATE, SWIPE_THRESHOLD]);
+  
+  // Return early DESPUÉS de declarar todos los hooks
+  if (!enableSwipe) {
+    return <>{children}</>;
+  }
   
   return (
     <div className="relative overflow-hidden">
@@ -79,10 +88,10 @@ export function SwipeableRow({
         className={`relative transition-transform duration-200 ease-out ${
           isDragging ? 'transition-none' : ''
         }`}
-        style={{ transform: `translateX(${enableSwipe ? translateX : 0}px)` }}
-        onTouchStart={enableSwipe ? handleTouchStart : undefined}
-        onTouchMove={enableSwipe ? handleTouchMove : undefined}
-        onTouchEnd={enableSwipe ? handleTouchEnd : undefined}
+        style={{ transform: `translateX(${translateX}px)` }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       >
         {children}
       </div>

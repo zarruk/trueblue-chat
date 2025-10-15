@@ -15,7 +15,7 @@ import {
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { useAuth } from '@/hooks/useAuth'
 import { useAgents } from '@/hooks/useAgents'
-import { format } from 'date-fns'
+import { format, isToday, isYesterday, isSameDay } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { supabase } from '@/integrations/supabase/client'
 import { MessageTemplatesSuggestions } from '@/components/MessageTemplatesSuggestions'
@@ -24,6 +24,17 @@ import data from '@emoji-mart/data'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 // Notificaciones deshabilitadas
 const toast = { success: (..._args: any[]) => {}, error: (..._args: any[]) => {}, info: (..._args: any[]) => {} } as const
+
+// Helper para formatear separadores de fecha
+function formatDateSeparator(date: Date): string {
+  if (isToday(date)) {
+    return 'Hoy'
+  }
+  if (isYesterday(date)) {
+    return 'Ayer'
+  }
+  return format(date, "d 'de' MMMM", { locale: es })
+}
 
 interface ChatWindowProps {
   conversationId?: string
@@ -176,15 +187,15 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     }
   }
 
-  // Sincronizar conversación seleccionada y cargar mensajes cuando cambia conversationId
-  useEffect(() => {
-    if (!conversationId) return
-    const selectFn = onSelectConversation
-    if (selectFn) {
-      console.log('🔄 ChatWindow: Selecting conversation for realtime + loading messages:', conversationId)
-      selectFn(conversationId)
-    }
-  }, [conversationId, onSelectConversation])
+  // COMENTADO: Llamada redundante a selectConversation
+  // Dashboard ya maneja la selección de conversaciones, ChatWindow solo necesita mostrar los datos
+  // useEffect(() => {
+  //   if (!conversationId) return
+  //   if (onSelectConversation) {
+  //     console.log('🔄 ChatWindow: Selecting conversation for realtime + loading messages:', conversationId)
+  //     onSelectConversation(conversationId)
+  //   }
+  // }, [conversationId])
 
   // Update local messages when propMessages change (evitar deps inestables)
   useEffect(() => {
@@ -247,13 +258,16 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
 
     const setupChannel = async () => {
       try {
+        // ✅ FIX: Usar nombre único y específico para este canal
+        const channelName = `chat-window-${conversationId}-${Date.now()}`
+        
         channel = supabase
-          .channel(`chat-window-messages-${conversationId}`)
+          .channel(channelName)
           .on(
             'postgres_changes',
             { event: 'INSERT', schema: 'public', table: 'tb_messages', filter: `conversation_id=eq.${conversationId}` },
             (payload) => {
-              // 🔧 FIX: Verificar que el componente sigue montado antes de actualizar estado
+              // ✅ FIX: Verificar que el componente sigue montado antes de actualizar estado
               if (!isMounted) return
               
               const newMessage = payload.new as unknown as Message
@@ -267,7 +281,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
             'postgres_changes',
             { event: 'UPDATE', schema: 'public', table: 'tb_messages', filter: `conversation_id=eq.${conversationId}` },
             (payload) => {
-              // 🔧 FIX: Verificar que el componente sigue montado antes de actualizar estado
+              // ✅ FIX: Verificar que el componente sigue montado antes de actualizar estado
               if (!isMounted) return
               
               const updatedMessage = payload.new as unknown as Message
@@ -288,19 +302,23 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     setupChannel()
 
     return () => {
-      // 🔧 FIX: Marcar como desmontado y limpiar canal de forma segura
+      // ✅ FIX: Marcar como desmontado primero para prevenir actualizaciones de estado
       isMounted = false
       
+      // ✅ FIX: Limpiar solo el canal específico de este componente
       if (channel) {
         try {
           channel.unsubscribe()
-          console.log('🧹 [ChatWindow] Canal de tiempo real limpiado para conversación', conversationId)
+          console.log('🧹 [ChatWindow] Canal limpiado para conversación', conversationId)
         } catch (error) {
-          console.warn('⚠️ [ChatWindow] Error al limpiar canal de tiempo real:', error)
+          console.warn('⚠️ [ChatWindow] Error al limpiar canal:', error)
         }
       }
+      
+      // ✅ FIX: NO buscar canales huérfanos - confiar en que cada instancia limpia su propio canal
+      // Esto evita interferencia con otros componentes y race conditions
     }
-  }, [conversationId])
+  }, []) // ✅ FIX: NO re-crear canales automáticamente
 
   // ELIMINADO: No usar polling automático para evitar refrescos
 
@@ -847,12 +865,34 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
               ))}
 
               {/* Mensajes de la conversación actual */}
-              {localMessages.length === 0 ? (
+              {messages.length === 0 ? (
                 <div className="text-center text-muted-foreground">
                   <p>No hay mensajes aún. Sé el primero en escribir.</p>
                 </div>
               ) : (
-                localMessages.map((msg) => renderMessageBubble(msg, false))
+                messages.map((msg, idx) => {
+                  // Verificar si necesitamos mostrar un separador de fecha
+                  const showDateSeparator = idx === 0 || 
+                    !isSameDay(new Date(messages[idx - 1].created_at), new Date(msg.created_at))
+                  
+                  return (
+                    <React.Fragment key={msg.id}>
+                      {showDateSeparator && (
+                        <div className="relative my-4">
+                          <div className="absolute inset-0 flex items-center">
+                            <span className="w-full border-t border-muted-foreground/20" />
+                          </div>
+                          <div className="relative flex justify-center text-xs">
+                            <span className="bg-background px-3 py-1 text-muted-foreground font-medium rounded-full">
+                              {formatDateSeparator(new Date(msg.created_at))}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                      {renderMessageBubble(msg, false)}
+                    </React.Fragment>
+                  )
+                })
               )}
             </>
           )}
@@ -924,6 +964,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
             }}
           />
           {/* Debug logs en consola */}
+          {/* COMENTADO: Causa loop infinito de re-renders
           {conversationId && (() => {
             console.log('🔍 ChatWindow Debug:', {
               conversationId,
@@ -933,6 +974,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
             });
             return null;
           })()}
+          */}
           <Button type="submit" size="icon" className="h-11 w-11 min-w-[44px] min-h-[44px] touch-manipulation" disabled={!message.trim() || !conversationId || conversation?.status === 'closed' || conversation?.status === 'pending_response'}>
             <Send className="h-4 w-4" />
           </Button>

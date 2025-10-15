@@ -124,12 +124,12 @@ export function ConversationList({
   }, [handleScroll, onScrollStateChange])
 
   // Log para debugging de re-renderizado
-  console.log('🔄 ConversationList: Re-renderizando con conversaciones:', conversations.length)
-  console.log('🔍 ConversationList: Array de conversaciones completo:', conversations)
-  if (selectedConversationId) {
-    const selectedConv = conversations.find(c => c.id === selectedConversationId)
-    console.log('🔍 ConversationList: Conversación seleccionada:', selectedConv)
-  }
+  // console.log('🔄 ConversationList: Re-renderizando con conversaciones:', conversations.length)
+  // console.log('🔍 ConversationList: Array de conversaciones completo:', conversations)
+  // if (selectedConversationId) {
+  //   const selectedConv = conversations.find(c => c.id === selectedConversationId)
+  //   console.log('🔍 ConversationList: Conversación seleccionada:', selectedConv)
+  // }
   
   // Debounce para búsqueda
   useEffect(() => {
@@ -250,8 +250,8 @@ export function ConversationList({
 
   return (
     <div className="flex flex-col h-full bg-background border-r dark:border-slate-700 max-h-screen">
-      {/* Header compacto */}
-      <div className="p-1 border-b dark:border-slate-700">
+      {/* Header compacto - Con z-index apropiado para evitar interferencia */}
+      <div className="relative z-10 p-1 border-b dark:border-slate-700 bg-background">
         <div className="flex items-center gap-1 flex-wrap">
           <div className="relative">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
@@ -263,40 +263,44 @@ export function ConversationList({
             />
           </div>
 
-          <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as ConversationStatus | 'all')}>
-            <SelectTrigger className="h-7 w-[130px] text-xs">
-              <SelectValue placeholder="Estado" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="active_ai">AI Activo</SelectItem>
-              <SelectItem value="active_human">Humano Activo</SelectItem>
-              <SelectItem value="pending_human">Pendiente</SelectItem>
-              <SelectItem value="pending_response">Pendiente Respuesta</SelectItem>
-              <SelectItem value="abierta">Abierta</SelectItem>
-              <SelectItem value="closed">Cerrado</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="relative z-20">
+            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as ConversationStatus | 'all')}>
+              <SelectTrigger className="h-7 w-[130px] text-xs">
+                <SelectValue placeholder="Estado" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="active_ai">AI Activo</SelectItem>
+                <SelectItem value="active_human">Humano Activo</SelectItem>
+                <SelectItem value="pending_human">Pendiente</SelectItem>
+                <SelectItem value="pending_response">Pendiente Respuesta</SelectItem>
+                <SelectItem value="abierta">Abierta</SelectItem>
+                <SelectItem value="closed">Cerrado</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-          <Select value={agentFilter} onValueChange={setAgentFilter}>
-            <SelectTrigger className="h-7 w-[160px] text-xs">
-              <SelectValue placeholder="Agente" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos los agentes</SelectItem>
-              {assignedAgents.map((agent) => (
-                <SelectItem key={agent.email} value={agent.email}>
-                  {agent.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="relative z-20">
+            <Select value={agentFilter} onValueChange={setAgentFilter}>
+              <SelectTrigger className="h-7 w-[160px] text-xs">
+                <SelectValue placeholder="Agente" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los agentes</SelectItem>
+                {assignedAgents.map((agent) => (
+                  <SelectItem key={agent.email} value={agent.email}>
+                    {agent.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 
 
-      {/* Conversations List */}
-      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto h-[60vh] max-h-[600px] min-h-[300px] scroll-smooth">
+      {/* Conversations List - Con z-index más bajo para evitar interferencia con filtros */}
+      <div ref={scrollContainerRef} className="relative z-0 flex-1 overflow-y-auto h-[60vh] max-h-[600px] min-h-[300px] scroll-smooth">
         {filteredConversations.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center p-4">
             <MessageSquare className="h-12 w-12 text-muted-foreground mb-2" />

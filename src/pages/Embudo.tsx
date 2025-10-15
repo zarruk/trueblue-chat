@@ -94,12 +94,13 @@ export default function Embudo() {
       const convToUser = new Map<string, ConversationRow>()
       convRows.forEach(c => convToUser.set(c.id, c))
 
-      // 2) Obtener mensajes de esas conversaciones filtrados por cliente
+      // 2) Obtener mensajes de esas conversaciones
+      // NOTA: No aplicamos filtro por client_id aquí porque los mensajes ya están filtrados
+      // indirectamente a través de la relación conversation_id -> tb_conversations.client_id
       const { data: msgs, error: msgErr } = await supabase
         .from('tb_messages')
-        .select('id,conversation_id,sender_role,created_at,agent_email,client_id')
+        .select('id,conversation_id,sender_role,created_at,agent_email')
         .in('conversation_id', convIds)
-        .eq('client_id', clientId)
         .order('created_at', { ascending: true })
 
       if (msgErr) {
