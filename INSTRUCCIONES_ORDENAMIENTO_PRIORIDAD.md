@@ -201,3 +201,7 @@ RPC: get_prioritized_conversations(100)
 **Fecha:** 10 de octubre, 2024
 **Estado actual:** Función SQL lista, código revertido (pendiente aplicar PASO 2)
 
+
+
+
+
