@@ -334,61 +334,146 @@ export function useConversations() {
     }
   }, [user, clientId, isProfileReady, p?.id, p?.role, poolSize])
 
-  // Fetch messages for a conversation
-  const fetchMessages = useCallback(async (conversationId: string) => {
+  // ✅ SOLUCIÓN 2: Verificar estado de WebSocket antes de consultas
+  const isSupabaseReady = useCallback(() => {
+    try {
+      const channels = supabase.getChannels()
+      const readyChannels = channels.filter(channel => 
+        channel.state === 'joined'
+      )
+      const erroredChannels = channels.filter(channel => 
+        channel.state === 'errored' || channel.state === 'closed'
+      )
+      
+      console.log(`🔍 WebSocket Status: ${readyChannels.length}/${channels.length} canales listos, ${erroredChannels.length} con errores`)
+      
+      // Considerar listo si:
+      // 1. No hay canales (primera carga)
+      // 2. Hay al menos un canal listo
+      // 3. No hay canales con errores críticos
+      const isReady = channels.length === 0 || 
+                     (readyChannels.length > 0 && erroredChannels.length === 0)
+      
+      if (!isReady && channels.length > 0) {
+        console.log('🔍 Canales no listos:', channels.map(ch => ({
+          topic: ch.topic,
+          state: ch.state
+        })))
+      }
+      
+      return isReady
+    } catch (error) {
+      console.warn('⚠️ Error verificando estado de WebSocket:', error)
+      return true // Fallback: asumir que está listo
+    }
+  }, [])
+
+  // Fetch messages for a conversation with retry logic
+  const fetchMessagesWithRetry = useCallback(async (conversationId: string, retries = 3) => {
     if (!conversationId) {
       console.log('❌ fetchMessages: No conversationId provided')
       return
     }
 
-    try {
-      console.log('🔍 fetchMessages: Fetching messages for conversation:', conversationId)
-      console.log('🔍 fetchMessages: Starting query to tb_messages table...')
+    // ✅ SOLUCIÓN 2: Verificar que Supabase esté listo antes de hacer consultas
+    if (!isSupabaseReady()) {
+      console.log('⏳ Supabase no está listo, esperando antes de hacer consulta...')
       
-      // ✅ TIMEOUT: Agregar timeout de 8 segundos para evitar cuelgues silenciosos
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('fetchMessages timeout after 8s')), 8000)
-      );
+      // Esperar hasta 10 segundos para que Supabase se estabilice
+      let waitTime = 0
+      const maxWaitTime = 10000 // 10 segundos máximo
+      const checkInterval = 500 // Verificar cada 500ms
       
-      const queryPromise = supabase
-        .from('tb_messages')
-        .select('*')
-        .eq('conversation_id', conversationId)
-        .order('created_at', { ascending: true });
-
-      console.log('🔍 fetchMessages: Executing query with timeout...')
-      
-      // Competencia: la que termine primero gana
-      const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
-      
-      console.log('🔍 fetchMessages: Query completed. Data length:', data?.length, 'Error:', error)
-
-      if (error) {
-        console.error('❌ Error fetching messages:', error)
-        toast.error('Error al cargar los mensajes')
-        return
-      }
-
-      console.log('✅ Messages fetched successfully:', data?.length || 0, 'messages for conversation:', conversationId)
-      
-      // Log detallado de los primeros 3 mensajes para debugging
-      if (data && data.length > 0) {
-        console.log('📨 fetchMessages: Primeros mensajes:', data.slice(0, 3).map((m: any) => ({
-          id: m.id,
-          sender: m.sender_role,
-          preview: m.content?.substring(0, 30) + '...',
-          time: m.created_at
-        })))
-      } else {
-        console.log('📭 fetchMessages: No hay mensajes en esta conversación')
+      while (!isSupabaseReady() && waitTime < maxWaitTime) {
+        await new Promise(resolve => setTimeout(resolve, checkInterval))
+        waitTime += checkInterval
+        
+        if (isSupabaseReady()) {
+          console.log('✅ Supabase está listo, continuando con la consulta')
+          break
+        }
+        
+        console.log(`⏳ Esperando Supabase... (${waitTime/1000}s/${maxWaitTime/1000}s)`)
       }
       
-      setMessages((data as any) || [])
-    } catch (error) {
-      console.error('❌ Exception fetching messages:', error)
-      toast.error('Error al cargar los mensajes')
+      if (!isSupabaseReady()) {
+        console.warn('⚠️ Supabase no está listo después de 10 segundos, continuando de todas formas')
+      }
     }
-  }, [clientId])
+
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        console.log(`🔍 fetchMessages: Intento ${attempt}/${retries} para conversación:`, conversationId)
+        console.log('🔍 fetchMessages: Starting query to tb_messages table...')
+        
+        // ✅ TIMEOUT: Timeout de 8 segundos (suficiente con las otras soluciones)
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('fetchMessages timeout after 8s')), 8000)
+        );
+        
+        const queryPromise = supabase
+          .from('tb_messages')
+          .select('*')
+          .eq('conversation_id', conversationId)
+          .order('created_at', { ascending: true });
+
+        console.log('🔍 fetchMessages: Executing query with timeout...')
+        
+        // Competencia: la que termine primero gana
+        const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
+        
+        console.log('🔍 fetchMessages: Query completed. Data length:', data?.length, 'Error:', error)
+
+        if (error) {
+          console.error(`❌ Error fetching messages (intento ${attempt}):`, error)
+          
+          if (attempt === retries) {
+            toast.error('Error al cargar los mensajes después de múltiples intentos')
+            return
+          }
+          
+          // Esperar antes del siguiente intento (backoff exponencial)
+          const waitTime = 1000 * Math.pow(2, attempt - 1) // 1s, 2s, 4s
+          console.log(`⏳ Esperando ${waitTime}ms antes del siguiente intento...`)
+          await new Promise(resolve => setTimeout(resolve, waitTime))
+          continue
+        }
+
+        console.log('✅ Messages fetched successfully:', data?.length || 0, 'messages for conversation:', conversationId)
+        
+        // Log detallado de los primeros 3 mensajes para debugging
+        if (data && data.length > 0) {
+          console.log('📨 fetchMessages: Primeros mensajes:', data.slice(0, 3).map((m: any) => ({
+            id: m.id,
+            sender: m.sender_role,
+            preview: m.content?.substring(0, 30) + '...',
+            time: m.created_at
+          })))
+        } else {
+          console.log('📭 fetchMessages: No hay mensajes en esta conversación')
+        }
+        
+        setMessages((data as any) || [])
+        return // Éxito, salir del loop de reintentos
+        
+      } catch (error) {
+        console.error(`❌ Exception fetching messages (intento ${attempt}):`, error)
+        
+        if (attempt === retries) {
+          toast.error('Error al cargar los mensajes después de múltiples intentos')
+          return
+        }
+        
+        // Esperar antes del siguiente intento (backoff exponencial)
+        const waitTime = 1000 * Math.pow(2, attempt - 1) // 1s, 2s, 4s
+        console.log(`⏳ Esperando ${waitTime}ms antes del siguiente intento...`)
+        await new Promise(resolve => setTimeout(resolve, waitTime))
+      }
+    }
+  }, [clientId, isSupabaseReady])
+
+  // Mantener función original para compatibilidad
+  const fetchMessages = fetchMessagesWithRetry
 
   // Send a message
   const sendMessage = useCallback(async (
