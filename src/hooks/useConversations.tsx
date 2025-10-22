@@ -1,10 +1,19 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { supabase } from '@/integrations/supabase/client'
 import { useAuth } from './useAuth'
 // Notificaciones deshabilitadas
 const toast = { success: (..._args: any[]) => {}, error: (..._args: any[]) => {}, info: (..._args: any[]) => {} } as const
 import { n8nService } from '@/services/n8nService'
 import { useRealtimeConversations } from './useRealtimeConversations'
+
+// ✅ SOLUCIÓN 2: Función debounce simple
+function debounce<T extends (...args: any[]) => any>(func: T, wait: number): T {
+  let timeout: NodeJS.Timeout | null = null;
+  return ((...args: any[]) => {
+    if (timeout) clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  }) as T;
+}
 
 export interface Conversation {
   id: string
@@ -470,6 +479,12 @@ export function useConversations() {
   // Mantener función original para compatibilidad
   const fetchMessages = fetchMessagesWithRetry
 
+  // ✅ SOLUCIÓN 2: Debounce para evitar múltiples llamadas simultáneas
+  const fetchMessagesDebounced = useMemo(
+    () => debounce(fetchMessagesWithRetry, 300), // 300ms de debounce
+    [fetchMessagesWithRetry]
+  )
+
   // Send a message
   const sendMessage = useCallback(async (
     conversationId: string, 
@@ -780,7 +795,8 @@ export function useConversations() {
     try {
       setSelectedConversationId(conversationId)
       console.log('📨 selectConversation: About to fetch messages for conversation:', conversationId)
-      const success = await fetchMessages(conversationId)
+      // ✅ SOLUCIÓN 2: Usar versión con debounce para evitar múltiples llamadas simultáneas
+      const success = await fetchMessagesDebounced(conversationId)
       
       if (success) {
         console.log('✅ selectConversation: Completado exitosamente')
@@ -793,7 +809,7 @@ export function useConversations() {
       console.log('🧹 selectConversation: Reseteando isSelectingConversation')
       setIsSelectingConversation(false)
     }
-  }, [fetchMessages]) // ✅ FIX: Solo depender de fetchMessages, no de los estados
+  }, [fetchMessagesDebounced]) // ✅ SOLUCIÓN 2: Usar fetchMessagesDebounced
 
   const clearSelectedConversation = useCallback(() => {
     console.log('🧹 Cleared selected conversation')

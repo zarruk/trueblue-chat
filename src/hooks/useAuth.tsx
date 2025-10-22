@@ -227,7 +227,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             // Si ya cargamos el perfil anteriormente, usar modo silencioso para no desmontar componentes
             const hasLoadedBefore = profileLoadedRef.current;
             console.log('🔍 Perfil ya cargado anteriormente:', hasLoadedBefore);
-            await loadProfile(u, hasLoadedBefore);
+            
+            // ✅ SOLUCIÓN 1: Solo recargar si NO se ha cargado antes
+            if (!hasLoadedBefore) {
+              await loadProfile(u, false);
+            } else {
+              console.log('⏭️ Perfil ya cargado, evitando recarga innecesaria');
+              // Solo asegurar que loading se resetee
+              setProfileLoading(false);
+            }
           } else {
             console.log('⏭️ Evento de auth no requiere recarga de perfil:', event);
             // Asegurar que loading se resetee incluso si no cargamos perfil
