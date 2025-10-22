@@ -372,10 +372,10 @@ export function useConversations() {
   }, [])
 
   // Fetch messages for a conversation with retry logic
-  const fetchMessagesWithRetry = useCallback(async (conversationId: string, retries = 3) => {
+  const fetchMessagesWithRetry = useCallback(async (conversationId: string, retries = 3): Promise<boolean> => {
     if (!conversationId) {
       console.log('❌ fetchMessages: No conversationId provided')
-      return
+      return false
     }
 
     // ✅ CANCELAR CONSULTA ANTERIOR: Cancelar cualquier consulta previa de fetchMessages
@@ -450,12 +450,12 @@ export function useConversations() {
           // ✅ MANEJO ESPECIAL: Si la consulta fue cancelada, no reintentar
           if (error.message === 'fetchMessages cancelled') {
             console.log('⏭️ fetchMessages: Consulta cancelada, no reintentando...')
-            return
+            return false
           }
           
           if (attempt === retries) {
             toast.error('Error al cargar los mensajes después de múltiples intentos')
-            return
+            return false
           }
           
           // Esperar antes del siguiente intento (backoff exponencial)
@@ -483,11 +483,11 @@ export function useConversations() {
         if (!currentAbortController.signal.aborted) {
           console.log('✅ fetchMessages: Actualizando mensajes para conversación:', conversationId)
           setMessages((data as any) || [])
+          return true // Éxito, salir del loop de reintentos
         } else {
           console.log('⏭️ fetchMessages: Consulta fue cancelada, no actualizando mensajes')
+          return false // Cancelado, no es exitoso
         }
-        
-        return // Éxito, salir del loop de reintentos
         
       } catch (error) {
         console.error(`❌ Exception fetching messages (intento ${attempt}):`, error)
@@ -495,12 +495,12 @@ export function useConversations() {
         // ✅ MANEJO ESPECIAL: Si la consulta fue cancelada, no reintentar
         if (error instanceof Error && error.message === 'fetchMessages cancelled') {
           console.log('⏭️ fetchMessages: Consulta cancelada en catch, no reintentando...')
-          return
+          return false
         }
         
         if (attempt === retries) {
           toast.error('Error al cargar los mensajes después de múltiples intentos')
-          return
+          return false
         }
         
         // Esperar antes del siguiente intento (backoff exponencial)
@@ -509,6 +509,9 @@ export function useConversations() {
         await new Promise(resolve => setTimeout(resolve, waitTime))
       }
     }
+    
+    // Si llegamos aquí, significa que todos los intentos fallaron
+    return false
   }, [clientId, isSupabaseReady])
 
   // Mantener función original para compatibilidad
@@ -824,8 +827,13 @@ export function useConversations() {
     try {
       setSelectedConversationId(conversationId)
       console.log('📨 selectConversation: About to fetch messages for conversation:', conversationId)
-      await fetchMessages(conversationId)
-      console.log('✅ selectConversation: Completado exitosamente')
+      const success = await fetchMessages(conversationId)
+      
+      if (success) {
+        console.log('✅ selectConversation: Completado exitosamente')
+      } else {
+        console.log('⏭️ selectConversation: fetchMessages fue cancelado, no completando selección')
+      }
     } catch (error) {
       console.error('❌ selectConversation: Error:', error)
     } finally {
