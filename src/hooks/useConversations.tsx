@@ -78,8 +78,8 @@ export function useConversations() {
   // Cola simple para evitar llamadas simultáneas a fetchConversations
   const isFetchingRef = useRef(false)
   
-  // AbortController para cancelar consultas anteriores de fetchMessages
-  const fetchMessagesAbortController = useRef<AbortController | null>(null)
+  // ID único para identificar la consulta más reciente de fetchMessages
+  const fetchMessagesQueryId = useRef<number | null>(null)
 
   // Estados para scroll infinito
   const [currentPage, setCurrentPage] = useState(0)
@@ -378,58 +378,22 @@ export function useConversations() {
       return false
     }
 
-    // ✅ CANCELAR CONSULTA ANTERIOR: Cancelar cualquier consulta previa de fetchMessages
-    if (fetchMessagesAbortController.current) {
-      console.log('🛑 fetchMessages: Cancelando consulta anterior...')
-      fetchMessagesAbortController.current.abort()
-    }
+    // ✅ SOLUCIÓN 1: Crear ID único para esta consulta
+    const queryId = Date.now() + Math.random()
+    console.log(`🔍 fetchMessages: Iniciando consulta ${queryId} para conversación:`, conversationId)
     
-    // ✅ CREAR NUEVO ABORTCONTROLLER: Para esta nueva consulta
-    fetchMessagesAbortController.current = new AbortController()
-    const currentAbortController = fetchMessagesAbortController.current
+    // ✅ GUARDAR ID DE CONSULTA MÁS RECIENTE
+    fetchMessagesQueryId.current = queryId
 
-    // ✅ SOLUCIÓN 2: Verificar que Supabase esté listo antes de hacer consultas
-    if (!isSupabaseReady()) {
-      console.log('⏳ Supabase no está listo, esperando antes de hacer consulta...')
-      
-      // Esperar hasta 10 segundos para que Supabase se estabilice
-      let waitTime = 0
-      const maxWaitTime = 10000 // 10 segundos máximo
-      const checkInterval = 500 // Verificar cada 500ms
-      
-      while (!isSupabaseReady() && waitTime < maxWaitTime) {
-        await new Promise(resolve => setTimeout(resolve, checkInterval))
-        waitTime += checkInterval
-        
-        if (isSupabaseReady()) {
-          console.log('✅ Supabase está listo, continuando con la consulta')
-          break
-        }
-        
-        console.log(`⏳ Esperando Supabase... (${waitTime/1000}s/${maxWaitTime/1000}s)`)
-      }
-      
-      if (!isSupabaseReady()) {
-        console.warn('⚠️ Supabase no está listo después de 10 segundos, continuando de todas formas')
-      }
-    }
+    // ✅ TIMEOUT REDUCIDO: 3 segundos en lugar de 8
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('fetchMessages timeout after 3s')), 3000)
+    );
 
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        console.log(`🔍 fetchMessages: Intento ${attempt}/${retries} para conversación:`, conversationId)
+        console.log(`🔍 fetchMessages: Intento ${attempt}/${retries} para consulta ${queryId}`)
         console.log('🔍 fetchMessages: Starting query to tb_messages table...')
-        
-        // ✅ TIMEOUT: Timeout de 8 segundos (suficiente con las otras soluciones)
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('fetchMessages timeout after 8s')), 8000)
-        );
-        
-        // ✅ ABORT: Promise que se resuelve cuando se cancela la consulta
-        const abortPromise = new Promise((_, reject) => {
-          currentAbortController.signal.addEventListener('abort', () => {
-            reject(new Error('fetchMessages cancelled'))
-          })
-        });
         
         const queryPromise = supabase
           .from('tb_messages')
@@ -437,21 +401,15 @@ export function useConversations() {
           .eq('conversation_id', conversationId)
           .order('created_at', { ascending: true });
 
-        console.log('🔍 fetchMessages: Executing query with timeout and abort...')
+        console.log('🔍 fetchMessages: Executing query with timeout...')
         
-        // Competencia: la que termine primero gana (timeout, abort, o query)
-        const { data, error } = await Promise.race([queryPromise, timeoutPromise, abortPromise]) as any;
+        // Competencia: la que termine primero gana (query o timeout)
+        const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
         
         console.log('🔍 fetchMessages: Query completed. Data length:', data?.length, 'Error:', error)
 
         if (error) {
           console.error(`❌ Error fetching messages (intento ${attempt}):`, error)
-          
-          // ✅ MANEJO ESPECIAL: Si la consulta fue cancelada, no reintentar
-          if (error.message === 'fetchMessages cancelled') {
-            console.log('⏭️ fetchMessages: Consulta cancelada, no reintentando...')
-            return false
-          }
           
           if (attempt === retries) {
             toast.error('Error al cargar los mensajes después de múltiples intentos')
@@ -479,24 +437,18 @@ export function useConversations() {
           console.log('📭 fetchMessages: No hay mensajes en esta conversación')
         }
         
-        // ✅ VERIFICACIÓN FINAL: Solo actualizar si la consulta no fue cancelada
-        if (!currentAbortController.signal.aborted) {
-          console.log('✅ fetchMessages: Actualizando mensajes para conversación:', conversationId)
+        // ✅ VERIFICACIÓN FINAL: Solo actualizar si es la consulta más reciente
+        if (queryId === fetchMessagesQueryId.current) {
+          console.log(`✅ fetchMessages: Consulta ${queryId} es la más reciente, actualizando mensajes`)
           setMessages((data as any) || [])
           return true // Éxito, salir del loop de reintentos
         } else {
-          console.log('⏭️ fetchMessages: Consulta fue cancelada, no actualizando mensajes')
-          return false // Cancelado, no es exitoso
+          console.log(`⏭️ fetchMessages: Consulta ${queryId} es antigua, ignorando resultado`)
+          return false // Antigua, no es exitosa
         }
         
       } catch (error) {
         console.error(`❌ Exception fetching messages (intento ${attempt}):`, error)
-        
-        // ✅ MANEJO ESPECIAL: Si la consulta fue cancelada, no reintentar
-        if (error instanceof Error && error.message === 'fetchMessages cancelled') {
-          console.log('⏭️ fetchMessages: Consulta cancelada en catch, no reintentando...')
-          return false
-        }
         
         if (attempt === retries) {
           toast.error('Error al cargar los mensajes después de múltiples intentos')
