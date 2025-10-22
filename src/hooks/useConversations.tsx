@@ -395,11 +395,12 @@ export function useConversations() {
         console.log(`🔍 fetchMessages: Intento ${attempt}/${retries} para consulta ${queryId}`)
         console.log('🔍 fetchMessages: Starting query to tb_messages table...')
         
-        const queryPromise = supabase
-          .from('tb_messages')
-          .select('*')
-          .eq('conversation_id', conversationId)
-          .order('created_at', { ascending: true });
+          const queryPromise = supabase
+            .from('tb_messages')
+            .select('*')
+            .eq('conversation_id', conversationId)
+            .order('created_at', { ascending: true })
+            .limit(100); // ✅ LIMITAR a 100 mensajes máximo para mejor rendimiento
 
         console.log('🔍 fetchMessages: Executing query with timeout...')
         
