@@ -64,13 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (!finalProfile) {
-        // NO crear perfil automáticamente
-        console.log('⚠️ Usuario sin perfil:', email);
-        console.log('⚠️ Contacta al administrador para crear tu perfil');
-        // Continuar sin perfil - mostrar pantalla de acceso denegado
-      }
-      else if (finalProfile && (finalProfile as any).status === 'pending') {
-        // Autocrear perfil mínimo (id = auth.uid())
+        // ✅ CORRECTO: Solo crear perfil si NO existe
         console.log('➕ Creando perfil porque no existe:', email);
         const { data: inserted, error: insertErr } = await supabase
           .from('profiles')
@@ -87,8 +81,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (insertErr) {
           console.error('❌ Error creando perfil:', insertErr);
+          // ✅ Si hay error de conflicto (409), intentar obtener el perfil existente
+          if (insertErr.code === '23505' || insertErr.message?.includes('duplicate') || insertErr.message?.includes('conflict')) {
+            console.log('🔄 Conflicto de email, obteniendo perfil existente...');
+            const { data: existingProfile, error: selectErr2 } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('email', email)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            
+            if (!selectErr2 && existingProfile) {
+              finalProfile = existingProfile as Profile;
+              console.log('✅ Perfil existente obtenido después del conflicto');
+            }
+          }
         } else {
           finalProfile = inserted as Profile | null;
+          console.log('✅ Perfil creado exitosamente');
+        }
+      } else if (finalProfile && (finalProfile as any).status === 'pending') {
+        // ✅ CORRECTO: Solo actualizar si existe y está pending
+        console.log('🔄 Activando perfil pending:', email);
+        const { data: updated, error: updateErr } = await supabase
+          .from('profiles')
+          .update({ status: 'active' })
+          .eq('email', email)
+          .select('*')
+          .maybeSingle();
+        if (updateErr) {
+          console.error('❌ Error activando perfil:', updateErr);
+        } else if (updated) {
+          finalProfile = updated as Profile;
+          console.log('✅ Perfil activado exitosamente');
         }
       } else if (finalProfile && (finalProfile as any).status === 'inactive') {
         // Activar si estaba inactivo
