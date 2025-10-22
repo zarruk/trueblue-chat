@@ -453,7 +453,14 @@ export function useConversations() {
           console.log('📭 fetchMessages: No hay mensajes en esta conversación')
         }
         
-        setMessages((data as any) || [])
+        // ✅ VERIFICACIÓN: Solo actualizar si es la conversación seleccionada
+        if (selectedConversationId === conversationId) {
+          console.log('✅ fetchMessages: Actualizando mensajes para conversación seleccionada:', conversationId)
+          setMessages((data as any) || [])
+        } else {
+          console.log('⏭️ fetchMessages: Ignorando mensajes de conversación no seleccionada:', conversationId, 'vs seleccionada:', selectedConversationId)
+        }
+        
         return // Éxito, salir del loop de reintentos
         
       } catch (error) {
@@ -470,7 +477,7 @@ export function useConversations() {
         await new Promise(resolve => setTimeout(resolve, waitTime))
       }
     }
-  }, [clientId, isSupabaseReady])
+  }, [clientId, isSupabaseReady, selectedConversationId])
 
   // Mantener función original para compatibilidad
   const fetchMessages = fetchMessagesWithRetry
