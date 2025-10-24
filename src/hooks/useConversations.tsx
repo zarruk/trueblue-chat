@@ -1,10 +1,19 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { supabase } from '@/integrations/supabase/client'
 import { useAuth } from './useAuth'
 // Notificaciones deshabilitadas
 const toast = { success: (..._args: any[]) => {}, error: (..._args: any[]) => {}, info: (..._args: any[]) => {} } as const
 import { n8nService } from '@/services/n8nService'
 import { useRealtimeConversations } from './useRealtimeConversations'
+
+// ✅ SOLUCIÓN 2: Función debounce simple
+function debounce<T extends (...args: any[]) => any>(func: T, wait: number): T {
+  let timeout: NodeJS.Timeout | null = null;
+  return ((...args: any[]) => {
+    if (timeout) clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  }) as T;
+}
 
 export interface Conversation {
   id: string
@@ -77,6 +86,9 @@ export function useConversations() {
   
   // Cola simple para evitar llamadas simultáneas a fetchConversations
   const isFetchingRef = useRef(false)
+  
+  // ID único para identificar la consulta más reciente de fetchMessages
+  const fetchMessagesQueryId = useRef<number | null>(null)
 
   // Estados para scroll infinito
   const [currentPage, setCurrentPage] = useState(0)
@@ -334,61 +346,144 @@ export function useConversations() {
     }
   }, [user, clientId, isProfileReady, p?.id, p?.role, poolSize])
 
-  // Fetch messages for a conversation
-  const fetchMessages = useCallback(async (conversationId: string) => {
+  // ✅ SOLUCIÓN 2: Verificar estado de WebSocket antes de consultas
+  const isSupabaseReady = useCallback(() => {
+    try {
+      const channels = supabase.getChannels()
+      const readyChannels = channels.filter(channel => 
+        channel.state === 'joined'
+      )
+      const erroredChannels = channels.filter(channel => 
+        channel.state === 'errored' || channel.state === 'closed'
+      )
+      
+      console.log(`🔍 WebSocket Status: ${readyChannels.length}/${channels.length} canales listos, ${erroredChannels.length} con errores`)
+      
+      // Considerar listo si:
+      // 1. No hay canales (primera carga)
+      // 2. Hay al menos un canal listo
+      // 3. No hay canales con errores críticos
+      const isReady = channels.length === 0 || 
+                     (readyChannels.length > 0 && erroredChannels.length === 0)
+      
+      if (!isReady && channels.length > 0) {
+        console.log('🔍 Canales no listos:', channels.map(ch => ({
+          topic: ch.topic,
+          state: ch.state
+        })))
+      }
+      
+      return isReady
+    } catch (error) {
+      console.warn('⚠️ Error verificando estado de WebSocket:', error)
+      return true // Fallback: asumir que está listo
+    }
+  }, [])
+
+  // Fetch messages for a conversation with retry logic
+  const fetchMessagesWithRetry = useCallback(async (conversationId: string, retries = 3): Promise<boolean> => {
     if (!conversationId) {
       console.log('❌ fetchMessages: No conversationId provided')
-      return
+      return false
     }
 
-    try {
-      console.log('🔍 fetchMessages: Fetching messages for conversation:', conversationId)
-      console.log('🔍 fetchMessages: Starting query to tb_messages table...')
-      
-      // ✅ TIMEOUT: Agregar timeout de 8 segundos para evitar cuelgues silenciosos
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('fetchMessages timeout after 8s')), 8000)
-      );
-      
-      const queryPromise = supabase
-        .from('tb_messages')
-        .select('*')
-        .eq('conversation_id', conversationId)
-        .order('created_at', { ascending: true });
+    // ✅ SOLUCIÓN 1: Crear ID único para esta consulta
+    const queryId = Date.now() + Math.random()
+    console.log(`🔍 fetchMessages: Iniciando consulta ${queryId} para conversación:`, conversationId)
+    
+    // ✅ GUARDAR ID DE CONSULTA MÁS RECIENTE
+    fetchMessagesQueryId.current = queryId
 
-      console.log('🔍 fetchMessages: Executing query with timeout...')
-      
-      // Competencia: la que termine primero gana
-      const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
-      
-      console.log('🔍 fetchMessages: Query completed. Data length:', data?.length, 'Error:', error)
+    // ✅ TIMEOUT REDUCIDO: 3 segundos en lugar de 8
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('fetchMessages timeout after 3s')), 3000)
+    );
 
-      if (error) {
-        console.error('❌ Error fetching messages:', error)
-        toast.error('Error al cargar los mensajes')
-        return
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        console.log(`🔍 fetchMessages: Intento ${attempt}/${retries} para consulta ${queryId}`)
+        console.log('🔍 fetchMessages: Starting query to tb_messages table...')
+        
+          const queryPromise = supabase
+            .from('tb_messages')
+            .select('*')
+            .eq('conversation_id', conversationId)
+            .order('created_at', { ascending: true })
+            .limit(100); // ✅ LIMITAR a 100 mensajes máximo para mejor rendimiento
+
+        console.log('🔍 fetchMessages: Executing query with timeout...')
+        
+        // Competencia: la que termine primero gana (query o timeout)
+        const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
+        
+        console.log('🔍 fetchMessages: Query completed. Data length:', data?.length, 'Error:', error)
+
+        if (error) {
+          console.error(`❌ Error fetching messages (intento ${attempt}):`, error)
+          
+          if (attempt === retries) {
+            toast.error('Error al cargar los mensajes después de múltiples intentos')
+            return false
+          }
+          
+          // Esperar antes del siguiente intento (backoff exponencial)
+          const waitTime = 1000 * Math.pow(2, attempt - 1) // 1s, 2s, 4s
+          console.log(`⏳ Esperando ${waitTime}ms antes del siguiente intento...`)
+          await new Promise(resolve => setTimeout(resolve, waitTime))
+          continue
+        }
+
+        console.log('✅ Messages fetched successfully:', data?.length || 0, 'messages for conversation:', conversationId)
+        
+        // Log detallado de los primeros 3 mensajes para debugging
+        if (data && data.length > 0) {
+          console.log('📨 fetchMessages: Primeros mensajes:', data.slice(0, 3).map((m: any) => ({
+            id: m.id,
+            sender: m.sender_role,
+            preview: m.content?.substring(0, 30) + '...',
+            time: m.created_at
+          })))
+        } else {
+          console.log('📭 fetchMessages: No hay mensajes en esta conversación')
+        }
+        
+        // ✅ VERIFICACIÓN FINAL: Solo actualizar si es la consulta más reciente
+        if (queryId === fetchMessagesQueryId.current) {
+          console.log(`✅ fetchMessages: Consulta ${queryId} es la más reciente, actualizando mensajes`)
+          setMessages((data as any) || [])
+          return true // Éxito, salir del loop de reintentos
+        } else {
+          console.log(`⏭️ fetchMessages: Consulta ${queryId} es antigua, ignorando resultado`)
+          return false // Antigua, no es exitosa
+        }
+        
+      } catch (error) {
+        console.error(`❌ Exception fetching messages (intento ${attempt}):`, error)
+        
+        if (attempt === retries) {
+          toast.error('Error al cargar los mensajes después de múltiples intentos')
+          return false
+        }
+        
+        // Esperar antes del siguiente intento (backoff exponencial)
+        const waitTime = 1000 * Math.pow(2, attempt - 1) // 1s, 2s, 4s
+        console.log(`⏳ Esperando ${waitTime}ms antes del siguiente intento...`)
+        await new Promise(resolve => setTimeout(resolve, waitTime))
       }
-
-      console.log('✅ Messages fetched successfully:', data?.length || 0, 'messages for conversation:', conversationId)
-      
-      // Log detallado de los primeros 3 mensajes para debugging
-      if (data && data.length > 0) {
-        console.log('📨 fetchMessages: Primeros mensajes:', data.slice(0, 3).map((m: any) => ({
-          id: m.id,
-          sender: m.sender_role,
-          preview: m.content?.substring(0, 30) + '...',
-          time: m.created_at
-        })))
-      } else {
-        console.log('📭 fetchMessages: No hay mensajes en esta conversación')
-      }
-      
-      setMessages((data as any) || [])
-    } catch (error) {
-      console.error('❌ Exception fetching messages:', error)
-      toast.error('Error al cargar los mensajes')
     }
-  }, [clientId])
+    
+    // Si llegamos aquí, significa que todos los intentos fallaron
+    return false
+  }, [clientId, isSupabaseReady])
+
+  // Mantener función original para compatibilidad
+  const fetchMessages = fetchMessagesWithRetry
+
+  // ✅ SOLUCIÓN 2: Debounce para evitar múltiples llamadas simultáneas
+  const fetchMessagesDebounced = useMemo(
+    () => debounce(fetchMessagesWithRetry, 300), // 300ms de debounce
+    [fetchMessagesWithRetry]
+  )
 
   // Send a message
   const sendMessage = useCallback(async (
@@ -700,15 +795,21 @@ export function useConversations() {
     try {
       setSelectedConversationId(conversationId)
       console.log('📨 selectConversation: About to fetch messages for conversation:', conversationId)
-      await fetchMessages(conversationId)
-      console.log('✅ selectConversation: Completado exitosamente')
+      // ✅ SOLUCIÓN 2: Usar versión con debounce para evitar múltiples llamadas simultáneas
+      const success = await fetchMessagesDebounced(conversationId)
+      
+      if (success) {
+        console.log('✅ selectConversation: Completado exitosamente')
+      } else {
+        console.log('⏭️ selectConversation: fetchMessages fue cancelado, no completando selección')
+      }
     } catch (error) {
       console.error('❌ selectConversation: Error:', error)
     } finally {
       console.log('🧹 selectConversation: Reseteando isSelectingConversation')
       setIsSelectingConversation(false)
     }
-  }, [fetchMessages]) // ✅ FIX: Solo depender de fetchMessages, no de los estados
+  }, [fetchMessagesDebounced]) // ✅ SOLUCIÓN 2: Usar fetchMessagesDebounced
 
   const clearSelectedConversation = useCallback(() => {
     console.log('🧹 Cleared selected conversation')

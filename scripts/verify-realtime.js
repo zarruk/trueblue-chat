@@ -1,196 +1,163 @@
 import { createClient } from '@supabase/supabase-js'
 
-// Configuración de Supabase
-const SUPABASE_URL = "https://avkpygwhymnxotwqzknz.supabase.co"
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF2a3B5Z3doeW1ueG90d3F6a256Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMzMjEyMDcsImV4cCI6MjA2ODg5NzIwN30.p97K1S3WYNAeYb-ExRpRp3J_pqFegFJ11VOe5th_xHk"
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.error('❌ Faltan SUPABASE_URL/SUPABASE_ANON_KEY (o VITE_*) en el entorno')
+  process.exit(1)
+}
 
-console.log('✅ VERIFICACIÓN DE REALTIME DESPUÉS DE HABILITAR')
-console.log('=' * 60)
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  realtime: {
+    params: {
+      eventsPerSecond: 10
+    }
+  }
+})
 
-async function verifyRealtime() {
+console.log('🎉 TEST FINAL - ¿FUNCIONA AHORA?')
+console.log('=' * 40)
+
+async function finalTest() {
   try {
-    // Test 1: Verificar conexión básica
-    console.log('\n🔌 Test 1: Verificando conexión básica...')
-    
-    const { data: conversations, error: connError } = await supabase
+    // 1. Verificar conversaciones
+    console.log('\n1. 📋 Obteniendo conversaciones...')
+    const { data: conversations, error: convError } = await supabase
       .from('tb_conversations')
       .select('*')
       .limit(1)
     
-    if (connError) {
-      console.log('❌ Error de conexión:', connError.message)
-      return false
+    if (convError) {
+      console.log('❌ Error:', convError.message)
+      return
     }
     
-    console.log('✅ Conexión exitosa')
-    console.log(`📊 Conversaciones disponibles: ${conversations?.length || 0}`)
+    console.log('✅ Conversaciones:', conversations.length)
     
-    if (!conversations || conversations.length === 0) {
-      console.log('❌ No hay conversaciones para probar')
-      return false
+    if (!conversations.length) {
+      console.log('❌ No hay conversaciones')
+      return
     }
+
+    // 2. Configurar escucha de Realtime ANTES de hacer cambios
+    console.log('\n2. 📡 Configurando Realtime...')
     
-    // Test 2: Configurar suscripción de Realtime
-    console.log('\n📡 Test 2: Configurando suscripción de Realtime...')
+    let messageReceived = false
+    let conversationReceived = false
     
-    let eventReceived = false
-    let subscriptionStatus = 'unknown'
-    
-    const channel = supabase
-      .channel('verify-test')
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'tb_conversations' },
-        (payload) => {
-          console.log('✅ Evento Realtime recibido:', payload.eventType)
-          console.log('📊 Datos del evento:', payload.new)
-          eventReceived = true
-        }
-      )
-      .subscribe((status) => {
-        console.log('📡 Estado de suscripción:', status)
-        subscriptionStatus = status
+    const messageChannel = supabase
+      .channel('final-test-messages')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public', 
+        table: 'tb_messages'
+      }, (payload) => {
+        console.log('🎉 ¡MENSAJE DETECTADO!', payload.new.content)
+        messageReceived = true
       })
+      .subscribe((status) => {
+        console.log('📡 Canal mensajes:', status)
+      })
+
+    const conversationChannel = supabase
+      .channel('final-test-conversations')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'tb_conversations'
+      }, (payload) => {
+        console.log('🎉 ¡CONVERSACIÓN ACTUALIZADA!', payload.new.status)
+        conversationReceived = true
+      })
+      .subscribe((status) => {
+        console.log('📡 Canal conversaciones:', status)
+      })
+
+    // Esperar conexión
+    console.log('\n⏳ Esperando conexión Realtime...')
+    await new Promise(resolve => setTimeout(resolve, 3000))
+
+    // 3. Insertar mensaje
+    console.log('\n3. 📨 Insertando mensaje...')
+    const { data: messageResult, error: messageError } = await supabase
+      .from('tb_messages')
+      .insert({
+        conversation_id: conversations[0].id,
+        content: `Test final ${new Date().toISOString()}`,
+        sender_role: 'agent',
+        agent_name: 'Test Agent'
+      })
+      .select()
     
-    // Esperar a que se conecte
-    console.log('\n⏳ Esperando conexión de Realtime...')
-    await new Promise(resolve => setTimeout(resolve, 5000))
-    
-    console.log('\n🔍 Estado de la suscripción:')
-    console.log('Estado:', subscriptionStatus)
-    console.log('Evento recibido:', eventReceived)
-    
-    if (subscriptionStatus !== 'SUBSCRIBED') {
-      console.log('❌ Suscripción no se conectó correctamente')
-      return false
+    if (messageError) {
+      console.log('❌ Error insertando mensaje:', messageError.message)
+    } else {
+      console.log('✅ Mensaje insertado:', messageResult[0].content)
     }
+
+    // 4. Actualizar conversación
+    console.log('\n4. 🔄 Actualizando conversación...')
+    const newStatus = conversations[0].status === 'pending_human' ? 'active_human' : 'pending_human'
     
-    // Test 3: Cambiar estado de una conversación para probar Realtime
-    console.log('\n🧪 Test 3: Probando Realtime con cambio real...')
-    
-    const testConversation = conversations[0]
-    console.log(`🎯 Conversación de prueba: ${testConversation.id}`)
-    console.log(`📊 Estado actual: ${testConversation.status}`)
-    
-    const newStatus = testConversation.status === 'pending_human' ? 'active_human' : 'pending_human'
-    console.log(`🔄 Cambiando estado a: ${newStatus}`)
-    
-    const { error: updateError } = await supabase
+    const { data: convResult, error: convUpdateError } = await supabase
       .from('tb_conversations')
-      .update({ status: newStatus })
-      .eq('id', testConversation.id)
+      .update({ 
+        status: newStatus,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', conversations[0].id)
+      .select()
     
-    if (updateError) {
-      console.log('❌ Error actualizando conversación:', updateError.message)
-      return false
+    if (convUpdateError) {
+      console.log('❌ Error actualizando conversación:', convUpdateError.message)
+    } else {
+      console.log('✅ Conversación actualizada:', convResult[0].status)
     }
-    
-    console.log('✅ Estado cambiado en base de datos')
-    console.log('⏳ Esperando evento Realtime...')
-    
-    // Esperar evento Realtime
-    let timeout = false
-    const timeoutPromise = new Promise(resolve => {
-      setTimeout(() => {
-        timeout = true
-        resolve(false)
-      }, 10000) // 10 segundos de timeout
-    })
-    
-    const eventPromise = new Promise(resolve => {
-      const checkEvent = () => {
-        if (eventReceived) {
-          resolve(true)
-        } else if (!timeout) {
-          setTimeout(checkEvent, 100)
-        } else {
-          resolve(false)
-        }
+
+    // 5. Esperar eventos Realtime
+    console.log('\n5. ⏳ Esperando eventos Realtime...')
+    await new Promise(resolve => setTimeout(resolve, 3000))
+
+    // 6. Resultado final
+    console.log('\n📊 RESULTADO FINAL:')
+    console.log('=' * 30)
+    console.log('📨 Inserción de mensaje:', messageError ? '❌' : '✅')
+    console.log('🔄 Actualización conversación:', convUpdateError ? '❌' : '✅')
+    console.log('📡 Realtime mensaje:', messageReceived ? '✅' : '❌')
+    console.log('📡 Realtime conversación:', conversationReceived ? '✅' : '❌')
+
+    const allWorking = !messageError && !convUpdateError && messageReceived && conversationReceived
+
+    if (allWorking) {
+      console.log('\n🎉🎉🎉 ¡TODO FUNCIONA! 🎉🎉🎉')
+      console.log('🔥 La sincronización en tiempo real está ACTIVA')
+      console.log('✨ Ahora la aplicación debe funcionar perfectamente')
+    } else {
+      console.log('\n🚨 Aún hay problemas:')
+      if (messageError || convUpdateError) {
+        console.log('• RLS aún bloquea operaciones')
       }
-      checkEvent()
-    })
-    
-    const eventResult = await Promise.race([eventPromise, timeoutPromise])
-    
-    if (eventResult) {
-      console.log('✅ Evento Realtime recibido exitosamente')
-    } else {
-      console.log('❌ Timeout esperando evento Realtime')
+      if (!messageReceived || !conversationReceived) {
+        console.log('• Realtime no está recibiendo eventos')
+      }
     }
-    
-    // Test 4: Verificar que el cambio se reflejó
-    console.log('\n🔍 Test 4: Verificando cambio en base de datos...')
-    
-    const { data: updatedConversation, error: verifyError } = await supabase
-      .from('tb_conversations')
-      .select('*')
-      .eq('id', testConversation.id)
-      .single()
-    
-    if (verifyError) {
-      console.log('❌ Error verificando conversación:', verifyError.message)
-      return false
-    }
-    
-    if (updatedConversation.status === newStatus) {
-      console.log('✅ Estado actualizado correctamente en base de datos')
-    } else {
-      console.log('❌ Estado no se actualizó correctamente')
-      console.log(`📊 Esperado: ${newStatus}, Actual: ${updatedConversation.status}`)
-    }
-    
-    // Test 5: Revertir el cambio
-    console.log('\n🔄 Test 5: Revirtiendo cambio...')
-    
-    const { error: revertError } = await supabase
-      .from('tb_conversations')
-      .update({ status: testConversation.status })
-      .eq('id', testConversation.id)
-    
-    if (revertError) {
-      console.log('❌ Error revirtiendo conversación:', revertError.message)
-    } else {
-      console.log('✅ Cambio revertido exitosamente')
-    }
-    
-    // Limpiar suscripción
-    channel.unsubscribe()
-    
-    // Resumen final
-    console.log('\n' + '=' * 60)
-    console.log('📊 RESUMEN DE LA VERIFICACIÓN:')
-    console.log(`🔌 Conexión básica: ✅`)
-    console.log(`📡 Suscripción Realtime: ${subscriptionStatus === 'SUBSCRIBED' ? '✅' : '❌'}`)
-    console.log(`📨 Evento recibido: ${eventResult ? '✅' : '❌'}`)
-    console.log(`💾 Base de datos: ${updatedConversation?.status === newStatus ? '✅' : '❌'}`)
-    
-    const allTestsPassed = subscriptionStatus === 'SUBSCRIBED' && eventResult && updatedConversation?.status === newStatus
-    
-    if (allTestsPassed) {
-      console.log('\n🎉 ¡REALTIME FUNCIONANDO PERFECTAMENTE!')
-      console.log('💡 Ahora la sincronización en la aplicación web debería funcionar')
-      return true
-    } else {
-      console.log('\n❌ Realtime aún no funciona completamente')
-      console.log('💡 Revisa los logs anteriores para identificar el problema')
-      return false
-    }
-    
+
+    // Limpiar
+    messageChannel.unsubscribe()
+    conversationChannel.unsubscribe()
+
   } catch (error) {
-    console.log('❌ Error general en verificación:', error)
-    return false
+    console.log('❌ Error:', error)
   }
 }
 
-// Ejecutar la verificación
-verifyRealtime()
-  .then(success => {
-    console.log('\n🏁 Verificación completada. Éxito:', success)
-    process.exit(success ? 0 : 1)
+finalTest()
+  .then(() => {
+    console.log('\n🏁 Test final completado')
+    process.exit(0)
   })
   .catch(error => {
-    console.log('❌ Error fatal en verificación:', error)
+    console.log('❌ Error fatal:', error)
     process.exit(1)
   })

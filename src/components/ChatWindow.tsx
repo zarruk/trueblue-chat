@@ -258,6 +258,23 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
 
     const setupChannel = async () => {
       try {
+        // ✅ SOLUCIÓN 1: Limpiar canales WebSocket acumulados antes de crear nuevo
+        console.log('🧹 [ChatWindow] Limpiando canales WebSocket acumulados...')
+        const existingChannels = supabase.getChannels()
+        let cleanedCount = 0
+        
+        existingChannels.forEach(existingChannel => {
+          if (existingChannel.topic.startsWith('chat-window-')) {
+            console.log('🧹 [ChatWindow] Limpiando canal huérfano:', existingChannel.topic)
+            supabase.removeChannel(existingChannel)
+            cleanedCount++
+          }
+        })
+        
+        if (cleanedCount > 0) {
+          console.log(`🧹 [ChatWindow] Limpiados ${cleanedCount} canales huérfanos`)
+        }
+        
         // ✅ FIX: Usar nombre único y específico para este canal
         const channelName = `chat-window-${conversationId}-${Date.now()}`
         

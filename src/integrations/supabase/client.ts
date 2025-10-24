@@ -6,6 +6,10 @@ import type { Database } from './types';
 const envUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const envAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
+// DEBUG TEMPORAL - Eliminar después
+console.log('🔍 [SUPABASE DEBUG] VITE_SUPABASE_URL:', envUrl);
+console.log('🔍 [SUPABASE DEBUG] VITE_SUPABASE_ANON_KEY:', envAnonKey ? '***' + envAnonKey.slice(-4) : 'undefined');
+
 if (!envUrl || !envAnonKey) {
   throw new Error(
     'Supabase no está configurado. Define VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en tu entorno (.env.local en dev, variables de Vercel en staging/prod).'
