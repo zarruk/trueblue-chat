@@ -169,14 +169,25 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
         if (!trimmed || trimmed === 'undefined' || trimmed === 'null' || trimmed === 'NaN') return undefined
         if (/^[{\[]/.test(trimmed)) {
           const parsed = JSON.parse(trimmed)
-          url = parsed?.['img-url'] || parsed?.imgUrl
+          // ✅ Buscar file-url además de img-url
+          url = parsed?.['img-url'] || parsed?.imgUrl || parsed?.['file-url']
         } else {
           url = trimmed
         }
       } else if (typeof metadata === 'object') {
-        url = (metadata as any)?.['img-url'] || (metadata as any)?.imgUrl
+        // ✅ Buscar file-url además de img-url
+        url = (metadata as any)?.['img-url'] || (metadata as any)?.imgUrl || (metadata as any)?.['file-url']
       }
       if (!url) return undefined
+      
+      // ✅ Verificar que sea una imagen si hay file-type
+      if (typeof metadata === 'object' && (metadata as any)?.['file-type']) {
+        const fileType = (metadata as any)?.['file-type']
+        if (!fileType.startsWith('image/')) {
+          return undefined // No es una imagen, se mostrará en la sección de documentos
+        }
+      }
+      
       // Normalizar esquema si viene sin http(s)
       if (!/^https?:\/\//i.test(url) && /^([\w-]+\.)+[\w-]{2,}/.test(url)) {
         url = `https://${url}`
