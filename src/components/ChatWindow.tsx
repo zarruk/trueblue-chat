@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { Send, Paperclip, Smile, ChevronDown, PanelRightOpen, ChevronLeft } from 'lucide-react'
+import { Send, Paperclip, Smile, ChevronDown, PanelRightOpen, ChevronLeft, X, FileText, Download, Image as ImageIcon, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -22,6 +22,7 @@ import { MessageTemplatesSuggestions } from '@/components/MessageTemplatesSugges
 import Picker from '@emoji-mart/react'
 import data from '@emoji-mart/data'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+import { uploadFile, validateFile } from '@/services/fileUploadService'
 // Notificaciones deshabilitadas
 const toast = { success: (..._args: any[]) => {}, error: (..._args: any[]) => {}, info: (..._args: any[]) => {} } as const
 
@@ -40,7 +41,7 @@ interface ChatWindowProps {
   conversationId?: string
   messages?: any[]
   loading?: boolean
-  onSendMessage?: (conversationId: string, content: string, role: string) => Promise<void>
+  onSendMessage?: (conversationId: string, content: string, role: string, metadata?: any) => Promise<void>
   onSelectConversation?: (conversationId: string) => void
   onUpdateConversationStatus?: (conversationId: string, status: Conversation['status']) => Promise<void>
   onAssignAgent?: (conversationId: string, agentId: string) => Promise<void>
@@ -88,6 +89,12 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   const [imageError, setImageError] = useState<Record<string, string | undefined>>({})
   // Estado del popover de emojis
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  
+  // Estados para adjuntar archivos
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
@@ -375,15 +382,82 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!message.trim() || !conversationId) return
+    if ((!message.trim() && selectedFiles.length === 0) || !conversationId) return
 
     try {
       if (!onSendMessage) throw new Error('onSendMessage no definido')
-      await onSendMessage(conversationId, message, 'agent')
+      
+      // Si hay archivos, subirlos primero
+      if (selectedFiles.length > 0 && profile?.client_id && conversationId) {
+        setUploading(true)
+        setUploadProgress(0)
+        
+        const firstFile = selectedFiles[0] // Inicialmente solo 1 archivo
+        const result = await uploadFile(
+          firstFile,
+          profile.client_id,
+          conversationId,
+          (progress) => setUploadProgress(progress)
+        )
+        
+        setUploading(false)
+        
+        if (!result.success || !result.metadata) {
+          console.error('Error subiendo archivo:', result.error)
+          toast.error(result.error || 'Error al subir archivo')
+          return
+        }
+        
+        // El metadata se manejará en el hook de conversaciones
+        await onSendMessage(conversationId, message, 'agent', result.metadata)
+      } else {
+        await onSendMessage(conversationId, message, 'agent')
+      }
+      
       setMessage('')
+      setSelectedFiles([])
+      setUploadProgress(0)
     } catch (error) {
       console.error('Error sending message:', error)
+      setUploading(false)
     }
+  }
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
+    
+    // Validar cada archivo
+    const validFiles: File[] = []
+    const errors: string[] = []
+    
+    files.forEach(file => {
+      const validation = validateFile(file)
+      if (validation.valid) {
+        validFiles.push(file)
+      } else {
+        errors.push(`${file.name}: ${validation.error}`)
+      }
+    })
+    
+    if (errors.length > 0) {
+      console.error('Errores de validación:', errors)
+      errors.forEach(err => toast.error(err))
+    }
+    
+    if (validFiles.length > 0) {
+      // Por ahora solo permitir 1 archivo
+      setSelectedFiles(validFiles.slice(0, 1))
+    }
+    
+    // Reset del input para permitir seleccionar el mismo archivo otra vez
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  const handleRemoveFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index))
   }
 
   const handleStatusChange = async (newStatus: string) => {
@@ -594,6 +668,50 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                 />
               </div>
             )}
+            {/* Mostrar documento adjunto */}
+            {!hasImage && msg?.metadata && (() => {
+              const fileUrl = (msg.metadata as any)?.['file-url']
+              const fileType = (msg.metadata as any)?.['file-type']
+              const fileName = (msg.metadata as any)?.['file-name']
+              
+              if (fileUrl && fileType && fileName) {
+                const isImage = fileType.startsWith('image/')
+                const isDocument = fileType.startsWith('application/')
+                
+                if (isDocument) {
+                  return (
+                    <div className="mb-2">
+                      <a 
+                        href={fileUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-3 p-3 bg-muted/50 dark:bg-muted/30 rounded-md hover:bg-muted/70 transition-colors border border-muted"
+                      >
+                        <FileText className="h-6 w-6 text-primary flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">{fileName}</div>
+                          <div className="text-xs text-muted-foreground">{fileType}</div>
+                        </div>
+                        <Download className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                      </a>
+                    </div>
+                  )
+                } else if (isImage) {
+                  return (
+                    <div className="mb-2">
+                      <img 
+                        src={fileUrl} 
+                        alt={fileName} 
+                        className="chat-message-content rounded-md cursor-zoom-in max-w-full h-auto max-h-72 object-contain w-auto"
+                        loading="lazy"
+                        onClick={() => { setViewerSrc(fileUrl); setViewerError(false); setViewerOpen(true) }}
+                      />
+                    </div>
+                  )
+                }
+              }
+              return null
+            })()}
             {msg.content && (
               <p className="chat-message-content text-[15px] leading-6 tablet:text-sm tablet:leading-5 whitespace-pre-wrap break-words">{msg.content}</p>
             )}
@@ -926,8 +1044,57 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
             setMessage(prev => (prev ? prev + '\n' : '') + tpl.message)
           }}
         />
+        
+        {/* Preview de archivos seleccionados */}
+        {selectedFiles.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-2">
+            {selectedFiles.map((file, index) => (
+              <div
+                key={index}
+                className="flex items-center gap-2 px-3 py-2 bg-muted rounded-lg group"
+              >
+                <FileText className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground max-w-[200px] truncate">
+                  {file.name}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveFile(index)}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <X className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        
+        {/* Barra de progreso */}
+        {uploading && (
+          <div className="w-full bg-muted rounded-full h-2">
+            <div
+              className="bg-primary h-2 rounded-full transition-all duration-300"
+              style={{ width: `${uploadProgress}%` }}
+            />
+          </div>
+        )}
+        
         <form onSubmit={handleSendMessage} className="flex items-end space-x-2">
-          <Button type="button" variant="ghost" size="icon" className="flex-shrink-0 h-11 w-11 min-w-[44px] min-h-[44px] touch-manipulation">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileSelect}
+            className="hidden"
+            accept="image/*,.pdf,.docx,.xlsx"
+          />
+          <Button 
+            type="button" 
+            variant="ghost" 
+            size="icon" 
+            className="flex-shrink-0 h-11 w-11 min-w-[44px] min-h-[44px] touch-manipulation"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={!conversationId || conversation?.status === 'closed' || uploading}
+          >
             <Paperclip className="h-4 w-4" />
           </Button>
           <Popover open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
@@ -992,8 +1159,17 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
             return null;
           })()}
           */}
-          <Button type="submit" size="icon" className="h-11 w-11 min-w-[44px] min-h-[44px] touch-manipulation" disabled={!message.trim() || !conversationId || conversation?.status === 'closed' || conversation?.status === 'pending_response'}>
-            <Send className="h-4 w-4" />
+          <Button 
+            type="submit" 
+            size="icon" 
+            className="h-11 w-11 min-w-[44px] min-h-[44px] touch-manipulation" 
+            disabled={(!message.trim() && selectedFiles.length === 0) || !conversationId || conversation?.status === 'closed' || conversation?.status === 'pending_response' || uploading}
+          >
+            {uploading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
           </Button>
         </form>
       </div>

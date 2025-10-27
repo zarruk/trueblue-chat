@@ -489,7 +489,8 @@ export function useConversations() {
   const sendMessage = useCallback(async (
     conversationId: string, 
     content: string, 
-    senderRole: 'user' | 'ai' | 'agent'
+    senderRole: 'user' | 'ai' | 'agent',
+    metadata?: any
   ) => {
     if (!user || !profile) {
       toast.error('Debes estar autenticado para enviar mensajes')
@@ -503,7 +504,8 @@ export function useConversations() {
         sender_role: senderRole,
         agent_email: (p?.email as string | undefined),
         agent_name: (p?.name as string | undefined),
-        responded_by_agent_id: (p?.id as string | undefined)
+        responded_by_agent_id: (p?.id as string | undefined),
+        ...(metadata && { metadata })
       }
 
       const { data: insertedMessage, error } = await supabase
