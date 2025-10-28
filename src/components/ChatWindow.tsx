@@ -249,15 +249,15 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     // 🔧 NUEVO: Detectar si está scrolleando hacia arriba (alejándose del final)
     if (!isAtBottom) {
       setUserIsScrolling(true)
-      // Reset después de 2 segundos de inactividad de scroll
+      // 🔧 FIX: NO usar timeout automático - solo restaurar cuando usuario vuelva al final
       if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
-      scrollTimeoutRef.current = setTimeout(() => {
-        setUserIsScrolling(false)
-        console.log('📍 ChatWindow: Usuario dejó de scrollear, restaurando scroll automático')
-      }, 2000)
+      console.log('🔼 ChatWindow: Usuario scrolleando hacia arriba - desactivando scroll automático')
     } else {
-      // Si está en el final, no está scrolleando manualmente
-      setUserIsScrolling(false)
+      // ✅ Solo restaurar scroll automático cuando usuario vuelva al final por su cuenta
+      if (userIsScrolling) {
+        setUserIsScrolling(false)
+        console.log('✅ ChatWindow: Usuario volvió al final, restaurando scroll automático')
+      }
       if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
     }
 
