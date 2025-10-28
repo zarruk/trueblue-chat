@@ -213,7 +213,7 @@ export default function Dashboard() {
                 conversationId={selectedConversationId || undefined}
                 messages={messages}
                 loading={loading}
-                onSendMessage={(conversationId, content, senderRole) => sendMessage(conversationId, content, senderRole as 'user' | 'ai' | 'agent')}
+                onSendMessage={(conversationId, content, senderRole, metadata) => sendMessage(conversationId, content, senderRole as 'user' | 'ai' | 'agent', metadata)}
                 onSelectConversation={selectConversation}
                 onUpdateConversationStatus={updateConversationStatus}
                 onAssignAgent={(conversationId, agentId) => assignAgent(conversationId, agentId)}
@@ -234,7 +234,7 @@ export default function Dashboard() {
                 conversationId={selectedConversationId || undefined}
                 messages={messages}
                 loading={loading}
-                onSendMessage={(conversationId, content, senderRole) => sendMessage(conversationId, content, senderRole as 'user' | 'ai' | 'agent')}
+                onSendMessage={(conversationId, content, senderRole, metadata) => sendMessage(conversationId, content, senderRole as 'user' | 'ai' | 'agent', metadata)}
                 onSelectConversation={selectConversation}
                 onUpdateConversationStatus={updateConversationStatus}
                 onAssignAgent={(conversationId, agentId) => assignAgent(conversationId, agentId)}
