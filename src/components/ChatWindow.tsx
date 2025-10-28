@@ -108,6 +108,11 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   // Estados para scroll infinito hacia arriba
   const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false)
   const prevScrollHeight = useRef(0)
+  
+  // Estados para detección de scroll manual del usuario
+  const [userIsScrolling, setUserIsScrolling] = useState(false)
+  const [isNearBottom, setIsNearBottom] = useState(true)
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // 🔧 FIX: Unificar estado de mensajes - usar props como fuente de verdad principal
   const messages = useMemo(() => {
@@ -228,10 +233,33 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     setLocalMessages(propMessages || [])
   }, [propMessages])
 
-  // Detectar scroll hacia arriba para cargar mensajes más antiguos
+  // Detectar scroll hacia arriba para cargar mensajes más antiguos + detección de scroll manual
   const handleScroll = useCallback(async () => {
     const container = messagesContainerRef.current
-    if (!container || !fetchOlderMessages || isLoadingOlderMessages) return
+    if (!container) return
+
+    // 🔧 NUEVO: Detectar si el usuario está cerca del final (últimos 100px)
+    const scrollFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
+    const isAtBottom = scrollFromBottom < 100
+    setIsNearBottom(isAtBottom)
+    
+    // 🔧 NUEVO: Detectar si está scrolleando hacia arriba (alejándose del final)
+    if (!isAtBottom) {
+      setUserIsScrolling(true)
+      // Reset después de 2 segundos de inactividad de scroll
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
+      scrollTimeoutRef.current = setTimeout(() => {
+        setUserIsScrolling(false)
+        console.log('📍 ChatWindow: Usuario dejó de scrollear, restaurando scroll automático')
+      }, 2000)
+    } else {
+      // Si está en el final, no está scrolleando manualmente
+      setUserIsScrolling(false)
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
+    }
+
+    // Scroll infinito hacia arriba (lógica existente)
+    if (!fetchOlderMessages || isLoadingOlderMessages) return
 
     // 🔧 FIX 1: Solo activar si ya hay mensajes cargados y no está en loading inicial
     if (loading || messages.length === 0) {
@@ -253,12 +281,23 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
         const success = await fetchOlderMessages()
         
         if (success) {
-          // Después de cargar mensajes, mantener la posición relativa del scroll
+          // 🔧 MEJORADO: Mejor cálculo para mantener posición exacta
           setTimeout(() => {
-            const newScrollHeight = container.scrollHeight
-            const heightDifference = newScrollHeight - prevScrollHeight.current
-            container.scrollTop = container.scrollTop + heightDifference
-          }, 100) // Pequeño delay para asegurar que el DOM se haya actualizado
+            if (container && prevScrollHeight.current > 0) {
+              const newScrollHeight = container.scrollHeight
+              const heightDifference = newScrollHeight - prevScrollHeight.current
+              const newScrollTop = container.scrollTop + heightDifference
+              
+              container.scrollTop = newScrollTop
+              
+              console.log('📍 ChatWindow: Posición mantenida después de cargar historial:', {
+                prevHeight: prevScrollHeight.current,
+                newHeight: newScrollHeight,
+                difference: heightDifference,
+                newScrollTop
+              })
+            }
+          }, 150) // Aumentar delay ligeramente para mejor estabilidad
         }
       } catch (error) {
         console.error('❌ ChatWindow: Error cargando mensajes más antiguos:', error)
@@ -268,14 +307,29 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     }
   }, [fetchOlderMessages, hasMoreHistory, isLoadingOlderMessages, loading, messages.length])
 
-  // Agregar listener de scroll
+  // Agregar listener de scroll + cleanup de timeouts
   useEffect(() => {
     const container = messagesContainerRef.current
     if (!container) return
 
     container.addEventListener('scroll', handleScroll)
-    return () => container.removeEventListener('scroll', handleScroll)
+    return () => {
+      container.removeEventListener('scroll', handleScroll)
+      // 🧹 Cleanup: Limpiar timeout al desmontar
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current)
+      }
+    }
   }, [handleScroll])
+  
+  // Cleanup general al desmontar el componente
+  useEffect(() => {
+    return () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current)
+      }
+    }
+  }, [])
 
   // Cargar historial de todas las conversaciones previas del mismo usuario (excluyendo la actual)
   const fetchHistoricalConversations = useCallback(async (userId: string, currentConvId: string) => {
@@ -425,11 +479,19 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   }, [scrollToBottom])
 
   useEffect(() => {
-    // 🔧 FIX: Scroll instantáneo cuando se cargan mensajes inicialmente (usar mensajes unificados)
-    if (messages.length > 0) {
-      scrollToBottomInstant()
+    // 🔧 FIX: Solo scroll automático si el usuario NO está scrolleando manualmente
+    // y está cerca del final O es la primera carga
+    if (messages.length > 0 && (!userIsScrolling || isNearBottom)) {
+      // Si es la primera vez que se cargan mensajes, siempre hacer scroll
+      const isFirstLoad = !userIsScrolling
+      if (isFirstLoad || isNearBottom) {
+        scrollToBottomInstant()
+        console.log('📍 ChatWindow: Scroll automático al final (primera carga o usuario en el final)')
+      }
+    } else if (userIsScrolling && !isNearBottom) {
+      console.log('📍 ChatWindow: Scroll automático omitido - usuario scrolleando manualmente')
     }
-  }, [messages.length, scrollToBottomInstant])
+  }, [messages.length, scrollToBottomInstant, userIsScrolling, isNearBottom])
 
   // Asegurar scroll al fondo cuando se cambia de conversación
   useEffect(() => {
@@ -440,13 +502,17 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
 
   // 🔧 FIX: Scroll suave cuando se agregan nuevos mensajes (usar mensajes unificados)
   useEffect(() => {
-    if (messages.length > 0) {
+    // 🔧 FIX: Solo smooth scroll si el usuario NO está scrolleando y está cerca del final
+    if (messages.length > 0 && (!userIsScrolling || isNearBottom)) {
       const timer = setTimeout(() => {
-        scrollToBottom('smooth')
+        if (!userIsScrolling || isNearBottom) {
+          scrollToBottom('smooth')
+          console.log('📍 ChatWindow: Smooth scroll al final')
+        }
       }, 100)
       return () => clearTimeout(timer)
     }
-  }, [messages, scrollToBottom])
+  }, [messages, scrollToBottom, userIsScrolling, isNearBottom])
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
