@@ -113,6 +113,9 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   const [userIsScrolling, setUserIsScrolling] = useState(false)
   const [isNearBottom, setIsNearBottom] = useState(true)
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  
+  // 🔧 FIX: Flag específico para bloquear scroll automático durante carga de historial
+  const [isLoadingHistoricalMessages, setIsLoadingHistoricalMessages] = useState(false)
 
   // 🔧 FIX: Unificar estado de mensajes - usar props como fuente de verdad principal
   const messages = useMemo(() => {
@@ -278,6 +281,10 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       prevScrollHeight.current = container.scrollHeight
       
       try {
+        // 🔧 FIX: Marcar que se están cargando mensajes históricos
+        setIsLoadingHistoricalMessages(true)
+        console.log('🚫 ChatWindow: Bloqueando scroll automático - cargando historial')
+        
         const success = await fetchOlderMessages()
         
         if (success) {
@@ -303,6 +310,11 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
         console.error('❌ ChatWindow: Error cargando mensajes más antiguos:', error)
       } finally {
         setIsLoadingOlderMessages(false)
+        // 🔧 FIX: Delay para evitar race condition con useEffect de scroll automático
+        setTimeout(() => {
+          setIsLoadingHistoricalMessages(false)
+          console.log('✅ ChatWindow: Restaurando scroll automático - historial completado')
+        }, 500)
       }
     }
   }, [fetchOlderMessages, hasMoreHistory, isLoadingOlderMessages, loading, messages.length])
@@ -479,7 +491,13 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   }, [scrollToBottom])
 
   useEffect(() => {
-    // 🔧 FIX: Solo scroll automático si el usuario NO está scrolleando manualmente
+    // 🔧 FIX: NUNCA hacer scroll automático si se están cargando mensajes históricos
+    if (isLoadingHistoricalMessages) {
+      console.log('🚫 ChatWindow: Scroll automático bloqueado - cargando mensajes históricos')
+      return
+    }
+    
+    // Solo scroll automático si el usuario NO está scrolleando manualmente
     // y está cerca del final O es la primera carga
     if (messages.length > 0 && (!userIsScrolling || isNearBottom)) {
       // Si es la primera vez que se cargan mensajes, siempre hacer scroll
@@ -491,7 +509,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     } else if (userIsScrolling && !isNearBottom) {
       console.log('📍 ChatWindow: Scroll automático omitido - usuario scrolleando manualmente')
     }
-  }, [messages.length, scrollToBottomInstant, userIsScrolling, isNearBottom])
+  }, [messages.length, scrollToBottomInstant, userIsScrolling, isNearBottom, isLoadingHistoricalMessages])
 
   // Asegurar scroll al fondo cuando se cambia de conversación
   useEffect(() => {
@@ -502,17 +520,24 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
 
   // 🔧 FIX: Scroll suave cuando se agregan nuevos mensajes (usar mensajes unificados)
   useEffect(() => {
-    // 🔧 FIX: Solo smooth scroll si el usuario NO está scrolleando y está cerca del final
+    // 🔧 FIX: NUNCA hacer smooth scroll si se están cargando mensajes históricos
+    if (isLoadingHistoricalMessages) {
+      console.log('🚫 ChatWindow: Smooth scroll bloqueado - cargando mensajes históricos')
+      return
+    }
+    
+    // Solo smooth scroll si el usuario NO está scrolleando y está cerca del final
     if (messages.length > 0 && (!userIsScrolling || isNearBottom)) {
       const timer = setTimeout(() => {
-        if (!userIsScrolling || isNearBottom) {
+        // Doble verificación para evitar race conditions
+        if (!isLoadingHistoricalMessages && (!userIsScrolling || isNearBottom)) {
           scrollToBottom('smooth')
           console.log('📍 ChatWindow: Smooth scroll al final')
         }
       }, 100)
       return () => clearTimeout(timer)
     }
-  }, [messages, scrollToBottom, userIsScrolling, isNearBottom])
+  }, [messages, scrollToBottom, userIsScrolling, isNearBottom, isLoadingHistoricalMessages])
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
