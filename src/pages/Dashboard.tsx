@@ -46,7 +46,12 @@ export default function Dashboard() {
     // Estados para control inteligente de scroll
     isUserScrolling,
     newConversationIds,
-    handleScrollStateChange
+    handleScrollStateChange,
+    // Estados y funciones para historial de mensajes
+    fetchOlderMessages,
+    hasMoreHistory,
+    loadingHistory,
+    historyOffset
   } = useConversations();
   const { agents } = useAgents();
   
@@ -218,6 +223,9 @@ export default function Dashboard() {
                 onUpdateConversationStatus={updateConversationStatus}
                 onAssignAgent={(conversationId, agentId) => assignAgent(conversationId, agentId)}
                 conversations={conversations}
+                fetchOlderMessages={fetchOlderMessages}
+                hasMoreHistory={hasMoreHistory}
+                loadingHistory={loadingHistory}
                 onMobileBack={() => {
                   const params = new URLSearchParams(location.search)
                   params.delete('conv')
@@ -229,9 +237,9 @@ export default function Dashboard() {
 
           {/* Desktop: Always show chat */}
           <div className="hidden desktop:flex flex-col h-full min-h-0 overflow-hidden">
-            {selectedConversation ? (
+            {selectedConversationId ? (
               <ChatWindow
-                conversationId={selectedConversationId || undefined}
+                conversationId={selectedConversationId}
                 messages={messages}
                 loading={loading}
                 onSendMessage={(conversationId, content, senderRole, metadata) => sendMessage(conversationId, content, senderRole as 'user' | 'ai' | 'agent', metadata)}
@@ -239,6 +247,9 @@ export default function Dashboard() {
                 onUpdateConversationStatus={updateConversationStatus}
                 onAssignAgent={(conversationId, agentId) => assignAgent(conversationId, agentId)}
                 conversations={conversations}
+                fetchOlderMessages={fetchOlderMessages}
+                hasMoreHistory={hasMoreHistory}
+                loadingHistory={loadingHistory}
                 showContextToggle={!contextPanelOpen}
                 onToggleContext={() => setContextPanelOpen(true)}
               />

@@ -49,6 +49,10 @@ interface ChatWindowProps {
   showContextToggle?: boolean
   onToggleContext?: () => void
   onMobileBack?: () => void
+  // Nuevas propiedades para historial de mensajes
+  fetchOlderMessages?: () => Promise<boolean>
+  hasMoreHistory?: boolean
+  loadingHistory?: boolean
 }
 
 interface Message {
@@ -74,7 +78,7 @@ interface Conversation {
   updated_at: string
 }
 
-export function ChatWindow({ conversationId, messages: propMessages, loading: propLoading, onSendMessage, onSelectConversation, onUpdateConversationStatus, onAssignAgent, conversations: propConversations, showContextToggle, onToggleContext, onMobileBack }: ChatWindowProps) {
+export function ChatWindow({ conversationId, messages: propMessages, loading: propLoading, onSendMessage, onSelectConversation, onUpdateConversationStatus, onAssignAgent, conversations: propConversations, showContextToggle, onToggleContext, onMobileBack, fetchOlderMessages, hasMoreHistory, loadingHistory }: ChatWindowProps) {
   const [message, setMessage] = useState('')
   const [localMessages, setLocalMessages] = useState<Message[]>([])
   const [updatingStatus, setUpdatingStatus] = useState(false)
@@ -100,6 +104,10 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const { profile } = useAuth()
   const { getAvailableAgents } = useAgents()
+  
+  // Estados para scroll infinito hacia arriba
+  const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false)
+  const prevScrollHeight = useRef(0)
 
   // 🔧 FIX: Unificar estado de mensajes - usar props como fuente de verdad principal
   const messages = useMemo(() => {
@@ -219,6 +227,55 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   useEffect(() => {
     setLocalMessages(propMessages || [])
   }, [propMessages])
+
+  // Detectar scroll hacia arriba para cargar mensajes más antiguos
+  const handleScroll = useCallback(async () => {
+    const container = messagesContainerRef.current
+    if (!container || !fetchOlderMessages || isLoadingOlderMessages) return
+
+    // 🔧 FIX 1: Solo activar si ya hay mensajes cargados y no está en loading inicial
+    if (loading || messages.length === 0) {
+      console.log('🚫 ChatWindow: Scroll infinito desactivado - aún cargando o sin mensajes')
+      return
+    }
+
+    // 🔧 FIX 2: Threshold más pequeño para evitar activación accidental (50px en lugar de 100px)
+    const isNearTop = container.scrollTop <= 50
+    
+    if (isNearTop && hasMoreHistory) {
+      console.log('🔼 ChatWindow: Usuario llegó al tope, cargando mensajes más antiguos...')
+      setIsLoadingOlderMessages(true)
+      
+      // Guardar la altura actual del scroll para mantener la posición
+      prevScrollHeight.current = container.scrollHeight
+      
+      try {
+        const success = await fetchOlderMessages()
+        
+        if (success) {
+          // Después de cargar mensajes, mantener la posición relativa del scroll
+          setTimeout(() => {
+            const newScrollHeight = container.scrollHeight
+            const heightDifference = newScrollHeight - prevScrollHeight.current
+            container.scrollTop = container.scrollTop + heightDifference
+          }, 100) // Pequeño delay para asegurar que el DOM se haya actualizado
+        }
+      } catch (error) {
+        console.error('❌ ChatWindow: Error cargando mensajes más antiguos:', error)
+      } finally {
+        setIsLoadingOlderMessages(false)
+      }
+    }
+  }, [fetchOlderMessages, hasMoreHistory, isLoadingOlderMessages, loading, messages.length])
+
+  // Agregar listener de scroll
+  useEffect(() => {
+    const container = messagesContainerRef.current
+    if (!container) return
+
+    container.addEventListener('scroll', handleScroll)
+    return () => container.removeEventListener('scroll', handleScroll)
+  }, [handleScroll])
 
   // Cargar historial de todas las conversaciones previas del mismo usuario (excluyendo la actual)
   const fetchHistoricalConversations = useCallback(async (userId: string, currentConvId: string) => {
@@ -988,6 +1045,24 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
           ref={messagesContainerRef} 
           className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain px-3 py-3 tablet:px-4 tablet:py-4 desktop:px-6 desktop:py-6 space-y-3 tablet:space-y-2 desktop:space-y-2 chat-messages-scroll dark:[&>.message-sep]:border-slate-700"
         >
+          {/* Indicadores de historial en la parte superior */}
+          {(isLoadingOlderMessages || loadingHistory) && (
+            <div className="flex justify-center py-3">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                <span>Cargando mensajes anteriores...</span>
+              </div>
+            </div>
+          )}
+          
+          {!hasMoreHistory && messages.length > 30 && (
+            <div className="flex justify-center py-2">
+              <div className="text-xs text-muted-foreground px-3 py-1 rounded-full bg-muted/50">
+                No hay más mensajes en esta conversación
+              </div>
+            </div>
+          )}
+          
           {loading ? (
             <div className="flex items-center justify-center h-full">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -1045,6 +1120,16 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
           )}
           
           <div ref={messagesEndRef} />
+          
+          {/* Mensaje de ayuda para scroll hacia arriba */}
+          {/* 🔧 FIX 3: Solo mostrar ayuda si hay suficientes mensajes (>10) para evitar confusión */}
+          {messages.length > 10 && hasMoreHistory && !loading && (
+            <div className="flex justify-center py-2 opacity-60">
+              <div className="text-xs text-muted-foreground">
+                Desliza hacia arriba para ver más mensajes
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

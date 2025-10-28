@@ -327,7 +327,7 @@ export function ConversationList({
           </div>
         ) : (
           <div className="space-y-1 p-1">
-            {filteredConversations.map((conversation) => {
+            {filteredConversations.map((conversation, index) => {
               const statusConfig = getStatusConfigLocal(conversation.status)
               const isSelected = selectedConversationId === conversation.id
               const isUrgent = needsUrgentResponse(conversation)
@@ -345,7 +345,7 @@ export function ConversationList({
 
               return (
                 <SwipeableRow
-                  key={conversation.id}
+                  key={`${conversation.id}-${index}`}
                   enableSwipe={false}
                   showAction={false}
                 >
