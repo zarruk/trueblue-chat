@@ -582,7 +582,8 @@ export function useConversations() {
               conversationData,
               content,
               (p?.id as string | undefined), // Cambiar de profile.email a profile.id
-              (p?.name as string | undefined)
+              (p?.name as string | undefined),
+              metadata // Pasar metadata si existe (para archivos adjuntos)
             )
 
             console.log('📤 Payload preparado para n8n:', webhookPayload)

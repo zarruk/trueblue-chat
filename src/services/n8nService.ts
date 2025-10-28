@@ -6,6 +6,7 @@ export interface N8nWebhookPayload {
   senderId: string
   chatId: string
   clientId?: string // Agregar client_id opcional
+  metadata?: any // Agregar metadata para archivos adjuntos
 }
 
 export interface N8nWebhookResponse {
@@ -120,7 +121,8 @@ class N8nService {
     conversation: any,
     messageContent: string,
     agentId: string, // Cambiar de agentEmail a agentId
-    agentName: string
+    agentName: string,
+    metadata?: any // Agregar parámetro metadata opcional
   ): N8nWebhookPayload {
     const channel = this.detectChannel(conversation).toLowerCase()
     
@@ -140,6 +142,7 @@ class N8nService {
       senderId,
       chatId,
       clientId,
+      metadata: metadata ? 'Metadata presente' : 'Sin metadata',
       conversationData: conversation
     })
     
@@ -149,7 +152,8 @@ class N8nService {
       channel: channel,
       senderId: senderId,
       chatId: chatId,
-      clientId: clientId // Agregar client_id al payload
+      clientId: clientId, // Agregar client_id al payload
+      metadata: metadata // Incluir metadata en el payload
     }
   }
 }
