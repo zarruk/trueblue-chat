@@ -419,6 +419,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
           return
         }
         
+        console.log('🔍 ChatWindow: Enviando mensaje con metadata:', result.metadata)
         // El metadata se manejará en el hook de conversaciones
         await onSendMessage(conversationId, message, 'agent', result.metadata)
       } else {

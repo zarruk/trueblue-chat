@@ -559,6 +559,7 @@ export function useConversations() {
       // Si el mensaje es enviado por un agente, enviarlo al webhook de n8n
       if (senderRole === 'agent') {
         console.log('🔍 senderRole es "agent", procediendo con webhook...')
+        console.log('🔍 Metadata recibido en sendMessage:', metadata)
         try {
           // Obtener la información de la conversación para el webhook
           console.log('🔍 Buscando conversación en BD:', conversationId)
