@@ -403,13 +403,28 @@ export function useConversations() {
     }
 
     // Encontrar la conversación para obtener el user_id (necesario para historial)
+    let userId: string | undefined
     const selectedConversation = conversations.find(c => c.id === conversationId)
-    if (!selectedConversation || !selectedConversation.user_id) {
-      console.log('❌ fetchMessages: No se encontró user_id para la conversación')
-      return false
+    
+    if (selectedConversation && selectedConversation.user_id) {
+      userId = selectedConversation.user_id
+    } else {
+      // ✅ FIX: Si no está en el array local, buscar en la BD (común en historial)
+      console.log('🔍 fetchMessages: Conversación no encontrada en array local, buscando en BD...')
+      const { data: convData, error: convError } = await supabase
+        .from('tb_conversations')
+        .select('user_id')
+        .eq('id', conversationId)
+        .maybeSingle()
+      
+      if (convError || !convData || !convData.user_id) {
+        console.log('❌ fetchMessages: No se encontró user_id para la conversación')
+        return false
+      }
+      
+      userId = convData.user_id as string
+      console.log('✅ fetchMessages: user_id obtenido de BD:', userId)
     }
-
-    const userId = selectedConversation.user_id
 
     // ✅ SOLUCIÓN 1: Crear ID único para esta consulta
     const queryId = Date.now() + Math.random()

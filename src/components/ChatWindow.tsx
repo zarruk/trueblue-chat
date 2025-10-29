@@ -115,6 +115,9 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   const [isNearBottom, setIsNearBottom] = useState(true)
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   
+  // ✅ NUEVO: Estado para rastrear último scroll manual (período de gracia)
+  const [lastManualScrollTime, setLastManualScrollTime] = useState<number>(0)
+  
   // 🔧 FIX: Flag específico para bloquear scroll automático durante carga de historial
   const [isLoadingHistoricalMessages, setIsLoadingHistoricalMessages] = useState(false)
 
@@ -250,6 +253,8 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     // 🔧 NUEVO: Detectar si está scrolleando hacia arriba (alejándose del final)
     if (!isAtBottom) {
       setUserIsScrolling(true)
+      // ✅ Actualizar timestamp de último scroll manual
+      setLastManualScrollTime(Date.now())
       // 🔧 FIX: NO usar timeout automático - solo restaurar cuando usuario vuelva al final
       if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
       console.log('🔼 ChatWindow: Usuario scrolleando hacia arriba - desactivando scroll automático')
@@ -257,6 +262,8 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       // ✅ Solo restaurar scroll automático cuando usuario vuelva al final por su cuenta
       if (userIsScrolling) {
         setUserIsScrolling(false)
+        // ✅ Actualizar timestamp cuando vuelve al final también
+        setLastManualScrollTime(Date.now())
         console.log('✅ ChatWindow: Usuario volvió al final, restaurando scroll automático')
       }
       if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
@@ -498,19 +505,37 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       return
     }
     
-    // Solo scroll automático si el usuario NO está scrolleando manualmente
-    // y está cerca del final O es la primera carga
-    if (messages.length > 0 && (!userIsScrolling || isNearBottom)) {
-      // Si es la primera vez que se cargan mensajes, siempre hacer scroll
-      const isFirstLoad = !userIsScrolling
-      if (isFirstLoad || isNearBottom) {
-        scrollToBottomInstant()
-        console.log('📍 ChatWindow: Scroll automático al final (primera carga o usuario en el final)')
-      }
-    } else if (userIsScrolling && !isNearBottom) {
-      console.log('📍 ChatWindow: Scroll automático omitido - usuario scrolleando manualmente')
+    // ✅ Calcular tiempo desde último scroll manual
+    const timeSinceLastScroll = Date.now() - lastManualScrollTime
+    const SCROLL_GRACE_PERIOD = 15000 // ✅ 15 segundos de período de gracia
+    
+    // ✅ Si el usuario ha scrolleado recientemente, NO hacer scroll automático
+    if (timeSinceLastScroll < SCROLL_GRACE_PERIOD && lastManualScrollTime > 0) {
+      console.log(`🚫 ChatWindow: Scroll automático bloqueado - usuario scrolleó hace ${Math.round(timeSinceLastScroll / 1000)}s (período de gracia: 15s)`)
+      return
     }
-  }, [messages.length, scrollToBottomInstant, userIsScrolling, isNearBottom, isLoadingHistoricalMessages])
+    
+    // Solo scroll automático si:
+    // 1. El usuario NO ha scrolleado recientemente (o nunca ha scrolleado)
+    // 2. Y está cerca del final O es la primera carga
+    if (messages.length > 0 && isNearBottom) {
+      // ✅ Delay antes de hacer scroll (período de gracia adicional)
+      const timer = setTimeout(() => {
+        // ✅ Doble verificación: asegurar que el usuario siga cerca del final y no haya scrolleado
+        const timeSinceLastScrollNow = Date.now() - lastManualScrollTime
+        if (timeSinceLastScrollNow >= SCROLL_GRACE_PERIOD && isNearBottom && !isLoadingHistoricalMessages) {
+          scrollToBottomInstant()
+          console.log('📍 ChatWindow: Scroll automático al final (período de gracia completado)')
+        } else {
+          console.log('📍 ChatWindow: Scroll automático cancelado - usuario scrolleó durante período de gracia')
+        }
+      }, 2000) // Esperar 2 segundos adicionales antes de hacer scroll
+      
+      return () => clearTimeout(timer)
+    } else if (userIsScrolling && !isNearBottom) {
+      console.log('📍 ChatWindow: Scroll automático omitido - usuario scrolleando manualmente y lejos del final')
+    }
+  }, [messages.length, scrollToBottomInstant, userIsScrolling, isNearBottom, isLoadingHistoricalMessages, lastManualScrollTime])
 
   // Asegurar scroll al fondo cuando se cambia de conversación
   useEffect(() => {
@@ -1185,13 +1210,30 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                 </div>
               ) : (
                 messages.map((msg, idx) => {
+                  // ✅ NUEVO: Detectar cambio de conversation_id para mostrar separador histórico
+                  const prevMsg = idx > 0 ? messages[idx - 1] : null
+                  const conversationChanged = prevMsg && prevMsg.conversation_id !== msg.conversation_id
+                  
                   // Verificar si necesitamos mostrar un separador de fecha
                   const showDateSeparator = idx === 0 || 
                     !isSameDay(new Date(messages[idx - 1].created_at), new Date(msg.created_at))
                   
                   return (
                     <React.Fragment key={msg.id}>
-                      {showDateSeparator && (
+                      {/* ✅ Separador para cambio de conversación (historial) */}
+                      {conversationChanged && (
+                        <div className="relative my-6 message-sep">
+                          <div className="absolute inset-0 flex items-center">
+                            <span className="w-full border-t border-dashed border-muted-foreground/30" />
+                          </div>
+                          <div className="relative flex justify-center text-[11px] uppercase">
+                            <span className="bg-background px-2 text-muted-foreground">
+                              Histórico • {format(new Date(msg.created_at), 'dd/MM/yyyy', { locale: es })}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                      {showDateSeparator && !conversationChanged && (
                         <div className="relative my-4">
                           <div className="absolute inset-0 flex items-center">
                             <span className="w-full border-t border-muted-foreground/20" />
