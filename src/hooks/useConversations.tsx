@@ -406,11 +406,27 @@ export function useConversations() {
     let userId: string | undefined
     const selectedConversation = conversations.find(c => c.id === conversationId)
     
+    // ✅ DEBUG: Logs para verificar
+    console.log('🔍 fetchMessages: Buscando user_id para conversación:', conversationId)
+    if (selectedConversation) {
+      console.log('🔍 fetchMessages: Conversación encontrada en array local:', {
+        id: selectedConversation.id,
+        has_user_id: !!selectedConversation.user_id,
+        user_id: selectedConversation.user_id
+      })
+    } else {
+      console.log('🔍 fetchMessages: Conversación no encontrada en array local')
+    }
+    
     if (selectedConversation && selectedConversation.user_id) {
       userId = selectedConversation.user_id
+      console.log('✅ fetchMessages: Usando user_id del array local:', userId)
     } else {
-      // ✅ FIX: Si no está en el array local, buscar en la BD (común en historial)
-      console.log('🔍 fetchMessages: Conversación no encontrada en array local, buscando en BD...')
+      // ✅ FIX: Si no está en el array local O no tiene user_id, buscar en la BD
+      console.log('🔍 fetchMessages: Conversación no encontrada en array local o sin user_id, buscando en BD...', {
+        foundInArray: !!selectedConversation,
+        hasUserId: selectedConversation ? !!selectedConversation.user_id : false
+      })
       const { data: convData, error: convError } = await supabase
         .from('tb_conversations')
         .select('user_id')
@@ -418,12 +434,21 @@ export function useConversations() {
         .maybeSingle()
       
       if (convError || !convData || !convData.user_id) {
-        console.log('❌ fetchMessages: No se encontró user_id para la conversación')
+        console.log('❌ fetchMessages: No se encontró user_id para la conversación', {
+          error: convError,
+          hasData: !!convData,
+          hasUserId: convData ? !!convData.user_id : false
+        })
         return false
       }
       
       userId = convData.user_id as string
       console.log('✅ fetchMessages: user_id obtenido de BD:', userId)
+    }
+    
+    if (!userId) {
+      console.log('❌ fetchMessages: No se pudo obtener user_id por ningún método')
+      return false
     }
 
     // ✅ SOLUCIÓN 1: Crear ID único para esta consulta
@@ -1310,9 +1335,13 @@ export function useConversations() {
 
   // Configurar suscripciones de tiempo real
   const handleMessageInsert = useCallback((message: Message) => {
+    console.log('📨 [REALTIME] ========== handleMessageInsert EJECUTADO ==========')
     console.log('📨 [REALTIME] Nuevo mensaje recibido:', message)
+    console.log('📨 [REALTIME] Mensaje ID:', message.id)
+    console.log('📨 [REALTIME] Conversación ID del mensaje:', message.conversation_id)
     console.log('📨 [REALTIME] Conversación seleccionada actual:', selectedConversationId)
     console.log('📨 [REALTIME] Usuario scrolleando:', isUserScrolling)
+    console.log('📨 [REALTIME] Contenido del mensaje:', message.content?.substring(0, 100))
     
     const isSelected = message.conversation_id === selectedConversationId
 
@@ -1366,14 +1395,17 @@ export function useConversations() {
       })
     }
     
-    // Actualizar último mensaje de la conversación si ya existe en estado
+    // ✅ FIX CRÍTICO: SIEMPRE actualizar último mensaje, incluso si isUserScrolling está en true
+    // El modo scroll solo afecta si mueve la conversación al inicio, pero SIEMPRE debe actualizar los datos
     console.log('📨 [REALTIME] Actualizando conversación con último mensaje')
     let existsInState = false
     setConversations(prevConversations => {
       const index = prevConversations.findIndex(c => c.id === message.conversation_id)
+      console.log('📨 [REALTIME] Buscando conversación', message.conversation_id, 'en estado actual. Índice:', index)
       if (index !== -1) {
         existsInState = true
         const target = prevConversations[index]
+        console.log('📨 [REALTIME] Conversación encontrada en índice', index, '- actualizando datos del último mensaje')
         const updatedTarget = {
           ...target,
           last_message_sender_role: message.sender_role,
@@ -1383,19 +1415,22 @@ export function useConversations() {
         } as any
         
         if (isUserScrolling) {
-          // 🔄 MODO SCROLL: Solo actualizar en su lugar, NO mover
-          console.log('📨 [REALTIME] Modo scroll: actualizando conversación en su lugar')
+          // 🔄 MODO SCROLL: Solo actualizar en su lugar, NO mover (pero SÍ actualizar los datos)
+          console.log('📨 [REALTIME] Modo scroll: actualizando conversación en su lugar sin mover')
           const newConversations = [...prevConversations]
           newConversations[index] = updatedTarget
+          console.log('📨 [REALTIME] Estado actualizado en modo scroll. Nuevo último mensaje:', updatedTarget.last_message_content?.substring(0, 50))
           return newConversations
         } else {
           // 🔄 MODO NORMAL: Actualizar Y mover al inicio
-          console.log('📨 [REALTIME] Modo normal: moviendo conversación al inicio')
+          console.log('📨 [REALTIME] Modo normal: actualizando y moviendo conversación al inicio')
           const rest = prevConversations.filter((c, i) => i !== index)
+          console.log('📨 [REALTIME] Estado actualizado y movido al inicio. Nuevo último mensaje:', updatedTarget.last_message_content?.substring(0, 50))
           return [updatedTarget, ...rest]
         }
       }
 
+      console.log('📨 [REALTIME] Conversación no encontrada en estado actual')
       // Si no existe, devolver el array sin cambios en este paso; el flujo de reintento lo agregará
       return prevConversations
     })
@@ -1407,7 +1442,11 @@ export function useConversations() {
       // Agregar placeholder para que aparezca instantáneamente en la lista
       try {
         setConversations(prev => {
-          if (prev.some(c => c.id === message.conversation_id)) return prev
+          if (prev.some(c => c.id === message.conversation_id)) {
+            console.log('🆕 [REALTIME] Placeholder ya existe, omitiendo')
+            return prev
+          }
+          console.log('🆕 [REALTIME] Agregando placeholder para conversación:', message.conversation_id)
           const placeholder = {
             id: message.conversation_id,
             user_id: 'nuevo_usuario',
@@ -1425,6 +1464,7 @@ export function useConversations() {
             created_at: message.created_at,
             updated_at: message.created_at,
           } as any
+          console.log('🆕 [REALTIME] Placeholder agregado a la lista')
           return [placeholder, ...prev]
         })
       } catch (e) {
@@ -1611,7 +1651,13 @@ export function useConversations() {
   }, [fetchMessages, selectedConversationId, isUserScrolling])
 
   // Usar el hook de tiempo real
-  // console.log('🔌 [REALTIME] Configurando hook useRealtimeConversations...')
+  console.log('🔌 [REALTIME] Configurando hook useRealtimeConversations...', {
+    hasHandleMessageInsert: !!handleMessageInsert,
+    hasHandleConversationInsert: !!handleConversationInsert,
+    hasHandleConversationUpdate: !!handleConversationUpdate,
+    userId: p?.id,
+    clientId: clientId
+  })
   useRealtimeConversations({
     onMessageInsert: handleMessageInsert,
     onConversationInsert: handleConversationInsert,
@@ -1619,7 +1665,7 @@ export function useConversations() {
     userId: (p?.id as string | undefined),
     clientId: clientId
   })
-  // console.log('🔌 [REALTIME] Hook useRealtimeConversations configurado')
+  console.log('🔌 [REALTIME] Hook useRealtimeConversations configurado')
 
   // Initial fetch
   useEffect(() => {
