@@ -76,6 +76,7 @@ interface Conversation {
   assigned_agent_name?: string
   created_at: string
   updated_at: string
+  channel?: string
 }
 
 export function ChatWindow({ conversationId, messages: propMessages, loading: propLoading, onSendMessage, onSelectConversation, onUpdateConversationStatus, onAssignAgent, conversations: propConversations, showContextToggle, onToggleContext, onMobileBack, fetchOlderMessages, hasMoreHistory, loadingHistory }: ChatWindowProps) {
@@ -1281,7 +1282,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
             size="icon" 
             className="flex-shrink-0 h-11 w-11 min-w-[44px] min-h-[44px] touch-manipulation"
             onClick={() => fileInputRef.current?.click()}
-            disabled={!conversationId || conversation?.status === 'closed' || uploading}
+            disabled={!conversationId || conversation?.status === 'closed' || uploading || conversation?.channel === 'instagram'}
           >
             <Paperclip className="h-4 w-4" />
           </Button>
