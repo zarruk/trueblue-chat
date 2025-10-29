@@ -1397,13 +1397,15 @@ export function useConversations() {
     
     // ✅ FIX CRÍTICO: SIEMPRE actualizar último mensaje, incluso si isUserScrolling está en true
     // El modo scroll solo afecta si mueve la conversación al inicio, pero SIEMPRE debe actualizar los datos
+    // ✅ FIX: Eliminar condición de carrera - manejar todo dentro de un solo setConversations
     console.log('📨 [REALTIME] Actualizando conversación con último mensaje')
-    let existsInState = false
+    
     setConversations(prevConversations => {
       const index = prevConversations.findIndex(c => c.id === message.conversation_id)
       console.log('📨 [REALTIME] Buscando conversación', message.conversation_id, 'en estado actual. Índice:', index)
+      
       if (index !== -1) {
-        existsInState = true
+        // ✅ CASO 1: Conversación existe → Actualizarla
         const target = prevConversations[index]
         console.log('📨 [REALTIME] Conversación encontrada en índice', index, '- actualizando datos del último mensaje')
         const updatedTarget = {
@@ -1430,105 +1432,90 @@ export function useConversations() {
         }
       }
 
-      console.log('📨 [REALTIME] Conversación no encontrada en estado actual')
-      // Si no existe, devolver el array sin cambios en este paso; el flujo de reintento lo agregará
-      return prevConversations
-    })
+      // ✅ CASO 2: Conversación NO existe → Agregar placeholder INMEDIATAMENTE
+      console.log('📨 [REALTIME] Conversación no encontrada en estado actual, agregando placeholder')
+      const placeholder = {
+        id: message.conversation_id,
+        user_id: 'nuevo_usuario',
+        username: 'Nuevo chat',
+        phone_number: undefined,
+        status: 'pending_human' as const,
+        assigned_agent_id: undefined,
+        assigned_agent_email: undefined,
+        assigned_agent_name: undefined,
+        summary: undefined,
+        channel: undefined,
+        last_message_sender_role: message.sender_role,
+        last_message_at: message.created_at,
+        last_message_content: message.content,
+        created_at: message.created_at,
+        updated_at: message.created_at,
+      } as any
+      
+      // Buscar la conversación completa en background (fuera del setState para evitar bloquear)
+      setTimeout(() => {
+        (async () => {
+          const tryFetch = async (attempt: number) => {
+            try {
+              const { data: newConv, error: fetchConvError } = await supabase
+                .from('tb_conversations')
+                .select('*')
+                .eq('id', message.conversation_id)
+                .maybeSingle()
 
-    // Si la conversación aún no existe en el estado, crear placeholder inmediato y luego traerla (con reintentos breves)
-    if (!existsInState) {
-      console.log('🆕 [REALTIME] Conversación no está en el estado; agregando placeholder y intentando fetch con reintentos...')
-
-      // Agregar placeholder para que aparezca instantáneamente en la lista
-      try {
-        setConversations(prev => {
-          if (prev.some(c => c.id === message.conversation_id)) {
-            console.log('🆕 [REALTIME] Placeholder ya existe, omitiendo')
-            return prev
-          }
-          console.log('🆕 [REALTIME] Agregando placeholder para conversación:', message.conversation_id)
-          const placeholder = {
-            id: message.conversation_id,
-            user_id: 'nuevo_usuario',
-            username: 'Nuevo chat',
-            phone_number: undefined,
-            status: 'pending_human' as const,
-            assigned_agent_id: undefined,
-            assigned_agent_email: undefined,
-            assigned_agent_name: undefined,
-            summary: undefined,
-            channel: undefined,
-            last_message_sender_role: message.sender_role,
-            last_message_at: message.created_at,
-            last_message_content: message.content,
-            created_at: message.created_at,
-            updated_at: message.created_at,
-          } as any
-          console.log('🆕 [REALTIME] Placeholder agregado a la lista')
-          return [placeholder, ...prev]
-        })
-      } catch (e) {
-        console.warn('⚠️ [REALTIME] Error procesando mensaje:', e)
-      }
-
-      (async () => {
-        const tryFetch = async (attempt: number) => {
-          try {
-            const { data: newConv, error: fetchConvError } = await supabase
-              .from('tb_conversations')
-              .select('*')
-              .eq('id', message.conversation_id)
-              .maybeSingle()
-
-            if (fetchConvError) {
-              console.warn(`⚠️ [REALTIME] Error trayendo conversación (intento ${attempt}):`, fetchConvError)
+              if (fetchConvError) {
+                console.warn(`⚠️ [REALTIME] Error trayendo conversación (intento ${attempt}):`, fetchConvError)
+                return null
+              }
+              return newConv
+            } catch (e) {
+              console.warn(`⚠️ [REALTIME] Excepción trayendo conversación (intento ${attempt}):`, e)
               return null
             }
-            return newConv
-          } catch (e) {
-            console.warn(`⚠️ [REALTIME] Excepción trayendo conversación (intento ${attempt}):`, e)
-            return null
           }
-        }
 
-        const delays = [0, 300, 900, 2000]
-        let attached = false
-        for (let i = 0; i < delays.length && !attached; i++) {
-          if (delays[i] > 0) await new Promise(res => setTimeout(res, delays[i]))
-          const conv = await tryFetch(i + 1)
-          if (conv) {
-            setConversations(prev => {
-              const enriched = {
-                ...conv,
-                last_message_sender_role: message.sender_role,
-                last_message_at: message.created_at,
-                last_message_content: message.content,
-              } as any
-              const index = prev.findIndex(c => c.id === conv.id)
-              if (index !== -1) {
-                // Reemplazar placeholder/registro previo
-                const rest = prev.filter((_, i) => i !== index)
-                console.log('🆕 [REALTIME] Placeholder reemplazado por conversación real:', enriched.id)
-                return [enriched, ...rest]
-              }
-              console.log('🆕 [REALTIME] Conversación agregada al estado por message insert (con retry):', enriched.id)
-              return [enriched, ...prev]
-            })
-            attached = true
+          const delays = [0, 300, 900, 2000]
+          let attached = false
+          for (let i = 0; i < delays.length && !attached; i++) {
+            if (delays[i] > 0) await new Promise(res => setTimeout(res, delays[i]))
+            const conv = await tryFetch(i + 1)
+            if (conv) {
+              setConversations(prev => {
+                const enriched = {
+                  ...conv,
+                  last_message_sender_role: message.sender_role,
+                  last_message_at: message.created_at,
+                  last_message_content: message.content,
+                } as any
+                const index = prev.findIndex(c => c.id === conv.id)
+                if (index !== -1) {
+                  // Reemplazar placeholder/registro previo
+                  const rest = prev.filter((_, i) => i !== index)
+                  console.log('🆕 [REALTIME] Placeholder reemplazado por conversación real:', enriched.id)
+                  return [enriched, ...rest]
+                }
+                console.log('🆕 [REALTIME] Conversación agregada al estado por message insert (con retry):', enriched.id)
+                return [enriched, ...prev]
+              })
+              attached = true
+            }
           }
-        }
 
-        // Refuerzo: si no se pudo obtener la conversación específica, refrescar listado completo
-        if (!attached) {
-          console.warn('⚠️ [REALTIME] No se pudo obtener la conversación por id tras reintentos. Refrescando listado...')
-          try {
-            await fetchConversations({ background: true })
-          } catch (e) {
-            console.warn('⚠️ [REALTIME] Error refrescando listado tras fallar fetch puntual:', e)
+          // Refuerzo: si no se pudo obtener la conversación específica, refrescar listado completo
+          if (!attached) {
+            console.warn('⚠️ [REALTIME] No se pudo obtener la conversación por id tras reintentos. Refrescando listado...')
+            try {
+              await fetchConversations({ background: true })
+            } catch (e) {
+              console.warn('⚠️ [REALTIME] Error refrescando listado tras fallar fetch puntual:', e)
+            }
           }
-        }
-      })()
-    }
+        })()
+      }, 0)
+      
+      // Retornar el array con el placeholder agregado
+      return [placeholder, ...prevConversations]
+    })
 
     // ✅ ELIMINADO: Refresco automático que causaba saltos en el scroll
     // El refresco automático se ha eliminado para evitar interrupciones del scroll infinito
