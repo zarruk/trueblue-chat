@@ -1662,17 +1662,33 @@ export function useConversations() {
     console.log('👤 isProfileReady:', isProfileReady)
     console.log('👤 clientId:', clientId)
     console.log('🔄 isInitialized:', isInitialized)
+    console.log('📊 conversations.length:', conversations.length)
     
-    if (user && isProfileReady && !isInitialized) {
-      console.log('✅ User and profile ready, fetching conversations (first time)')
+    // Dispara si:
+    // - user y profile están listos
+    // - Y (nunca se inicializó) O (la lista está vacía por cualquier razón)
+    if (user && isProfileReady && (!isInitialized || conversations.length === 0)) {
+      console.log('✅ User/profile ready y lista vacía o no inicializada → fetching conversations')
       fetchConversations()
     } else if (!user || !isProfileReady) {
       console.log('❌ User or profile not ready yet')
       setIsInitialized(false)
     } else if (isInitialized) {
-      console.log('⏭️ Already initialized, skipping fetch')
+      console.log('⏭️ Already initialized and conversations present, skipping fetch')
     }
-  }, [user, isProfileReady, clientId, isInitialized, fetchConversations])
+  }, [user, isProfileReady, clientId, isInitialized, fetchConversations, conversations.length])
+
+  // Safety fetch: Si después de configurar suscripciones aún no hay conversaciones, forzar carga
+  useEffect(() => {
+    // Esperar a que se configuren suscripciones; si no hay conversaciones, disparar fetch
+    const t = setTimeout(() => {
+      if (user && isProfileReady && conversations.length === 0 && isInitialized) {
+        console.log('🛟 Safety fetch: conversaciones siguen vacías tras suscripción → fetchConversations()')
+        fetchConversations()
+      }
+    }, 2000)
+    return () => clearTimeout(t)
+  }, [user, isProfileReady, clientId, conversations.length, isInitialized, fetchConversations])
 
   return {
     conversations,
