@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { Send, Paperclip, Smile, ChevronDown, PanelRightOpen, ChevronLeft } from 'lucide-react'
+import { Send, Paperclip, Smile, ChevronDown, PanelRightOpen, ChevronLeft, X, FileText, Download, Image as ImageIcon, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -22,6 +22,7 @@ import { MessageTemplatesSuggestions } from '@/components/MessageTemplatesSugges
 import Picker from '@emoji-mart/react'
 import data from '@emoji-mart/data'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+import { uploadFile, validateFile } from '@/services/fileUploadService'
 // Notificaciones deshabilitadas
 const toast = { success: (..._args: any[]) => {}, error: (..._args: any[]) => {}, info: (..._args: any[]) => {} } as const
 
@@ -40,7 +41,7 @@ interface ChatWindowProps {
   conversationId?: string
   messages?: any[]
   loading?: boolean
-  onSendMessage?: (conversationId: string, content: string, role: string) => Promise<void>
+  onSendMessage?: (conversationId: string, content: string, role: string, metadata?: any) => Promise<void>
   onSelectConversation?: (conversationId: string) => void
   onUpdateConversationStatus?: (conversationId: string, status: Conversation['status']) => Promise<void>
   onAssignAgent?: (conversationId: string, agentId: string) => Promise<void>
@@ -48,6 +49,10 @@ interface ChatWindowProps {
   showContextToggle?: boolean
   onToggleContext?: () => void
   onMobileBack?: () => void
+  // Nuevas propiedades para historial de mensajes
+  fetchOlderMessages?: () => Promise<boolean>
+  hasMoreHistory?: boolean
+  loadingHistory?: boolean
 }
 
 interface Message {
@@ -71,9 +76,10 @@ interface Conversation {
   assigned_agent_name?: string
   created_at: string
   updated_at: string
+  channel?: string
 }
 
-export function ChatWindow({ conversationId, messages: propMessages, loading: propLoading, onSendMessage, onSelectConversation, onUpdateConversationStatus, onAssignAgent, conversations: propConversations, showContextToggle, onToggleContext, onMobileBack }: ChatWindowProps) {
+export function ChatWindow({ conversationId, messages: propMessages, loading: propLoading, onSendMessage, onSelectConversation, onUpdateConversationStatus, onAssignAgent, conversations: propConversations, showContextToggle, onToggleContext, onMobileBack, fetchOlderMessages, hasMoreHistory, loadingHistory }: ChatWindowProps) {
   const [message, setMessage] = useState('')
   const [localMessages, setLocalMessages] = useState<Message[]>([])
   const [updatingStatus, setUpdatingStatus] = useState(false)
@@ -88,11 +94,29 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   const [imageError, setImageError] = useState<Record<string, string | undefined>>({})
   // Estado del popover de emojis
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  
+  // Estados para adjuntar archivos
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const { profile } = useAuth()
   const { getAvailableAgents } = useAgents()
+  
+  // Estados para scroll infinito hacia arriba
+  const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false)
+  const prevScrollHeight = useRef(0)
+  
+  // Estados para detección de scroll manual del usuario
+  const [userIsScrolling, setUserIsScrolling] = useState(false)
+  const [isNearBottom, setIsNearBottom] = useState(true)
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  
+  // 🔧 FIX: Flag específico para bloquear scroll automático durante carga de historial
+  const [isLoadingHistoricalMessages, setIsLoadingHistoricalMessages] = useState(false)
 
   // 🔧 FIX: Unificar estado de mensajes - usar props como fuente de verdad principal
   const messages = useMemo(() => {
@@ -162,14 +186,25 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
         if (!trimmed || trimmed === 'undefined' || trimmed === 'null' || trimmed === 'NaN') return undefined
         if (/^[{\[]/.test(trimmed)) {
           const parsed = JSON.parse(trimmed)
-          url = parsed?.['img-url'] || parsed?.imgUrl
+          // ✅ Buscar file-url además de img-url
+          url = parsed?.['img-url'] || parsed?.imgUrl || parsed?.['file-url']
         } else {
           url = trimmed
         }
       } else if (typeof metadata === 'object') {
-        url = (metadata as any)?.['img-url'] || (metadata as any)?.imgUrl
+        // ✅ Buscar file-url además de img-url
+        url = (metadata as any)?.['img-url'] || (metadata as any)?.imgUrl || (metadata as any)?.['file-url']
       }
       if (!url) return undefined
+      
+      // ✅ Verificar que sea una imagen si hay file-type
+      if (typeof metadata === 'object' && (metadata as any)?.['file-type']) {
+        const fileType = (metadata as any)?.['file-type']
+        if (!fileType.startsWith('image/')) {
+          return undefined // No es una imagen, se mostrará en la sección de documentos
+        }
+      }
+      
       // Normalizar esquema si viene sin http(s)
       if (!/^https?:\/\//i.test(url) && /^([\w-]+\.)+[\w-]{2,}/.test(url)) {
         url = `https://${url}`
@@ -201,6 +236,113 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   useEffect(() => {
     setLocalMessages(propMessages || [])
   }, [propMessages])
+
+  // Detectar scroll hacia arriba para cargar mensajes más antiguos + detección de scroll manual
+  const handleScroll = useCallback(async () => {
+    const container = messagesContainerRef.current
+    if (!container) return
+
+    // 🔧 NUEVO: Detectar si el usuario está cerca del final (últimos 100px)
+    const scrollFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
+    const isAtBottom = scrollFromBottom < 100
+    setIsNearBottom(isAtBottom)
+    
+    // 🔧 NUEVO: Detectar si está scrolleando hacia arriba (alejándose del final)
+    if (!isAtBottom) {
+      setUserIsScrolling(true)
+      // 🔧 FIX: NO usar timeout automático - solo restaurar cuando usuario vuelva al final
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
+      console.log('🔼 ChatWindow: Usuario scrolleando hacia arriba - desactivando scroll automático')
+    } else {
+      // ✅ Solo restaurar scroll automático cuando usuario vuelva al final por su cuenta
+      if (userIsScrolling) {
+        setUserIsScrolling(false)
+        console.log('✅ ChatWindow: Usuario volvió al final, restaurando scroll automático')
+      }
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
+    }
+
+    // Scroll infinito hacia arriba (lógica existente)
+    if (!fetchOlderMessages || isLoadingOlderMessages) return
+
+    // 🔧 FIX 1: Solo activar si ya hay mensajes cargados y no está en loading inicial
+    if (loading || messages.length === 0) {
+      console.log('🚫 ChatWindow: Scroll infinito desactivado - aún cargando o sin mensajes')
+      return
+    }
+
+    // 🔧 FIX 2: Threshold más pequeño para evitar activación accidental (50px en lugar de 100px)
+    const isNearTop = container.scrollTop <= 50
+    
+    if (isNearTop && hasMoreHistory) {
+      console.log('🔼 ChatWindow: Usuario llegó al tope, cargando mensajes más antiguos...')
+      setIsLoadingOlderMessages(true)
+      
+      // Guardar la altura actual del scroll para mantener la posición
+      prevScrollHeight.current = container.scrollHeight
+      
+      try {
+        // 🔧 FIX: Marcar que se están cargando mensajes históricos
+        setIsLoadingHistoricalMessages(true)
+        console.log('🚫 ChatWindow: Bloqueando scroll automático - cargando historial')
+        
+        const success = await fetchOlderMessages()
+        
+        if (success) {
+          // 🔧 MEJORADO: Mejor cálculo para mantener posición exacta
+          setTimeout(() => {
+            if (container && prevScrollHeight.current > 0) {
+              const newScrollHeight = container.scrollHeight
+              const heightDifference = newScrollHeight - prevScrollHeight.current
+              const newScrollTop = container.scrollTop + heightDifference
+              
+              container.scrollTop = newScrollTop
+              
+              console.log('📍 ChatWindow: Posición mantenida después de cargar historial:', {
+                prevHeight: prevScrollHeight.current,
+                newHeight: newScrollHeight,
+                difference: heightDifference,
+                newScrollTop
+              })
+            }
+          }, 150) // Aumentar delay ligeramente para mejor estabilidad
+        }
+      } catch (error) {
+        console.error('❌ ChatWindow: Error cargando mensajes más antiguos:', error)
+      } finally {
+        setIsLoadingOlderMessages(false)
+        // 🔧 FIX: Delay para evitar race condition con useEffect de scroll automático
+        setTimeout(() => {
+          setIsLoadingHistoricalMessages(false)
+          console.log('✅ ChatWindow: Restaurando scroll automático - historial completado')
+        }, 500)
+      }
+    }
+  }, [fetchOlderMessages, hasMoreHistory, isLoadingOlderMessages, loading, messages.length])
+
+  // Agregar listener de scroll + cleanup de timeouts
+  useEffect(() => {
+    const container = messagesContainerRef.current
+    if (!container) return
+
+    container.addEventListener('scroll', handleScroll)
+    return () => {
+      container.removeEventListener('scroll', handleScroll)
+      // 🧹 Cleanup: Limpiar timeout al desmontar
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current)
+      }
+    }
+  }, [handleScroll])
+  
+  // Cleanup general al desmontar el componente
+  useEffect(() => {
+    return () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current)
+      }
+    }
+  }, [])
 
   // Cargar historial de todas las conversaciones previas del mismo usuario (excluyendo la actual)
   const fetchHistoricalConversations = useCallback(async (userId: string, currentConvId: string) => {
@@ -350,11 +492,25 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   }, [scrollToBottom])
 
   useEffect(() => {
-    // 🔧 FIX: Scroll instantáneo cuando se cargan mensajes inicialmente (usar mensajes unificados)
-    if (messages.length > 0) {
-      scrollToBottomInstant()
+    // 🔧 FIX: NUNCA hacer scroll automático si se están cargando mensajes históricos
+    if (isLoadingHistoricalMessages) {
+      console.log('🚫 ChatWindow: Scroll automático bloqueado - cargando mensajes históricos')
+      return
     }
-  }, [messages.length, scrollToBottomInstant])
+    
+    // Solo scroll automático si el usuario NO está scrolleando manualmente
+    // y está cerca del final O es la primera carga
+    if (messages.length > 0 && (!userIsScrolling || isNearBottom)) {
+      // Si es la primera vez que se cargan mensajes, siempre hacer scroll
+      const isFirstLoad = !userIsScrolling
+      if (isFirstLoad || isNearBottom) {
+        scrollToBottomInstant()
+        console.log('📍 ChatWindow: Scroll automático al final (primera carga o usuario en el final)')
+      }
+    } else if (userIsScrolling && !isNearBottom) {
+      console.log('📍 ChatWindow: Scroll automático omitido - usuario scrolleando manualmente')
+    }
+  }, [messages.length, scrollToBottomInstant, userIsScrolling, isNearBottom, isLoadingHistoricalMessages])
 
   // Asegurar scroll al fondo cuando se cambia de conversación
   useEffect(() => {
@@ -365,25 +521,104 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
 
   // 🔧 FIX: Scroll suave cuando se agregan nuevos mensajes (usar mensajes unificados)
   useEffect(() => {
-    if (messages.length > 0) {
+    // 🔧 FIX: NUNCA hacer smooth scroll si se están cargando mensajes históricos
+    if (isLoadingHistoricalMessages) {
+      console.log('🚫 ChatWindow: Smooth scroll bloqueado - cargando mensajes históricos')
+      return
+    }
+    
+    // Solo smooth scroll si el usuario NO está scrolleando y está cerca del final
+    if (messages.length > 0 && (!userIsScrolling || isNearBottom)) {
       const timer = setTimeout(() => {
-        scrollToBottom('smooth')
+        // Doble verificación para evitar race conditions
+        if (!isLoadingHistoricalMessages && (!userIsScrolling || isNearBottom)) {
+          scrollToBottom('smooth')
+          console.log('📍 ChatWindow: Smooth scroll al final')
+        }
       }, 100)
       return () => clearTimeout(timer)
     }
-  }, [messages, scrollToBottom])
+  }, [messages, scrollToBottom, userIsScrolling, isNearBottom, isLoadingHistoricalMessages])
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!message.trim() || !conversationId) return
+    if ((!message.trim() && selectedFiles.length === 0) || !conversationId) return
 
     try {
       if (!onSendMessage) throw new Error('onSendMessage no definido')
-      await onSendMessage(conversationId, message, 'agent')
+      
+      // Si hay archivos, subirlos primero
+      if (selectedFiles.length > 0 && profile?.client_id && conversationId) {
+        setUploading(true)
+        setUploadProgress(0)
+        
+        const firstFile = selectedFiles[0] // Inicialmente solo 1 archivo
+        const result = await uploadFile(
+          firstFile,
+          profile.client_id,
+          conversationId,
+          (progress) => setUploadProgress(progress)
+        )
+        
+        setUploading(false)
+        
+        if (!result.success || !result.metadata) {
+          console.error('Error subiendo archivo:', result.error)
+          toast.error(result.error || 'Error al subir archivo')
+          return
+        }
+        
+        console.log('🔍 ChatWindow: Enviando mensaje con metadata:', result.metadata)
+        // El metadata se manejará en el hook de conversaciones
+        await onSendMessage(conversationId, message, 'agent', result.metadata)
+      } else {
+        await onSendMessage(conversationId, message, 'agent')
+      }
+      
       setMessage('')
+      setSelectedFiles([])
+      setUploadProgress(0)
     } catch (error) {
       console.error('Error sending message:', error)
+      setUploading(false)
     }
+  }
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
+    
+    // Validar cada archivo
+    const validFiles: File[] = []
+    const errors: string[] = []
+    
+    files.forEach(file => {
+      const validation = validateFile(file)
+      if (validation.valid) {
+        validFiles.push(file)
+      } else {
+        errors.push(`${file.name}: ${validation.error}`)
+      }
+    })
+    
+    if (errors.length > 0) {
+      console.error('Errores de validación:', errors)
+      errors.forEach(err => toast.error(err))
+    }
+    
+    if (validFiles.length > 0) {
+      // Por ahora solo permitir 1 archivo
+      setSelectedFiles(validFiles.slice(0, 1))
+    }
+    
+    // Reset del input para permitir seleccionar el mismo archivo otra vez
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  const handleRemoveFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index))
   }
 
   const handleStatusChange = async (newStatus: string) => {
@@ -594,6 +829,50 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                 />
               </div>
             )}
+            {/* Mostrar documento adjunto */}
+            {!hasImage && msg?.metadata && (() => {
+              const fileUrl = (msg.metadata as any)?.['file-url']
+              const fileType = (msg.metadata as any)?.['file-type']
+              const fileName = (msg.metadata as any)?.['file-name']
+              
+              if (fileUrl && fileType && fileName) {
+                const isImage = fileType.startsWith('image/')
+                const isDocument = fileType.startsWith('application/')
+                
+                if (isDocument) {
+                  return (
+                    <div className="mb-2">
+                      <a 
+                        href={fileUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-3 p-3 bg-muted/50 dark:bg-muted/30 rounded-md hover:bg-muted/70 transition-colors border border-muted"
+                      >
+                        <FileText className="h-6 w-6 text-primary flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">{fileName}</div>
+                          <div className="text-xs text-muted-foreground">{fileType}</div>
+                        </div>
+                        <Download className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                      </a>
+                    </div>
+                  )
+                } else if (isImage) {
+                  return (
+                    <div className="mb-2">
+                      <img 
+                        src={fileUrl} 
+                        alt={fileName} 
+                        className="chat-message-content rounded-md cursor-zoom-in max-w-full h-auto max-h-72 object-contain w-auto"
+                        loading="lazy"
+                        onClick={() => { setViewerSrc(fileUrl); setViewerError(false); setViewerOpen(true) }}
+                      />
+                    </div>
+                  )
+                }
+              }
+              return null
+            })()}
             {msg.content && (
               <p className="chat-message-content text-[15px] leading-6 tablet:text-sm tablet:leading-5 whitespace-pre-wrap break-words">{msg.content}</p>
             )}
@@ -858,6 +1137,24 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
           ref={messagesContainerRef} 
           className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain px-3 py-3 tablet:px-4 tablet:py-4 desktop:px-6 desktop:py-6 space-y-3 tablet:space-y-2 desktop:space-y-2 chat-messages-scroll dark:[&>.message-sep]:border-slate-700"
         >
+          {/* Indicadores de historial en la parte superior */}
+          {(isLoadingOlderMessages || loadingHistory) && (
+            <div className="flex justify-center py-3">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                <span>Cargando mensajes anteriores...</span>
+              </div>
+            </div>
+          )}
+          
+          {!hasMoreHistory && messages.length > 30 && (
+            <div className="flex justify-center py-2">
+              <div className="text-xs text-muted-foreground px-3 py-1 rounded-full bg-muted/50">
+                No hay más mensajes en esta conversación
+              </div>
+            </div>
+          )}
+          
           {loading ? (
             <div className="flex items-center justify-center h-full">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -915,6 +1212,16 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
           )}
           
           <div ref={messagesEndRef} />
+          
+          {/* Mensaje de ayuda para scroll hacia arriba */}
+          {/* 🔧 FIX 3: Solo mostrar ayuda si hay suficientes mensajes (>10) para evitar confusión */}
+          {messages.length > 10 && hasMoreHistory && !loading && (
+            <div className="flex justify-center py-2 opacity-60">
+              <div className="text-xs text-muted-foreground">
+                Desliza hacia arriba para ver más mensajes
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -926,8 +1233,57 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
             setMessage(prev => (prev ? prev + '\n' : '') + tpl.message)
           }}
         />
+        
+        {/* Preview de archivos seleccionados */}
+        {selectedFiles.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-2">
+            {selectedFiles.map((file, index) => (
+              <div
+                key={index}
+                className="flex items-center gap-2 px-3 py-2 bg-muted rounded-lg group"
+              >
+                <FileText className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground max-w-[200px] truncate">
+                  {file.name}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveFile(index)}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <X className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        
+        {/* Barra de progreso */}
+        {uploading && (
+          <div className="w-full bg-muted rounded-full h-2">
+            <div
+              className="bg-primary h-2 rounded-full transition-all duration-300"
+              style={{ width: `${uploadProgress}%` }}
+            />
+          </div>
+        )}
+        
         <form onSubmit={handleSendMessage} className="flex items-end space-x-2">
-          <Button type="button" variant="ghost" size="icon" className="flex-shrink-0 h-11 w-11 min-w-[44px] min-h-[44px] touch-manipulation">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileSelect}
+            className="hidden"
+            accept="image/*,.pdf,.docx,.xlsx"
+          />
+          <Button 
+            type="button" 
+            variant="ghost" 
+            size="icon" 
+            className="flex-shrink-0 h-11 w-11 min-w-[44px] min-h-[44px] touch-manipulation"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={!conversationId || conversation?.status === 'closed' || uploading || conversation?.channel === 'instagram'}
+          >
             <Paperclip className="h-4 w-4" />
           </Button>
           <Popover open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
@@ -992,8 +1348,17 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
             return null;
           })()}
           */}
-          <Button type="submit" size="icon" className="h-11 w-11 min-w-[44px] min-h-[44px] touch-manipulation" disabled={!message.trim() || !conversationId || conversation?.status === 'closed' || conversation?.status === 'pending_response'}>
-            <Send className="h-4 w-4" />
+          <Button 
+            type="submit" 
+            size="icon" 
+            className="h-11 w-11 min-w-[44px] min-h-[44px] touch-manipulation" 
+            disabled={(!message.trim() && selectedFiles.length === 0) || !conversationId || conversation?.status === 'closed' || conversation?.status === 'pending_response' || uploading}
+          >
+            {uploading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
           </Button>
         </form>
       </div>
