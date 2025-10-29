@@ -1324,7 +1324,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
             size="icon" 
             className="flex-shrink-0 h-11 w-11 min-w-[44px] min-h-[44px] touch-manipulation"
             onClick={() => fileInputRef.current?.click()}
-            disabled={!conversationId || conversation?.status === 'closed' || uploading || conversation?.channel === 'instagram'}
+            disabled={!conversationId || conversation?.status === 'closed' || uploading || conversation?.channel?.toLowerCase() === 'instagram'}
           >
             <Paperclip className="h-4 w-4" />
           </Button>
