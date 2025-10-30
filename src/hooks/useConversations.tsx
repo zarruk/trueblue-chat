@@ -108,16 +108,6 @@ export function useConversations() {
   const [poolOffset, setPoolOffset] = useState(0)
   const [poolSize] = useState(100) // Tamaño del pool inicial
 
-  // Estados para historial de mensajes y scroll infinito hacia atrás
-  const [historyOffset, setHistoryOffset] = useState(0)
-  const [hasMoreHistory, setHasMoreHistory] = useState(true)
-  const [loadingHistory, setLoadingHistory] = useState(false)
-
-  // ✅ NUEVO: Estados para rastrear conversaciones cargadas del historial
-  const [loadedConversationIds, setLoadedConversationIds] = useState<Set<string>>(new Set())
-  const [currentConversationMessagesOffset, setCurrentConversationMessagesOffset] = useState(0)
-  const [currentConversationHasMore, setCurrentConversationHasMore] = useState(true)
-
   // Fetch conversations
   const fetchConversations = useCallback(async (options?: { background?: boolean }) => {
     if (!user || !isProfileReady) {
@@ -391,69 +381,15 @@ export function useConversations() {
   }, [])
 
   // Fetch messages for a conversation with retry logic
-  const fetchMessagesWithRetry = useCallback(async (
-    conversationId: string, 
-    retries = 3, 
-    offset = 0,
-    isInitialLoad = true // ✅ NUEVO: Indicar si es carga inicial (solo esta conversación)
-  ): Promise<boolean> => {
+  const fetchMessagesWithRetry = useCallback(async (conversationId: string, retries = 3): Promise<boolean> => {
     if (!conversationId) {
       console.log('❌ fetchMessages: No conversationId provided')
       return false
     }
 
-    // Encontrar la conversación para obtener el user_id (necesario para historial)
-    let userId: string | undefined
-    const selectedConversation = conversations.find(c => c.id === conversationId)
-    
-    // ✅ DEBUG: Logs para verificar
-    console.log('🔍 fetchMessages: Buscando user_id para conversación:', conversationId)
-    if (selectedConversation) {
-      console.log('🔍 fetchMessages: Conversación encontrada en array local:', {
-        id: selectedConversation.id,
-        has_user_id: !!selectedConversation.user_id,
-        user_id: selectedConversation.user_id
-      })
-    } else {
-      console.log('🔍 fetchMessages: Conversación no encontrada en array local')
-    }
-    
-    if (selectedConversation && selectedConversation.user_id) {
-      userId = selectedConversation.user_id
-      console.log('✅ fetchMessages: Usando user_id del array local:', userId)
-    } else {
-      // ✅ FIX: Si no está en el array local O no tiene user_id, buscar en la BD
-      console.log('🔍 fetchMessages: Conversación no encontrada en array local o sin user_id, buscando en BD...', {
-        foundInArray: !!selectedConversation,
-        hasUserId: selectedConversation ? !!selectedConversation.user_id : false
-      })
-      const { data: convData, error: convError } = await supabase
-        .from('tb_conversations')
-        .select('user_id')
-        .eq('id', conversationId)
-        .maybeSingle()
-      
-      if (convError || !convData || !convData.user_id) {
-        console.log('❌ fetchMessages: No se encontró user_id para la conversación', {
-          error: convError,
-          hasData: !!convData,
-          hasUserId: convData ? !!convData.user_id : false
-        })
-        return false
-      }
-      
-      userId = convData.user_id as string
-      console.log('✅ fetchMessages: user_id obtenido de BD:', userId)
-    }
-    
-    if (!userId) {
-      console.log('❌ fetchMessages: No se pudo obtener user_id por ningún método')
-      return false
-    }
-
     // ✅ SOLUCIÓN 1: Crear ID único para esta consulta
     const queryId = Date.now() + Math.random()
-    console.log(`🔍 fetchMessages: Iniciando consulta ${queryId} para conversación:`, conversationId, 'offset:', offset, 'isInitialLoad:', isInitialLoad)
+    console.log(`🔍 fetchMessages: Iniciando consulta ${queryId} para conversación:`, conversationId)
     
     // ✅ GUARDAR ID DE CONSULTA MÁS RECIENTE
     fetchMessagesQueryId.current = queryId
@@ -466,28 +402,14 @@ export function useConversations() {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         console.log(`🔍 fetchMessages: Intento ${attempt}/${retries} para consulta ${queryId}`)
+        console.log('🔍 fetchMessages: Starting query to tb_messages table...')
         
-        let queryPromise
-        
-        if (isInitialLoad && offset === 0) {
-          // ✅ CARGA INICIAL: TODOS los mensajes de esta conversación (sin límite)
-          console.log('🔍 fetchMessages: Carga inicial - todos los mensajes de conversation_id:', conversationId)
-          queryPromise = supabase
-            .from('tb_messages')
-            .select('*')
-            .eq('conversation_id', conversationId)
-            .order('created_at', { ascending: true })
-            // ✅ SIN .range() ni .limit() - traer TODOS los mensajes
-        } else {
-          // ✅ HISTORIAL: Más mensajes de la misma conversación
-          console.log('🔍 fetchMessages: Cargando más mensajes de conversation_id:', conversationId, 'offset:', offset)
-          queryPromise = supabase
-            .from('tb_messages')
-            .select('*')
-            .eq('conversation_id', conversationId)
-            .order('created_at', { ascending: true })
-            .range(offset, offset + 29)
-        }
+        const queryPromise = supabase
+          .from('tb_messages')
+          .select('*')
+          .eq('conversation_id', conversationId)
+          .order('created_at', { ascending: true })
+          .limit(100) // ✅ LIMITAR a 100 mensajes máximo para mejor rendimiento
 
         console.log('🔍 fetchMessages: Executing query with timeout...')
         
@@ -511,41 +433,24 @@ export function useConversations() {
           continue
         }
 
-        console.log('✅ Messages fetched successfully:', data?.length || 0, 'messages for conversation:', conversationId, 'offset:', offset)
+        console.log('✅ Messages fetched successfully:', data?.length || 0, 'messages for conversation:', conversationId)
         
         // Log detallado de los primeros 3 mensajes para debugging
         if (data && data.length > 0) {
           console.log('📨 fetchMessages: Primeros mensajes:', data.slice(0, 3).map((m: any) => ({
             id: m.id,
-            conversation_id: m.conversation_id,
             sender: m.sender_role,
             preview: m.content?.substring(0, 30) + '...',
             time: m.created_at
           })))
         } else {
-          console.log('📭 fetchMessages: No hay más mensajes para esta conversación')
+          console.log('📭 fetchMessages: No hay mensajes en esta conversación')
         }
         
         // ✅ VERIFICACIÓN FINAL: Solo actualizar si es la consulta más reciente
         if (queryId === fetchMessagesQueryId.current) {
           console.log(`✅ fetchMessages: Consulta ${queryId} es la más reciente, actualizando mensajes`)
-          
-          if (isInitialLoad && offset === 0) {
-            // Primera carga: reemplazar todos los mensajes y resetear estados
-            setMessages((data as any) || [])
-            setLoadedConversationIds(new Set([conversationId])) // ✅ Marcar esta conversación como cargada
-            setCurrentConversationMessagesOffset(data?.length || 0)
-            // ✅ Ya cargamos TODOS los mensajes de esta conversación, no hay más en esta conversación
-            setCurrentConversationHasMore(false)
-            setHistoryOffset(0) // Resetear offset global
-            setHasMoreHistory(true) // Pero puede haber otras conversaciones del historial
-          } else {
-            // Carga de más mensajes de la misma conversación: agregar al principio
-            setMessages(prev => [...(data as any) || [], ...prev])
-            setCurrentConversationMessagesOffset(prev => prev + (data?.length || 0))
-            setCurrentConversationHasMore((data?.length || 0) === 30)
-          }
-          
+          setMessages((data as any) || [])
           return true // Éxito, salir del loop de reintentos
         } else {
           console.log(`⏭️ fetchMessages: Consulta ${queryId} es antigua, ignorando resultado`)
@@ -569,179 +474,14 @@ export function useConversations() {
     
     // Si llegamos aquí, significa que todos los intentos fallaron
     return false
-  }, [conversations]) // ✅ Removemos clientId e isSupabaseReady de dependencias porque ya no se usan en la consulta inicial
+  }, [clientId, isSupabaseReady])
 
   // Mantener función original para compatibilidad
   const fetchMessages = fetchMessagesWithRetry
 
-  // ✅ FUNCIÓN: Obtener la siguiente conversación más RECIENTE del mismo usuario
-  const getNextOlderConversation = useCallback(async (
-    userId: string, 
-    excludeConversationIds: Set<string>
-  ): Promise<string | null> => {
-    try {
-      console.log('🔍 getNextOlderConversation: Buscando siguiente conversación para user_id:', userId)
-      console.log('🔍 getNextOlderConversation: Excluyendo conversaciones:', Array.from(excludeConversationIds))
-      
-      // Obtener todas las conversaciones del usuario ordenadas por created_at DESC (más reciente primero)
-      // @ts-ignore - TypeScript tiene problemas con tipos profundos de Supabase
-      const { data, error } = await supabase
-        .from('tb_conversations')
-        .select('id, created_at')
-        .eq('user_id', userId)
-        .eq('client_id', clientId)
-        .order('created_at', { ascending: false }) // Más reciente primero
-      
-      if (error) {
-        console.error('❌ Error obteniendo conversaciones para historial:', error)
-        return null
-      }
-      
-      // ✅ DEBUG: Log detallado de todas las conversaciones encontradas
-      console.log('🔍 getNextOlderConversation: Total conversaciones encontradas:', data?.length || 0)
-      if (data && data.length > 0) {
-        console.log('🔍 getNextOlderConversation: Todas las conversaciones:', data.map(conv => ({
-          id: conv.id,
-          created_at: conv.created_at
-        })))
-      }
-      
-      if (!data || data.length === 0) {
-        console.log('📭 No hay más conversaciones para este usuario')
-        return null
-      }
-      
-      // Filtrar conversaciones ya cargadas
-      const availableConversations = data.filter(conv => !excludeConversationIds.has(conv.id))
-      
-      // ✅ DEBUG: Log de conversaciones después del filtro
-      console.log('🔍 getNextOlderConversation: Conversaciones disponibles después del filtro:', availableConversations.length)
-      console.log('🔍 getNextOlderConversation: IDs excluidos:', Array.from(excludeConversationIds))
-      if (availableConversations.length > 0) {
-        console.log('🔍 getNextOlderConversation: Conversaciones disponibles:', availableConversations.map(conv => ({
-          id: conv.id,
-          created_at: conv.created_at
-        })))
-      }
-      
-      if (availableConversations.length === 0) {
-        console.log('📭 No hay más conversaciones sin cargar para este usuario')
-        return null
-      }
-      
-      // ✅ La primera en el array (siguiente más RECIENTE que no se haya cargado)
-      const nextConversation = availableConversations[0]
-      console.log('✅ getNextOlderConversation: Siguiente conversación más reciente encontrada:', nextConversation.id, 'created_at:', nextConversation.created_at)
-      
-      return nextConversation.id
-    } catch (error) {
-      console.error('❌ Excepción obteniendo siguiente conversación:', error)
-      return null
-    }
-  }, [clientId])
-
-  // Función para cargar mensajes más antiguos (scroll hacia arriba)
-  const fetchOlderMessages = useCallback(async (): Promise<boolean> => {
-    if (!selectedConversationId || loadingHistory) {
-      console.log('🛑 fetchOlderMessages: No se puede cargar (no hay conversación o ya cargando)')
-      return false
-    }
-
-    // ✅ PASO 1: Verificar si hay más mensajes en la conversación actual
-    if (currentConversationHasMore) {
-      console.log(`🔙 fetchOlderMessages: Cargando más mensajes de conversación actual desde offset ${currentConversationMessagesOffset}`)
-      setLoadingHistory(true)
-      
-      try {
-        const success = await fetchMessagesWithRetry(
-          selectedConversationId, 
-          3, 
-          currentConversationMessagesOffset,
-          false // No es carga inicial
-        )
-        
-        if (!success) {
-          console.log('❌ fetchOlderMessages: Error al cargar mensajes de conversación actual')
-          setCurrentConversationHasMore(false) // Ya no hay más en esta conversación
-        }
-        
-        return success
-      } catch (error) {
-        console.error('❌ fetchOlderMessages: Excepción al cargar mensajes:', error)
-        setCurrentConversationHasMore(false)
-        return false
-      } finally {
-        setLoadingHistory(false)
-      }
-    }
-    
-    // ✅ PASO 2: Si no hay más mensajes en la conversación actual, buscar la siguiente conversación más RECIENTE
-    const selectedConversation = conversations.find(c => c.id === selectedConversationId)
-    if (!selectedConversation || !selectedConversation.user_id) {
-      console.log('🛑 fetchOlderMessages: No se encontró user_id para obtener siguiente conversación')
-      setHasMoreHistory(false)
-      return false
-    }
-    
-    console.log('🔙 fetchOlderMessages: No hay más mensajes en conversación actual, buscando siguiente conversación más reciente...')
-    setLoadingHistory(true)
-    
-    try {
-      const nextConversationId = await getNextOlderConversation(
-        selectedConversation.user_id,
-        loadedConversationIds
-      )
-      
-      if (!nextConversationId) {
-        console.log('📭 fetchOlderMessages: No hay más conversaciones para cargar en historial')
-        setHasMoreHistory(false)
-        return false
-      }
-      
-      console.log('✅ fetchOlderMessages: Siguiente conversación encontrada:', nextConversationId)
-      
-      // ✅ PASO 3: Cargar mensajes de la siguiente conversación (todos desde el inicio)
-      const success = await fetchMessagesWithRetry(
-        nextConversationId,
-        3,
-        0, // Siempre empezar desde 0 para nueva conversación
-        false // No es carga inicial de la conversación principal
-      )
-      
-      if (success) {
-        // ✅ Agregar separador visual y marcar conversación como cargada
-        setLoadedConversationIds(prev => new Set([...prev, nextConversationId]))
-        // ✅ Resetear offset de la nueva conversación (ya cargamos todos sus mensajes)
-        setCurrentConversationMessagesOffset(0)
-        setCurrentConversationHasMore(false) // ✅ Ya cargamos todos los mensajes de esta conversación también
-        console.log('✅ fetchOlderMessages: Mensajes de siguiente conversación más reciente agregados al historial')
-        return true
-      } else {
-        console.log('❌ fetchOlderMessages: Error al cargar mensajes de siguiente conversación')
-        return false
-      }
-    } catch (error) {
-      console.error('❌ fetchOlderMessages: Excepción al buscar siguiente conversación:', error)
-      setHasMoreHistory(false)
-      return false
-    } finally {
-      setLoadingHistory(false)
-    }
-  }, [
-    selectedConversationId, 
-    loadingHistory, 
-    currentConversationMessagesOffset,
-    currentConversationHasMore,
-    fetchMessagesWithRetry,
-    conversations,
-    getNextOlderConversation,
-    loadedConversationIds
-  ])
-
   // ✅ SOLUCIÓN 2: Debounce para evitar múltiples llamadas simultáneas
-  // 🔧 FIX 2: Debounce más rápido para mejor performance (100ms en lugar de 300ms)
   const fetchMessagesDebounced = useMemo(
-    () => debounce(fetchMessagesWithRetry, 100), // Reducido de 300ms a 100ms
+    () => debounce(fetchMessagesWithRetry, 300), // 300ms de debounce
     [fetchMessagesWithRetry]
   )
 
@@ -1048,41 +788,22 @@ export function useConversations() {
       return
     }
     
-    // ✅ FIX: Permitir re-seleccionar para refrescar desde cero
-    // Si es la misma conversación, resetear y recargar
-    const isSameConversation = selectedConversationId === conversationId
+    if (selectedConversationId === conversationId) {
+      console.log('🚫 selectConversation: Misma conversación, ignorando...')
+      return
+    }
     
     setIsSelectingConversation(true)
     console.log('🎯 selectConversation: Iniciando selección...')
     
     try {
-      // ✅ Resetear TODOS los estados de historial para nueva conversación
-      setHistoryOffset(0)
-      setHasMoreHistory(true)
-      setLoadingHistory(false)
-      setLoadedConversationIds(new Set()) // ✅ Resetear conversaciones cargadas
-      setCurrentConversationMessagesOffset(0)
-      setCurrentConversationHasMore(true)
-      
-      // ✅ Limpiar mensajes antes de cargar nuevos (evita mostrar mensajes anteriores brevemente)
-      if (isSameConversation) {
-        setMessages([]) // Solo limpiar si es la misma conversación (refresh)
-      } else {
-        setSelectedConversationId(conversationId) // Cambiar primero si es diferente
-        setMessages([]) // Limpiar mensajes
-      }
-      
+      setSelectedConversationId(conversationId)
       console.log('📨 selectConversation: About to fetch messages for conversation:', conversationId)
       // ✅ SOLUCIÓN 2: Usar versión con debounce para evitar múltiples llamadas simultáneas
-      // ✅ Pasar isInitialLoad=true para que solo traiga mensajes de esta conversación
-      const success = await fetchMessagesWithRetry(conversationId, 3, 0, true)
+      const success = await fetchMessagesDebounced(conversationId)
       
       if (success) {
         console.log('✅ selectConversation: Completado exitosamente')
-        // ✅ Asegurar que selectedConversationId esté actualizado
-        if (!isSameConversation) {
-          setSelectedConversationId(conversationId)
-        }
       } else {
         console.log('⏭️ selectConversation: fetchMessages fue cancelado, no completando selección')
       }
@@ -1092,16 +813,12 @@ export function useConversations() {
       console.log('🧹 selectConversation: Reseteando isSelectingConversation')
       setIsSelectingConversation(false)
     }
-  }, [fetchMessagesWithRetry, selectedConversationId, isSelectingConversation]) // ✅ Usar fetchMessagesWithRetry directamente en lugar de debounced para carga inicial
+  }, [fetchMessagesDebounced]) // ✅ SOLUCIÓN 2: Usar fetchMessagesDebounced
 
   const clearSelectedConversation = useCallback(() => {
     console.log('🧹 Cleared selected conversation')
     setSelectedConversationId(null)
     setMessages([])
-    // Resetear estados de historial
-    setHistoryOffset(0)
-    setHasMoreHistory(true)
-    setLoadingHistory(false)
   }, [])
 
   // Función para manejar cambios de estado de scroll
@@ -1714,11 +1431,6 @@ export function useConversations() {
     // Nuevos estados y funciones para control inteligente
     isUserScrolling,
     newConversationIds,
-    handleScrollStateChange,
-    // Estados y funciones para historial de mensajes
-    fetchOlderMessages,
-    hasMoreHistory,
-    loadingHistory,
-    historyOffset
+    handleScrollStateChange
   }
 }

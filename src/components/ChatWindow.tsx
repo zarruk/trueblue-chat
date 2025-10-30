@@ -49,10 +49,6 @@ interface ChatWindowProps {
   showContextToggle?: boolean
   onToggleContext?: () => void
   onMobileBack?: () => void
-  // Nuevas propiedades para historial de mensajes
-  fetchOlderMessages?: () => Promise<boolean>
-  hasMoreHistory?: boolean
-  loadingHistory?: boolean
 }
 
 interface Message {
@@ -79,12 +75,10 @@ interface Conversation {
   channel?: string
 }
 
-export function ChatWindow({ conversationId, messages: propMessages, loading: propLoading, onSendMessage, onSelectConversation, onUpdateConversationStatus, onAssignAgent, conversations: propConversations, showContextToggle, onToggleContext, onMobileBack, fetchOlderMessages, hasMoreHistory, loadingHistory }: ChatWindowProps) {
+export function ChatWindow({ conversationId, messages: propMessages, loading: propLoading, onSendMessage, onSelectConversation, onUpdateConversationStatus, onAssignAgent, conversations: propConversations, showContextToggle, onToggleContext, onMobileBack }: ChatWindowProps) {
   const [message, setMessage] = useState('')
   const [localMessages, setLocalMessages] = useState<Message[]>([])
   const [updatingStatus, setUpdatingStatus] = useState(false)
-
-  const [historicalConversations, setHistoricalConversations] = useState<Array<{ id: string; created_at: string; updated_at: string; messages: Message[] }>>([])
   const [viewerOpen, setViewerOpen] = useState(false)
   const [viewerSrc, setViewerSrc] = useState<string | undefined>(undefined)
   const [viewerError, setViewerError] = useState(false)
@@ -106,8 +100,6 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   const { profile } = useAuth()
   const { getAvailableAgents } = useAgents()
   
-  // Estados para scroll infinito hacia arriba
-  const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false)
   const prevScrollHeight = useRef(0)
   
   // Estados para detección de scroll manual del usuario
@@ -268,64 +260,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       }
       if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
     }
-
-    // Scroll infinito hacia arriba (lógica existente)
-    if (!fetchOlderMessages || isLoadingOlderMessages) return
-
-    // 🔧 FIX 1: Solo activar si ya hay mensajes cargados y no está en loading inicial
-    if (loading || messages.length === 0) {
-      console.log('🚫 ChatWindow: Scroll infinito desactivado - aún cargando o sin mensajes')
-      return
-    }
-
-    // 🔧 FIX 2: Threshold más pequeño para evitar activación accidental (50px en lugar de 100px)
-    const isNearTop = container.scrollTop <= 50
-    
-    if (isNearTop && hasMoreHistory) {
-      console.log('🔼 ChatWindow: Usuario llegó al tope, cargando mensajes más antiguos...')
-      setIsLoadingOlderMessages(true)
-      
-      // Guardar la altura actual del scroll para mantener la posición
-      prevScrollHeight.current = container.scrollHeight
-      
-      try {
-        // 🔧 FIX: Marcar que se están cargando mensajes históricos
-        setIsLoadingHistoricalMessages(true)
-        console.log('🚫 ChatWindow: Bloqueando scroll automático - cargando historial')
-        
-        const success = await fetchOlderMessages()
-        
-        if (success) {
-          // 🔧 MEJORADO: Mejor cálculo para mantener posición exacta
-          setTimeout(() => {
-            if (container && prevScrollHeight.current > 0) {
-              const newScrollHeight = container.scrollHeight
-              const heightDifference = newScrollHeight - prevScrollHeight.current
-              const newScrollTop = container.scrollTop + heightDifference
-              
-              container.scrollTop = newScrollTop
-              
-              console.log('📍 ChatWindow: Posición mantenida después de cargar historial:', {
-                prevHeight: prevScrollHeight.current,
-                newHeight: newScrollHeight,
-                difference: heightDifference,
-                newScrollTop
-              })
-            }
-          }, 150) // Aumentar delay ligeramente para mejor estabilidad
-        }
-      } catch (error) {
-        console.error('❌ ChatWindow: Error cargando mensajes más antiguos:', error)
-      } finally {
-        setIsLoadingOlderMessages(false)
-        // 🔧 FIX: Delay para evitar race condition con useEffect de scroll automático
-        setTimeout(() => {
-          setIsLoadingHistoricalMessages(false)
-          console.log('✅ ChatWindow: Restaurando scroll automático - historial completado')
-        }, 500)
-      }
-    }
-  }, [fetchOlderMessages, hasMoreHistory, isLoadingOlderMessages, loading, messages.length])
+  }, [userIsScrolling])
 
   // Agregar listener de scroll + cleanup de timeouts
   useEffect(() => {
@@ -351,52 +286,6 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     }
   }, [])
 
-  // Cargar historial de todas las conversaciones previas del mismo usuario (excluyendo la actual)
-  const fetchHistoricalConversations = useCallback(async (userId: string, currentConvId: string) => {
-    try {
-      const p = profile as any
-      const clientId = p?.client_id
-      if (!clientId) return
-      
-      // Simplificar completamente para evitar problemas de tipos
-      const convs: any[] = []
-      const convsError = null
-
-      if (convsError) {
-        console.error('❌ [ChatWindow] Error obteniendo conversaciones históricas:', convsError)
-        setHistoricalConversations([])
-        return
-      }
-
-      const results: Array<{ id: string; created_at: string; updated_at: string; messages: Message[] }> = []
-      for (const c of (convs as any[]) || []) {
-        const { data: msgs, error: msgsError } = await supabase
-          .from('tb_messages')
-          .select('*')
-          .eq('conversation_id', c.id)
-          // .eq('client_id', profile?.client_id)
-          .order('created_at', { ascending: true })
-        if (msgsError) {
-          console.error('❌ [ChatWindow] Error obteniendo mensajes históricos:', msgsError)
-          continue
-        }
-        results.push({ id: c.id, created_at: c.created_at as any, updated_at: c.updated_at as any, messages: (msgs as any) || [] })
-      }
-
-      setHistoricalConversations(results)
-    } catch (e) {
-      console.error('❌ [ChatWindow] Excepción cargando historial:', e)
-      setHistoricalConversations([])
-    }
-  }, [profile?.client_id])
-
-  useEffect(() => {
-    if (conversation && conversation.user_id) {
-      fetchHistoricalConversations(conversation.user_id, conversation.id)
-    } else {
-      setHistoricalConversations([])
-    }
-  }, [conversation?.id, conversation?.user_id, fetchHistoricalConversations, conversation])
 
   // Realtime subscription scoped to this conversation as a fail-safe
   useEffect(() => {
@@ -1162,47 +1051,12 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
           ref={messagesContainerRef} 
           className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain px-3 py-3 tablet:px-4 tablet:py-4 desktop:px-6 desktop:py-6 space-y-3 tablet:space-y-2 desktop:space-y-2 chat-messages-scroll dark:[&>.message-sep]:border-slate-700"
         >
-          {/* Indicadores de historial en la parte superior */}
-          {(isLoadingOlderMessages || loadingHistory) && (
-            <div className="flex justify-center py-3">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                <span>Cargando mensajes anteriores...</span>
-              </div>
-            </div>
-          )}
-          
-          {!hasMoreHistory && messages.length > 30 && (
-            <div className="flex justify-center py-2">
-              <div className="text-xs text-muted-foreground px-3 py-1 rounded-full bg-muted/50">
-                No hay más mensajes en esta conversación
-              </div>
-            </div>
-          )}
-          
           {loading ? (
             <div className="flex items-center justify-center h-full">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
           ) : (
             <>
-              {/* Historial de conversaciones anteriores */}
-              {historicalConversations.map((conv, idx) => (
-                <div key={conv.id} className="space-y-3">
-                  <div className="relative my-6 message-sep">
-                    <div className="absolute inset-0 flex items-center">
-                      <span className="w-full border-t border-dashed border-muted-foreground/30" />
-                    </div>
-                    <div className="relative flex justify-center text-[11px] uppercase">
-                      <span className="bg-background px-2 text-muted-foreground">
-                        Histórico • {format(new Date(conv.created_at), 'dd/MM/yyyy', { locale: es })}
-                      </span>
-                    </div>
-                  </div>
-                  {conv.messages.map((m) => renderMessageBubble(m, true))}
-                </div>
-              ))}
-
               {/* Mensajes de la conversación actual */}
               {messages.length === 0 ? (
                 <div className="text-center text-muted-foreground">
@@ -1210,30 +1064,13 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                 </div>
               ) : (
                 messages.map((msg, idx) => {
-                  // ✅ NUEVO: Detectar cambio de conversation_id para mostrar separador histórico
-                  const prevMsg = idx > 0 ? messages[idx - 1] : null
-                  const conversationChanged = prevMsg && prevMsg.conversation_id !== msg.conversation_id
-                  
                   // Verificar si necesitamos mostrar un separador de fecha
                   const showDateSeparator = idx === 0 || 
                     !isSameDay(new Date(messages[idx - 1].created_at), new Date(msg.created_at))
                   
                   return (
                     <React.Fragment key={msg.id}>
-                      {/* ✅ Separador para cambio de conversación (historial) */}
-                      {conversationChanged && (
-                        <div className="relative my-6 message-sep">
-                          <div className="absolute inset-0 flex items-center">
-                            <span className="w-full border-t border-dashed border-muted-foreground/30" />
-                          </div>
-                          <div className="relative flex justify-center text-[11px] uppercase">
-                            <span className="bg-background px-2 text-muted-foreground">
-                              Histórico • {format(new Date(msg.created_at), 'dd/MM/yyyy', { locale: es })}
-                            </span>
-                          </div>
-                        </div>
-                      )}
-                      {showDateSeparator && !conversationChanged && (
+                      {showDateSeparator && (
                         <div className="relative my-4">
                           <div className="absolute inset-0 flex items-center">
                             <span className="w-full border-t border-muted-foreground/20" />
@@ -1254,16 +1091,6 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
           )}
           
           <div ref={messagesEndRef} />
-          
-          {/* Mensaje de ayuda para scroll hacia arriba */}
-          {/* 🔧 FIX 3: Solo mostrar ayuda si hay suficientes mensajes (>10) para evitar confusión */}
-          {messages.length > 10 && hasMoreHistory && !loading && (
-            <div className="flex justify-center py-2 opacity-60">
-              <div className="text-xs text-muted-foreground">
-                Desliza hacia arriba para ver más mensajes
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
