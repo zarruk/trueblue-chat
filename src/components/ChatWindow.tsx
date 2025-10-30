@@ -258,7 +258,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     const isAtTop = container.scrollTop < 100
     
     if (isAtTop && !loadingOlderRef.current && !loadingHistory && hasMoreHistory && fetchOlderMessages) {
-      console.log('🔼 ChatWindow: Scroll al inicio, cargando historial...')
+      if (import.meta.env.DEV) console.log('🔼 ChatWindow: Scroll al inicio, cargando historial...')
       const prevScrollHeight = container.scrollHeight
       
       loadingOlderRef.current = true
@@ -283,14 +283,14 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       setLastManualScrollTime(Date.now())
       // 🔧 FIX: NO usar timeout automático - solo restaurar cuando usuario vuelva al final
       if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
-      console.log('🔼 ChatWindow: Usuario scrolleando hacia arriba - desactivando scroll automático')
+      if (import.meta.env.DEV) console.log('🔼 ChatWindow: Usuario scrolleando hacia arriba - desactivando scroll automático')
     } else {
       // ✅ Solo restaurar scroll automático cuando usuario vuelva al final por su cuenta
       if (userIsScrolling) {
         setUserIsScrolling(false)
         // ✅ Actualizar timestamp cuando vuelve al final también
         setLastManualScrollTime(Date.now())
-        console.log('✅ ChatWindow: Usuario volvió al final, restaurando scroll automático')
+        if (import.meta.env.DEV) console.log('✅ ChatWindow: Usuario volvió al final, restaurando scroll automático')
       }
       if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
     }
@@ -424,7 +424,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   useEffect(() => {
     // 🔧 FIX: NUNCA hacer scroll automático si se están cargando mensajes históricos
     if (isLoadingHistoricalMessages) {
-      console.log('🚫 ChatWindow: Scroll automático bloqueado - cargando mensajes históricos')
+      if (import.meta.env.DEV) console.log('🚫 ChatWindow: Scroll automático bloqueado - cargando mensajes históricos')
       return
     }
     
@@ -434,7 +434,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     
     // ✅ Si el usuario ha scrolleado recientemente, NO hacer scroll automático
     if (timeSinceLastScroll < SCROLL_GRACE_PERIOD && lastManualScrollTime > 0) {
-      console.log(`🚫 ChatWindow: Scroll automático bloqueado - usuario scrolleó hace ${Math.round(timeSinceLastScroll / 1000)}s (período de gracia: 15s)`)
+      if (import.meta.env.DEV) console.log(`🚫 ChatWindow: Scroll automático bloqueado - usuario scrolleó hace ${Math.round(timeSinceLastScroll / 1000)}s (período de gracia: 15s)`) 
       return
     }
     
@@ -448,15 +448,15 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
         const timeSinceLastScrollNow = Date.now() - lastManualScrollTime
         if (timeSinceLastScrollNow >= SCROLL_GRACE_PERIOD && isNearBottom && !isLoadingHistoricalMessages) {
           scrollToBottomInstant()
-          console.log('📍 ChatWindow: Scroll automático al final (período de gracia completado)')
+          if (import.meta.env.DEV) console.log('📍 ChatWindow: Scroll automático al final (período de gracia completado)')
         } else {
-          console.log('📍 ChatWindow: Scroll automático cancelado - usuario scrolleó durante período de gracia')
+          if (import.meta.env.DEV) console.log('📍 ChatWindow: Scroll automático cancelado - usuario scrolleó durante período de gracia')
         }
       }, 2000) // Esperar 2 segundos adicionales antes de hacer scroll
       
       return () => clearTimeout(timer)
     } else if (userIsScrolling && !isNearBottom) {
-      console.log('📍 ChatWindow: Scroll automático omitido - usuario scrolleando manualmente y lejos del final')
+      if (import.meta.env.DEV) console.log('📍 ChatWindow: Scroll automático omitido - usuario scrolleando manualmente y lejos del final')
     }
   }, [messages.length, scrollToBottomInstant, userIsScrolling, isNearBottom, isLoadingHistoricalMessages, lastManualScrollTime])
 
@@ -471,7 +471,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   useEffect(() => {
     // 🔧 FIX: NUNCA hacer smooth scroll si se están cargando mensajes históricos
     if (isLoadingHistoricalMessages) {
-      console.log('🚫 ChatWindow: Smooth scroll bloqueado - cargando mensajes históricos')
+      if (import.meta.env.DEV) console.log('🚫 ChatWindow: Smooth scroll bloqueado - cargando mensajes históricos')
       return
     }
     
@@ -481,7 +481,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
         // Doble verificación para evitar race conditions
         if (!isLoadingHistoricalMessages && (!userIsScrolling || isNearBottom)) {
           scrollToBottom('smooth')
-          console.log('📍 ChatWindow: Smooth scroll al final')
+          if (import.meta.env.DEV) console.log('📍 ChatWindow: Smooth scroll al final')
         }
       }, 100)
       return () => clearTimeout(timer)
