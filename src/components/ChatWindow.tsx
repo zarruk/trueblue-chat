@@ -49,6 +49,9 @@ interface ChatWindowProps {
   showContextToggle?: boolean
   onToggleContext?: () => void
   onMobileBack?: () => void
+  fetchOlderMessages?: () => Promise<boolean>
+  hasMoreHistory?: boolean
+  loadingHistory?: boolean
 }
 
 interface Message {
@@ -75,7 +78,7 @@ interface Conversation {
   channel?: string
 }
 
-export function ChatWindow({ conversationId, messages: propMessages, loading: propLoading, onSendMessage, onSelectConversation, onUpdateConversationStatus, onAssignAgent, conversations: propConversations, showContextToggle, onToggleContext, onMobileBack }: ChatWindowProps) {
+export function ChatWindow({ conversationId, messages: propMessages, loading: propLoading, onSendMessage, onSelectConversation, onUpdateConversationStatus, onAssignAgent, conversations: propConversations, showContextToggle, onToggleContext, onMobileBack, fetchOlderMessages, hasMoreHistory, loadingHistory }: ChatWindowProps) {
   const [message, setMessage] = useState('')
   const [localMessages, setLocalMessages] = useState<Message[]>([])
   const [updatingStatus, setUpdatingStatus] = useState(false)
@@ -242,6 +245,26 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     const isAtBottom = scrollFromBottom < 100
     setIsNearBottom(isAtBottom)
     
+    // Detectar scroll hacia arriba (cerca del inicio)
+    const isAtTop = container.scrollTop < 100
+    
+    if (isAtTop && !loadingHistory && hasMoreHistory && fetchOlderMessages) {
+      console.log('🔼 ChatWindow: Scroll al inicio, cargando historial...')
+      const prevScrollHeight = container.scrollHeight
+      
+      const success = await fetchOlderMessages()
+      
+      if (success) {
+        // Mantener posición de scroll después de cargar
+        requestAnimationFrame(() => {
+          if (container) {
+            const newScrollHeight = container.scrollHeight
+            container.scrollTop = newScrollHeight - prevScrollHeight
+          }
+        })
+      }
+    }
+    
     // 🔧 NUEVO: Detectar si está scrolleando hacia arriba (alejándose del final)
     if (!isAtBottom) {
       setUserIsScrolling(true)
@@ -260,7 +283,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       }
       if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
     }
-  }, [userIsScrolling])
+  }, [userIsScrolling, loadingHistory, hasMoreHistory, fetchOlderMessages])
 
   // Agregar listener de scroll + cleanup de timeouts
   useEffect(() => {
@@ -1051,6 +1074,14 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
           ref={messagesContainerRef} 
           className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain px-3 py-3 tablet:px-4 tablet:py-4 desktop:px-6 desktop:py-6 space-y-3 tablet:space-y-2 desktop:space-y-2 chat-messages-scroll dark:[&>.message-sep]:border-slate-700"
         >
+          {/* Indicador de carga de historial */}
+          {loadingHistory && (
+            <div className="flex items-center justify-center py-4">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+              <span className="ml-2 text-sm text-muted-foreground">Cargando historial...</span>
+            </div>
+          )}
+          
           {loading ? (
             <div className="flex items-center justify-center h-full">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -1068,9 +1099,28 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                   const showDateSeparator = idx === 0 || 
                     !isSameDay(new Date(messages[idx - 1].created_at), new Date(msg.created_at))
                   
+                  // Verificar si es inicio de conversación histórica
+                  const isHistoricalStart = (msg as any)._isHistoricalStart
+                  const historicalDate = (msg as any)._historicalConversationDate
+                  
                   return (
                     <React.Fragment key={msg.id}>
-                      {showDateSeparator && (
+                      {/* Separador de conversación histórica */}
+                      {isHistoricalStart && historicalDate && (
+                        <div className="relative my-6">
+                          <div className="absolute inset-0 flex items-center">
+                            <span className="w-full border-t-2 border-muted-foreground/30" />
+                          </div>
+                          <div className="relative flex justify-center text-sm">
+                            <span className="bg-background px-4 py-2 text-muted-foreground font-semibold rounded-full border border-muted-foreground/30">
+                              Histórico · {format(new Date(historicalDate), "dd/MM/yyyy", { locale: es })}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Separador de fecha normal */}
+                      {showDateSeparator && !isHistoricalStart && (
                         <div className="relative my-4">
                           <div className="absolute inset-0 flex items-center">
                             <span className="w-full border-t border-muted-foreground/20" />
@@ -1082,6 +1132,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                           </div>
                         </div>
                       )}
+                      
                       {renderMessageBubble(msg, false)}
                     </React.Fragment>
                   )
