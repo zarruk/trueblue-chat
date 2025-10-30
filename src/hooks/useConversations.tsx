@@ -417,12 +417,22 @@ export function useConversations() {
         console.log(`🔍 fetchMessages: Intento ${attempt}/${retries} para consulta ${queryId}`)
         console.log('🔍 fetchMessages: Starting query to tb_messages table...')
         
-        const queryPromise = supabase
+        // Para historial, usar offset negativo (mensajes más antiguos)
+        const effectiveOffset = isInitialLoad ? offset : offset
+        
+        let query = supabase
           .from('tb_messages')
           .select('*')
           .eq('conversation_id', conversationId)
-          .order('created_at', { ascending: isInitialLoad })
-          .range(offset, offset + limit - 1)
+        
+        if (isInitialLoad) {
+          query = query.order('created_at', { ascending: true }).range(offset, offset + limit - 1)
+        } else {
+          // Para historial, ordenar descendente y tomar desde el principio
+          query = query.order('created_at', { ascending: false }).limit(limit)
+        }
+        
+        const queryPromise = query
 
         console.log('🔍 fetchMessages: Executing query with timeout...')
         
@@ -466,11 +476,11 @@ export function useConversations() {
           const hasMore = data && data.length === limit
           
           if (isInitialLoad) {
-            // Invertir para mostrar cronológicamente
-            setMessages((data as any)?.reverse() || [])
+            // Carga inicial: mostrar cronológicamente (data ya viene ordenada)
+            setMessages((data as any) || [])
           } else {
-            // Prepend mensajes antiguos (ya invertidos)
-            setMessages(prev => [...(data as any)?.reverse() || [], ...prev])
+            // Historial: prepend mensajes antiguos (data viene ordenada descendente)
+            setMessages(prev => [...(data as any) || [], ...prev])
           }
           
           return { success: true, messages: (data as any) || [], hasMore: hasMore || false }
