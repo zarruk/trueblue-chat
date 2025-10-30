@@ -568,6 +568,16 @@ export function useConversations() {
       // Paso 1: Intentar cargar más mensajes de la conversación actual
       if (currentConversationHasMore) {
         console.log('📜 Cargando más mensajes de conversación actual...')
+        
+        // ✅ FIX: Agregar conversación actual al set si no está ya cargada
+        setLoadedConversationIds(prev => {
+          const newSet = new Set(prev)
+          if (!newSet.has(selectedConversationId)) {
+            newSet.add(selectedConversationId)
+          }
+          return newSet
+        })
+        
         const newOffset = currentConversationMessagesOffset + 100
         
         const result = await fetchMessagesWithRetry(
@@ -596,6 +606,13 @@ export function useConversations() {
         clientId || '',
         loadedConversationIds
       )
+      
+      // ✅ FIX: Verificar si ya cargamos esta conversación antes de cargar
+      if (nextConv && loadedConversationIds.has(nextConv.id)) {
+        console.log('⏭️ Conversación ya cargada, buscando siguiente...')
+        setLoadingHistory(false)
+        return false // Esto permitirá que el scroll intente de nuevo
+      }
       
       if (!nextConv) {
         console.log('✅ No hay más conversaciones históricas')
