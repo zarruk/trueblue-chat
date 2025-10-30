@@ -1106,32 +1106,14 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                 </div>
               ) : (
                 messages.map((msg, idx) => {
-                  // Verificar si necesitamos mostrar un separador de fecha
+                  // ¿Hay cambio de día o es el primero?
                   const showDateSeparator = idx === 0 || 
                     !isSameDay(new Date(messages[idx - 1].created_at), new Date(msg.created_at))
-                  
-                  // Verificar si es inicio de conversación histórica
-                  const isHistoricalStart = (msg as any)._isHistoricalStart
-                  const historicalDate = (msg as any)._historicalConversationDate
-                  
+
                   return (
                     <React.Fragment key={msg.id}>
-                      {/* Separador de conversación histórica */}
-                      {isHistoricalStart && historicalDate && (
-                        <div className="relative my-6">
-                          <div className="absolute inset-0 flex items-center">
-                            <span className="w-full border-t-2 border-muted-foreground/30" />
-                          </div>
-                          <div className="relative flex justify-center text-sm">
-                            <span className="bg-background px-4 py-2 text-muted-foreground font-semibold rounded-full border border-muted-foreground/30">
-                              Histórico · {format(new Date(historicalDate), "dd/MM/yyyy", { locale: es })}
-                            </span>
-                          </div>
-                        </div>
-                      )}
-                      
                       {/* Separador de fecha normal */}
-                      {showDateSeparator && !isHistoricalStart && (
+                      {showDateSeparator && (
                         <div className="relative my-4">
                           <div className="absolute inset-0 flex items-center">
                             <span className="w-full border-t border-muted-foreground/20" />
@@ -1143,7 +1125,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                           </div>
                         </div>
                       )}
-                      
+
                       {renderMessageBubble(msg, false)}
                     </React.Fragment>
                   )
