@@ -480,7 +480,13 @@ export function useConversations() {
             setMessages((data as any) || [])
           } else {
             // Historial: prepend mensajes antiguos (data viene ordenada descendente)
-            setMessages(prev => [...(data as any) || [], ...prev])
+            // ✅ FILTRO DE DUPLICADOS
+            setMessages(prev => {
+              const existingIds = new Set(prev.map(m => m.id))
+              const newMessages = (data as any) || []
+              const uniqueNew = newMessages.filter((m: any) => !existingIds.has(m.id))
+              return [...uniqueNew, ...prev]
+            })
           }
           
           return { success: true, messages: (data as any) || [], hasMore: hasMore || false }
