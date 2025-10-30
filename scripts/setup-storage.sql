@@ -34,3 +34,5 @@ USING (bucket_id = 'chat-attachments');
 -- Nota: Los archivos se organizan en la estructura: {client_id}/{conversation_id}/{filename}
 -- Esto permite el aislamiento por cliente y conversación
 
+
+

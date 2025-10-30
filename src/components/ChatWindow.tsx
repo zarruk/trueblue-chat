@@ -112,18 +112,27 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   
   // ✅ NUEVO: Estado para rastrear último scroll manual (período de gracia)
   const [lastManualScrollTime, setLastManualScrollTime] = useState<number>(0)
+  // ✅ NUEVO: Guard local para evitar cargas duplicadas de historial
+  const loadingOlderRef = useRef(false)
   
   // 🔧 FIX: Flag específico para bloquear scroll automático durante carga de historial
   const [isLoadingHistoricalMessages, setIsLoadingHistoricalMessages] = useState(false)
+  
+  // ✅ Sincronizar bandera local con prop del padre
+  useEffect(() => {
+    setIsLoadingHistoricalMessages(!!loadingHistory)
+  }, [loadingHistory])
 
-  // 🔧 FIX: Unificar estado de mensajes - usar props como fuente de verdad principal
+  // 🔧 FIX: Unificar estado de mensajes fusionando servidor + realtime sin duplicados (prioriza servidor)
   const messages = useMemo(() => {
-    // Priorizar mensajes del padre (useConversations) sobre mensajes locales
-    if (propMessages && propMessages.length > 0) {
-      return propMessages
+    const base = Array.isArray(propMessages) ? propMessages : []
+    if (!Array.isArray(localMessages) || localMessages.length === 0) return base
+    const byId = new Map(base.map((m: any) => [m?.id, m]))
+    for (const m of localMessages) {
+      const id = (m as any)?.id
+      if (!byId.has(id)) byId.set(id, m)
     }
-    // Fallback a mensajes locales solo si no hay mensajes del padre
-    return localMessages
+    return Array.from(byId.values())
   }, [propMessages, localMessages])
   
   const loading = propLoading !== undefined ? propLoading : false
@@ -248,10 +257,11 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     // Detectar scroll hacia arriba (cerca del inicio)
     const isAtTop = container.scrollTop < 100
     
-    if (isAtTop && !loadingHistory && hasMoreHistory && fetchOlderMessages) {
+    if (isAtTop && !loadingOlderRef.current && !loadingHistory && hasMoreHistory && fetchOlderMessages) {
       console.log('🔼 ChatWindow: Scroll al inicio, cargando historial...')
       const prevScrollHeight = container.scrollHeight
       
+      loadingOlderRef.current = true
       const success = await fetchOlderMessages()
       
       if (success) {
@@ -263,6 +273,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
           }
         })
       }
+      loadingOlderRef.current = false
     }
     
     // 🔧 NUEVO: Detectar si está scrolleando hacia arriba (alejándose del final)
@@ -396,7 +407,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       // ✅ FIX: NO buscar canales huérfanos - confiar en que cada instancia limpia su propio canal
       // Esto evita interferencia con otros componentes y race conditions
     }
-  }, []) // ✅ FIX: NO re-crear canales automáticamente
+  }, [conversationId]) // ✅ FIX: Re-crear canal cuando cambie la conversación
 
   // ELIMINADO: No usar polling automático para evitar refrescos
 
