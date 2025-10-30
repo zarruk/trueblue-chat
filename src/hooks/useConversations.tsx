@@ -426,10 +426,11 @@ export function useConversations() {
           .eq('conversation_id', conversationId)
         
         if (isInitialLoad) {
-          query = query.order('created_at', { ascending: true }).range(offset, offset + limit - 1)
-        } else {
-          // Para historial, ordenar descendente y tomar desde el principio
+          // Carga inicial: traer los más recientes y luego invertir para mostrar cronológico
           query = query.order('created_at', { ascending: false }).limit(limit)
+        } else {
+          // Historial: paginar correctamente usando offset
+          query = query.order('created_at', { ascending: false }).range(offset, offset + limit - 1)
         }
         
         const queryPromise = query
@@ -476,15 +477,15 @@ export function useConversations() {
           const hasMore = data && data.length === limit
           
           if (isInitialLoad) {
-            // Carga inicial: mostrar cronológicamente (data ya viene ordenada)
-            setMessages((data as any) || [])
+            // data viene descendente; invertir para mostrar ascendente
+            setMessages(((data as any) || []).slice().reverse())
           } else {
-            // Historial: prepend mensajes antiguos (data viene ordenada descendente)
+            // Historial: data viene descendente; invertir y hacer prepend sin duplicados
             // ✅ FILTRO DE DUPLICADOS
             setMessages(prev => {
               const existingIds = new Set(prev.map(m => m.id))
-              const newMessages = (data as any) || []
-              const uniqueNew = newMessages.filter((m: any) => !existingIds.has(m.id))
+              const newAsc = ((data as any) || []).slice().reverse()
+              const uniqueNew = newAsc.filter((m: any) => !existingIds.has(m.id))
               return [...uniqueNew, ...prev]
             })
           }
