@@ -78,24 +78,20 @@ export function useRealtimeConversations({
   }, [onMessageInsert, onMessageUpdate, onMessageDelete, onConversationInsert, onConversationUpdate, onConversationDelete, userId])
 
   const setupRealtimeSubscriptions = useCallback(() => {
-    console.log('🔄 [REALTIME] Configurando suscripciones de tiempo real...')
-    console.log('🔄 [REALTIME] Callbacks disponibles:', {
-      onMessageInsert: !!callbacksRef.current.onMessageInsert,
-      onConversationInsert: !!callbacksRef.current.onConversationInsert,
-      onConversationUpdate: !!callbacksRef.current.onConversationUpdate,
-      userId: callbacksRef.current.userId
-    })
-    
-    // Log adicional para debugging en staging
-    console.log('🔍 [REALTIME] Entorno:', import.meta.env.MODE)
-    console.log('🔍 [REALTIME] Supabase URL:', import.meta.env.VITE_SUPABASE_URL?.substring(0, 30) + '...')
+    if (import.meta.env.DEV) {
+      console.log('🔄 [REALTIME] Configurando suscripciones (DEV)...', {
+        hasOnMessageInsert: !!callbacksRef.current.onMessageInsert,
+        hasOnConversationUpdate: !!callbacksRef.current.onConversationUpdate,
+        mode: import.meta.env.MODE
+      })
+    }
     
     let messagesChannel: RealtimeChannel | null = null
     let conversationsChannel: RealtimeChannel | null = null
 
     try {
       // Suscripción para mensajes
-      console.log('📡 [REALTIME] Creando canal de mensajes...')
+      if (import.meta.env.DEV) console.log('📡 [REALTIME] Creando canal de mensajes...')
       messagesChannel = supabase
         .channel('messages-changes', {
           config: {
@@ -110,46 +106,48 @@ export function useRealtimeConversations({
             table: 'tb_messages'
           },
           async (payload) => {
-            console.log('✅ [REALTIME] Raw message insert payload received:', payload);
+            if (import.meta.env.DEV) console.log('✅ [REALTIME] Insert payload:', payload)
             const newMessage = payload.new as Message & { client_id?: string }
 
-            // --- Intensive Debugging ---
-            console.log(`[REALTIME DEBUG] Hook's client_id: ${clientId}`);
-            console.log(`[REALTIME DEBUG] Message's client_id: ${newMessage.client_id}`);
+            // --- Debugging con gating DEV ---
+            if (import.meta.env.DEV) {
+              console.log(`[REALTIME DEBUG] Hook client_id: ${clientId}`)
+              console.log(`[REALTIME DEBUG] Message client_id: ${newMessage.client_id}`)
+            }
 
             // Guardar por clientId si está disponible; si no, intentar inferirlo por la conversación
             if (clientId) {
               if (newMessage.client_id && newMessage.client_id !== clientId) {
-                console.log(`[REALTIME DEBUG] REJECTED: Message client_id (${newMessage.client_id}) does not match hook's client_id (${clientId}).`);
+                if (import.meta.env.DEV) console.log('[REALTIME DEBUG] REJECTED por client_id (mensaje)')
                 return
               }
               if (!newMessage.client_id && newMessage.conversation_id) {
-                console.log(`[REALTIME DEBUG] Message has no client_id. Fetching from conversation ${newMessage.conversation_id}...`);
+                if (import.meta.env.DEV) console.log('[REALTIME DEBUG] Buscando client_id por conversación...')
                 try {
                   const { data: conv } = await supabase
                     .from('tb_conversations')
                     .select('client_id')
                     .eq('id', newMessage.conversation_id)
                     .maybeSingle()
-                  console.log(`[REALTIME DEBUG] Fetched conversation's client_id: ${(conv as any)?.client_id}`);
+                  if (import.meta.env.DEV) console.log('[REALTIME DEBUG] conv.client_id:', (conv as any)?.client_id)
                   const convClientId = (conv as any)?.client_id as string | undefined
                   if (convClientId && convClientId !== clientId) {
-                    console.log(`[REALTIME DEBUG] REJECTED: Conversation's client_id (${convClientId}) does not match hook's client_id (${clientId}).`);
+                    if (import.meta.env.DEV) console.log('[REALTIME DEBUG] REJECTED por client_id (conversación)')
                     return
                   }
                 } catch (e) {
-                  console.warn('[REALTIME DEBUG] Error verificando client_id del mensaje:', e)
+                  if (import.meta.env.DEV) console.warn('[REALTIME DEBUG] Error verificando client_id del mensaje:', e)
                 }
               }
             }
-            console.log('[REALTIME DEBUG] PASSED: Message client_id check passed. Firing callback.');
+            if (import.meta.env.DEV) console.log('[REALTIME DEBUG] PASSED: client_id OK, ejecutando callback')
             // --- End Intensive Debugging ---
 
             if (callbacksRef.current.onMessageInsert) {
-              console.log('📨 [REALTIME] Ejecutando callback onMessageInsert...')
+              if (import.meta.env.DEV) console.log('📨 [REALTIME] Ejecutando onMessageInsert...')
               callbacksRef.current.onMessageInsert(newMessage)
             } else {
-              console.log('⚠️ [REALTIME] Callback onMessageInsert no disponible')
+              if (import.meta.env.DEV) console.log('⚠️ [REALTIME] onMessageInsert no disponible')
             }
             
             if (newMessage.sender_role !== 'agent' || newMessage.responded_by_agent_id !== callbacksRef.current.userId) {
@@ -168,16 +166,16 @@ export function useRealtimeConversations({
             table: 'tb_messages'
           },
           async (payload) => {
-            console.log('🔄 [REALTIME] Mensaje actualizado en tiempo real:', payload.new)
+            if (import.meta.env.DEV) console.log('🔄 [REALTIME] Mensaje actualizado:', payload.new)
             const updatedMessage = payload.new as Message & { client_id?: string }
             if (clientId) {
               if (updatedMessage.client_id && updatedMessage.client_id !== clientId) return
             }
             if (callbacksRef.current.onMessageUpdate) {
-              console.log('📝 [REALTIME] Ejecutando callback onMessageUpdate...')
+              if (import.meta.env.DEV) console.log('📝 [REALTIME] Ejecutando onMessageUpdate...')
               callbacksRef.current.onMessageUpdate(updatedMessage)
             } else {
-              console.log('⚠️ [REALTIME] Callback onMessageUpdate no disponible')
+              if (import.meta.env.DEV) console.log('⚠️ [REALTIME] onMessageUpdate no disponible')
             }
           }
         )
@@ -189,19 +187,19 @@ export function useRealtimeConversations({
             table: 'tb_messages'
           },
           (payload) => {
-            console.log('🗑️ [REALTIME] Mensaje eliminado en tiempo real:', payload.old)
+            if (import.meta.env.DEV) console.log('🗑️ [REALTIME] Mensaje eliminado:', payload.old)
             const deletedMessage = payload.old as { id: string }
             if (callbacksRef.current.onMessageDelete) {
-              console.log('🗑️ [REALTIME] Ejecutando callback onMessageDelete...')
+              if (import.meta.env.DEV) console.log('🗑️ [REALTIME] Ejecutando onMessageDelete...')
               callbacksRef.current.onMessageDelete(deletedMessage.id)
             } else {
-              console.log('⚠️ [REALTIME] Callback onMessageDelete no disponible')
+              if (import.meta.env.DEV) console.log('⚠️ [REALTIME] onMessageDelete no disponible')
             }
           }
         )
 
       // Suscripción para conversaciones
-      console.log('📡 [REALTIME] Creando canal de conversaciones...')
+      if (import.meta.env.DEV) console.log('📡 [REALTIME] Creando canal de conversaciones...')
       conversationsChannel = supabase
         .channel('conversations-changes', {
           config: {
@@ -216,17 +214,17 @@ export function useRealtimeConversations({
             table: 'tb_conversations'
           },
           (payload) => {
-            console.log('✅ [REALTIME] Nueva conversación recibida en tiempo real:', payload.new)
+            if (import.meta.env.DEV) console.log('✅ [REALTIME] Nueva conversación:', payload.new)
             const newConversation = payload.new as Conversation & { client_id?: string }
             if (clientId && newConversation.client_id && newConversation.client_id !== clientId) {
-              console.log(`[REALTIME DEBUG] REJECTED: Conversation client_id (${newConversation.client_id}) does not match hook's client_id (${clientId}).`);
+              if (import.meta.env.DEV) console.log('[REALTIME DEBUG] REJECTED por client_id (conversación)')
               return
             }
             if (callbacksRef.current.onConversationInsert) {
-              console.log('🆕 [REALTIME] Ejecutando callback onConversationInsert...')
+              if (import.meta.env.DEV) console.log('🆕 [REALTIME] Ejecutando onConversationInsert...')
               callbacksRef.current.onConversationInsert(newConversation)
             } else {
-              console.log('⚠️ [REALTIME] Callback onConversationInsert no disponible')
+              if (import.meta.env.DEV) console.log('⚠️ [REALTIME] onConversationInsert no disponible')
             }
             
             toast.success('Nueva conversación', {
@@ -243,14 +241,14 @@ export function useRealtimeConversations({
             table: 'tb_conversations'
           },
           (payload) => {
-            console.log('🔄 [REALTIME] Conversación actualizada en tiempo real:', payload.new)
+            if (import.meta.env.DEV) console.log('🔄 [REALTIME] Conversación actualizada:', payload.new)
             const updatedConversation = payload.new as Conversation & { client_id?: string }
             if (clientId && updatedConversation.client_id && updatedConversation.client_id !== clientId) return
             if (callbacksRef.current.onConversationUpdate) {
-              console.log('🔄 [REALTIME] Ejecutando callback onConversationUpdate...')
+              if (import.meta.env.DEV) console.log('🔄 [REALTIME] Ejecutando onConversationUpdate...')
               callbacksRef.current.onConversationUpdate(updatedConversation)
             } else {
-              console.log('⚠️ [REALTIME] Callback onConversationUpdate no disponible')
+              if (import.meta.env.DEV) console.log('⚠️ [REALTIME] onConversationUpdate no disponible')
             }
           }
         )
@@ -262,27 +260,27 @@ export function useRealtimeConversations({
             table: 'tb_conversations'
           },
           (payload) => {
-            console.log('🗑️ [REALTIME] Conversación eliminada en tiempo real:', payload.old)
+            if (import.meta.env.DEV) console.log('🗑️ [REALTIME] Conversación eliminada:', payload.old)
             const deletedConversation = payload.old as { id: string }
             if (callbacksRef.current.onConversationDelete) {
-              console.log('🗑️ [REALTIME] Ejecutando callback onConversationDelete...')
+              if (import.meta.env.DEV) console.log('🗑️ [REALTIME] Ejecutando onConversationDelete...')
               callbacksRef.current.onConversationDelete(deletedConversation.id)
             } else {
-              console.log('⚠️ [REALTIME] Callback onConversationDelete no disponible')
+              if (import.meta.env.DEV) console.log('⚠️ [REALTIME] onConversationDelete no disponible')
             }
           }
         )
 
       // Suscribirse a los canales con reintentos
-      console.log('📡 [REALTIME] Suscribiendo a canal de mensajes...')
+      if (import.meta.env.DEV) console.log('📡 [REALTIME] Suscribiendo a canal de mensajes...')
       let messagesRetryCount = 0
       const maxRetries = 3
       
       const subscribeMessages = () => {
         messagesChannel.subscribe((status) => {
-          console.log('📡 [REALTIME] Estado de suscripción de mensajes:', status)
+          if (import.meta.env.DEV) console.log('📡 [REALTIME] Estado mensajes:', status)
           if (status === 'SUBSCRIBED') {
-            console.log('✅ [REALTIME] Suscripción a mensajes activa - ESPERANDO MENSAJES')
+            if (import.meta.env.DEV) console.log('✅ [REALTIME] Mensajes activo')
             messagesRetryCount = 0
           } else if (status === 'TIMED_OUT') {
             console.warn('⏰ [REALTIME] Timeout en mensajes, reintentando...')
@@ -314,21 +312,21 @@ export function useRealtimeConversations({
           } else if (status === 'CLOSED') {
             console.warn('⚠️ [REALTIME] Canal de mensajes cerrado')
           } else {
-            console.log('📡 [REALTIME] Estado de mensajes:', status)
+            if (import.meta.env.DEV) console.log('📡 [REALTIME] Estado de mensajes:', status)
           }
         })
       }
       
       subscribeMessages()
 
-      console.log('📡 [REALTIME] Suscribiendo a canal de conversaciones...')
+      if (import.meta.env.DEV) console.log('📡 [REALTIME] Suscribiendo a canal de conversaciones...')
       let conversationsRetryCount = 0
       
       const subscribeConversations = () => {
         conversationsChannel.subscribe((status) => {
-          console.log('📡 [REALTIME] Estado de suscripción de conversaciones:', status)
+          if (import.meta.env.DEV) console.log('📡 [REALTIME] Estado conversaciones:', status)
           if (status === 'SUBSCRIBED') {
-            console.log('✅ [REALTIME] Suscripción a conversaciones activa')
+            if (import.meta.env.DEV) console.log('✅ [REALTIME] Conversaciones activa')
             conversationsRetryCount = 0
           } else if (status === 'TIMED_OUT') {
             console.warn('⏰ [REALTIME] Timeout en conversaciones, reintentando...')
@@ -370,7 +368,7 @@ export function useRealtimeConversations({
 
     // Función de limpieza
     return () => {
-      console.log('🧹 [REALTIME] Limpiando suscripciones de tiempo real...')
+      if (import.meta.env.DEV) console.log('🧹 [REALTIME] Limpiando suscripciones de tiempo real...')
       if (messagesChannel) {
         messagesChannel.unsubscribe()
       }
@@ -381,7 +379,7 @@ export function useRealtimeConversations({
   }, []) // ✅ FIX: NO re-configurar automáticamente - solo cuando se monte el hook
 
   useEffect(() => {
-    console.log('🔌 [REALTIME] useEffect ejecutándose, configurando suscripciones...')
+    if (import.meta.env.DEV) console.log('🔌 [REALTIME] Preparando suscripciones...')
     
     // ✅ FIX: Verificar si ya hay canales activos para evitar duplicados (React Strict Mode)
     const existingChannels = supabase.getChannels()
@@ -390,16 +388,16 @@ export function useRealtimeConversations({
     )
     
     if (hasActiveChannels) {
-      console.log('🔌 [REALTIME] Canales ya existen, saltando configuración')
+      if (import.meta.env.DEV) console.log('🔌 [REALTIME] Canales existentes, salto configuración')
       return
     }
     
     const cleanup = setupRealtimeSubscriptions()
-    console.log('🔌 [REALTIME] Suscripciones configuradas, cleanup function creada')
+    if (import.meta.env.DEV) console.log('🔌 [REALTIME] Suscripciones configuradas')
     
     // ✅ FIX: Solo limpiar los canales específicos de este hook
     return () => {
-      console.log('🧹 [REALTIME] Limpieza de canales de useRealtimeConversations...')
+      if (import.meta.env.DEV) console.log('🧹 [REALTIME] Cleanup useRealtimeConversations')
       if (cleanup) {
         cleanup()
       }

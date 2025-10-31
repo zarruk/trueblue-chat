@@ -1,0 +1,326 @@
+{
+  "name": "Realtime Health Monitor",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Cron Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/monitor_realtime_health",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": []
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "supabase-monitor",
+      "name": "Supabase Monitor",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-status",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "failed",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-status",
+      "name": "Check Status",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "🚨 ALERTA REALTIME FAILURE\n\nSe detectaron {{ $json.orphaned_messages_found }} mensajes huérfanos que no se enviaron.\n\nDetalles:\n- Mensajes encontrados: {{ $json.orphaned_messages_found }}\n- Mensajes reintentados: {{ $json.messages_retried }}\n- Estado: {{ $json.status }}\n- Timestamp: {{ $json.timestamp }}\n\nRevisar sistema de monitoreo inmediatamente."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "slack-alert",
+      "name": "Slack Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        900,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "toEmail": "={{ $env.ALERT_EMAIL }}",
+        "subject": "🚨 Alerta Realtime - {{ $json.orphaned_messages_found }} mensajes fallidos",
+        "emailFormat": "html",
+        "message": "<h2>🚨 Alerta del Sistema de Monitoreo Realtime</h2><p>Se detectaron <strong>{{ $json.orphaned_messages_found }}</strong> mensajes huérfanos que no se enviaron correctamente.</p><h3>Detalles:</h3><ul><li><strong>Mensajes encontrados:</strong> {{ $json.orphaned_messages_found }}</li><li><strong>Mensajes reintentados:</strong> {{ $json.messages_retried }}</li><li><strong>Estado:</strong> {{ $json.status }}</li><li><strong>Timestamp:</strong> {{ $json.timestamp }}</li></ul><p>Por favor revisar el sistema de monitoreo inmediatamente.</p><p>---<br>Sistema de Monitoreo Realtime<br>TrueBlue Chat</p>",
+        "options": {}
+      },
+      "id": "email-alert",
+      "name": "Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        900,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-retries",
+              "leftValue": "={{ $json.messages_retried }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-retries",
+      "name": "Check Retries",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        680,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "✅ RECUPERACIÓN REALTIME\n\nSe recuperaron {{ $json.messages_retried }} mensajes huérfanos exitosamente.\n\nDetalles:\n- Mensajes encontrados: {{ $json.orphaned_messages_found }}\n- Mensajes reintentados: {{ $json.messages_retried }}\n- Estado: {{ $json.status }}\n- Timestamp: {{ $json.timestamp }}\n\nSistema funcionando correctamente."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "slack-success",
+      "name": "Slack Success",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        900,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "toEmail": "={{ $env.ALERT_EMAIL }}",
+        "subject": "✅ Recuperación Realtime - {{ $json.messages_retried }} mensajes recuperados",
+        "emailFormat": "html",
+        "message": "<h2>✅ Recuperación del Sistema Realtime</h2><p>Se recuperaron exitosamente <strong>{{ $json.messages_retried }}</strong> mensajes huérfanos.</p><h3>Detalles:</h3><ul><li><strong>Mensajes encontrados:</strong> {{ $json.orphaned_messages_found }}</li><li><strong>Mensajes reintentados:</strong> {{ $json.messages_retried }}</li><li><strong>Estado:</strong> {{ $json.status }}</li><li><strong>Timestamp:</strong> {{ $json.timestamp }}</li></ul><p>El sistema está funcionando correctamente.</p><p>---<br>Sistema de Monitoreo Realtime<br>TrueBlue Chat</p>",
+        "options": {}
+      },
+      "id": "email-success",
+      "name": "Email Success",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        900,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/get_monitoring_stats",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": []
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "get-stats",
+      "name": "Get Stats",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        460,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Cron Trigger": {
+      "main": [
+        [
+          {
+            "node": "Supabase Monitor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase Monitor": {
+      "main": [
+        [
+          {
+            "node": "Check Status",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check Retries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Status": {
+      "main": [
+        [
+          {
+            "node": "Slack Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Email Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Retries": {
+      "main": [
+        [
+          {
+            "node": "Slack Success",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Email Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2025-01-23T15:00:00.000Z",
+      "updatedAt": "2025-01-23T15:00:00.000Z",
+      "id": "realtime-monitoring",
+      "name": "realtime-monitoring"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2025-01-23T15:00:00.000Z",
+  "versionId": "1"
+}
+
+

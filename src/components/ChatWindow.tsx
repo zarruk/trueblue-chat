@@ -49,7 +49,6 @@ interface ChatWindowProps {
   showContextToggle?: boolean
   onToggleContext?: () => void
   onMobileBack?: () => void
-  // Nuevas propiedades para historial de mensajes
   fetchOlderMessages?: () => Promise<boolean>
   hasMoreHistory?: boolean
   loadingHistory?: boolean
@@ -83,8 +82,6 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   const [message, setMessage] = useState('')
   const [localMessages, setLocalMessages] = useState<Message[]>([])
   const [updatingStatus, setUpdatingStatus] = useState(false)
-
-  const [historicalConversations, setHistoricalConversations] = useState<Array<{ id: string; created_at: string; updated_at: string; messages: Message[] }>>([])
   const [viewerOpen, setViewerOpen] = useState(false)
   const [viewerSrc, setViewerSrc] = useState<string | undefined>(undefined)
   const [viewerError, setViewerError] = useState(false)
@@ -106,8 +103,6 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   const { profile } = useAuth()
   const { getAvailableAgents } = useAgents()
   
-  // Estados para scroll infinito hacia arriba
-  const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false)
   const prevScrollHeight = useRef(0)
   
   // Estados para detección de scroll manual del usuario
@@ -115,17 +110,29 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   const [isNearBottom, setIsNearBottom] = useState(true)
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   
+  // ✅ NUEVO: Estado para rastrear último scroll manual (período de gracia)
+  const [lastManualScrollTime, setLastManualScrollTime] = useState<number>(0)
+  // ✅ NUEVO: Guard local para evitar cargas duplicadas de historial
+  const loadingOlderRef = useRef(false)
+  
   // 🔧 FIX: Flag específico para bloquear scroll automático durante carga de historial
   const [isLoadingHistoricalMessages, setIsLoadingHistoricalMessages] = useState(false)
+  
+  // ✅ Sincronizar bandera local con prop del padre
+  useEffect(() => {
+    setIsLoadingHistoricalMessages(!!loadingHistory)
+  }, [loadingHistory])
 
-  // 🔧 FIX: Unificar estado de mensajes - usar props como fuente de verdad principal
+  // 🔧 FIX: Unificar estado de mensajes fusionando servidor + realtime sin duplicados (prioriza servidor)
   const messages = useMemo(() => {
-    // Priorizar mensajes del padre (useConversations) sobre mensajes locales
-    if (propMessages && propMessages.length > 0) {
-      return propMessages
+    const base = Array.isArray(propMessages) ? propMessages : []
+    if (!Array.isArray(localMessages) || localMessages.length === 0) return base
+    const byId = new Map(base.map((m: any) => [m?.id, m]))
+    for (const m of localMessages) {
+      const id = (m as any)?.id
+      if (!byId.has(id)) byId.set(id, m)
     }
-    // Fallback a mensajes locales solo si no hay mensajes del padre
-    return localMessages
+    return Array.from(byId.values())
   }, [propMessages, localMessages])
   
   const loading = propLoading !== undefined ? propLoading : false
@@ -247,78 +254,47 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     const isAtBottom = scrollFromBottom < 100
     setIsNearBottom(isAtBottom)
     
+    // Detectar scroll hacia arriba (cerca del inicio)
+    const isAtTop = container.scrollTop < 100
+    
+    if (isAtTop && !loadingOlderRef.current && !loadingHistory && hasMoreHistory && fetchOlderMessages) {
+      if (import.meta.env.DEV) console.log('🔼 ChatWindow: Scroll al inicio, cargando historial...')
+      const prevScrollHeight = container.scrollHeight
+      
+      loadingOlderRef.current = true
+      const success = await fetchOlderMessages()
+      
+      if (success) {
+        // Mantener posición de scroll después de cargar
+        requestAnimationFrame(() => {
+          if (container) {
+            const newScrollHeight = container.scrollHeight
+            container.scrollTop = newScrollHeight - prevScrollHeight
+          }
+        })
+      }
+      loadingOlderRef.current = false
+    }
+    
     // 🔧 NUEVO: Detectar si está scrolleando hacia arriba (alejándose del final)
     if (!isAtBottom) {
       setUserIsScrolling(true)
+      // ✅ Actualizar timestamp de último scroll manual
+      setLastManualScrollTime(Date.now())
       // 🔧 FIX: NO usar timeout automático - solo restaurar cuando usuario vuelva al final
       if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
-      console.log('🔼 ChatWindow: Usuario scrolleando hacia arriba - desactivando scroll automático')
+      if (import.meta.env.DEV) console.log('🔼 ChatWindow: Usuario scrolleando hacia arriba - desactivando scroll automático')
     } else {
       // ✅ Solo restaurar scroll automático cuando usuario vuelva al final por su cuenta
       if (userIsScrolling) {
         setUserIsScrolling(false)
-        console.log('✅ ChatWindow: Usuario volvió al final, restaurando scroll automático')
+        // ✅ Actualizar timestamp cuando vuelve al final también
+        setLastManualScrollTime(Date.now())
+        if (import.meta.env.DEV) console.log('✅ ChatWindow: Usuario volvió al final, restaurando scroll automático')
       }
       if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
     }
-
-    // Scroll infinito hacia arriba (lógica existente)
-    if (!fetchOlderMessages || isLoadingOlderMessages) return
-
-    // 🔧 FIX 1: Solo activar si ya hay mensajes cargados y no está en loading inicial
-    if (loading || messages.length === 0) {
-      console.log('🚫 ChatWindow: Scroll infinito desactivado - aún cargando o sin mensajes')
-      return
-    }
-
-    // 🔧 FIX 2: Threshold más pequeño para evitar activación accidental (50px en lugar de 100px)
-    const isNearTop = container.scrollTop <= 50
-    
-    if (isNearTop && hasMoreHistory) {
-      console.log('🔼 ChatWindow: Usuario llegó al tope, cargando mensajes más antiguos...')
-      setIsLoadingOlderMessages(true)
-      
-      // Guardar la altura actual del scroll para mantener la posición
-      prevScrollHeight.current = container.scrollHeight
-      
-      try {
-        // 🔧 FIX: Marcar que se están cargando mensajes históricos
-        setIsLoadingHistoricalMessages(true)
-        console.log('🚫 ChatWindow: Bloqueando scroll automático - cargando historial')
-        
-        const success = await fetchOlderMessages()
-        
-        if (success) {
-          // 🔧 MEJORADO: Mejor cálculo para mantener posición exacta
-          setTimeout(() => {
-            if (container && prevScrollHeight.current > 0) {
-              const newScrollHeight = container.scrollHeight
-              const heightDifference = newScrollHeight - prevScrollHeight.current
-              const newScrollTop = container.scrollTop + heightDifference
-              
-              container.scrollTop = newScrollTop
-              
-              console.log('📍 ChatWindow: Posición mantenida después de cargar historial:', {
-                prevHeight: prevScrollHeight.current,
-                newHeight: newScrollHeight,
-                difference: heightDifference,
-                newScrollTop
-              })
-            }
-          }, 150) // Aumentar delay ligeramente para mejor estabilidad
-        }
-      } catch (error) {
-        console.error('❌ ChatWindow: Error cargando mensajes más antiguos:', error)
-      } finally {
-        setIsLoadingOlderMessages(false)
-        // 🔧 FIX: Delay para evitar race condition con useEffect de scroll automático
-        setTimeout(() => {
-          setIsLoadingHistoricalMessages(false)
-          console.log('✅ ChatWindow: Restaurando scroll automático - historial completado')
-        }, 500)
-      }
-    }
-  }, [fetchOlderMessages, hasMoreHistory, isLoadingOlderMessages, loading, messages.length])
+  }, [userIsScrolling, loadingHistory, hasMoreHistory, fetchOlderMessages])
 
   // Agregar listener de scroll + cleanup de timeouts
   useEffect(() => {
@@ -344,52 +320,6 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     }
   }, [])
 
-  // Cargar historial de todas las conversaciones previas del mismo usuario (excluyendo la actual)
-  const fetchHistoricalConversations = useCallback(async (userId: string, currentConvId: string) => {
-    try {
-      const p = profile as any
-      const clientId = p?.client_id
-      if (!clientId) return
-      
-      // Simplificar completamente para evitar problemas de tipos
-      const convs: any[] = []
-      const convsError = null
-
-      if (convsError) {
-        console.error('❌ [ChatWindow] Error obteniendo conversaciones históricas:', convsError)
-        setHistoricalConversations([])
-        return
-      }
-
-      const results: Array<{ id: string; created_at: string; updated_at: string; messages: Message[] }> = []
-      for (const c of (convs as any[]) || []) {
-        const { data: msgs, error: msgsError } = await supabase
-          .from('tb_messages')
-          .select('*')
-          .eq('conversation_id', c.id)
-          // .eq('client_id', profile?.client_id)
-          .order('created_at', { ascending: true })
-        if (msgsError) {
-          console.error('❌ [ChatWindow] Error obteniendo mensajes históricos:', msgsError)
-          continue
-        }
-        results.push({ id: c.id, created_at: c.created_at as any, updated_at: c.updated_at as any, messages: (msgs as any) || [] })
-      }
-
-      setHistoricalConversations(results)
-    } catch (e) {
-      console.error('❌ [ChatWindow] Excepción cargando historial:', e)
-      setHistoricalConversations([])
-    }
-  }, [profile?.client_id])
-
-  useEffect(() => {
-    if (conversation && conversation.user_id) {
-      fetchHistoricalConversations(conversation.user_id, conversation.id)
-    } else {
-      setHistoricalConversations([])
-    }
-  }, [conversation?.id, conversation?.user_id, fetchHistoricalConversations, conversation])
 
   // Realtime subscription scoped to this conversation as a fail-safe
   useEffect(() => {
@@ -477,7 +407,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
       // ✅ FIX: NO buscar canales huérfanos - confiar en que cada instancia limpia su propio canal
       // Esto evita interferencia con otros componentes y race conditions
     }
-  }, []) // ✅ FIX: NO re-crear canales automáticamente
+  }, [conversationId]) // ✅ FIX: Re-crear canal cuando cambie la conversación
 
   // ELIMINADO: No usar polling automático para evitar refrescos
 
@@ -494,23 +424,41 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   useEffect(() => {
     // 🔧 FIX: NUNCA hacer scroll automático si se están cargando mensajes históricos
     if (isLoadingHistoricalMessages) {
-      console.log('🚫 ChatWindow: Scroll automático bloqueado - cargando mensajes históricos')
+      if (import.meta.env.DEV) console.log('🚫 ChatWindow: Scroll automático bloqueado - cargando mensajes históricos')
       return
     }
     
-    // Solo scroll automático si el usuario NO está scrolleando manualmente
-    // y está cerca del final O es la primera carga
-    if (messages.length > 0 && (!userIsScrolling || isNearBottom)) {
-      // Si es la primera vez que se cargan mensajes, siempre hacer scroll
-      const isFirstLoad = !userIsScrolling
-      if (isFirstLoad || isNearBottom) {
-        scrollToBottomInstant()
-        console.log('📍 ChatWindow: Scroll automático al final (primera carga o usuario en el final)')
-      }
-    } else if (userIsScrolling && !isNearBottom) {
-      console.log('📍 ChatWindow: Scroll automático omitido - usuario scrolleando manualmente')
+    // ✅ Calcular tiempo desde último scroll manual
+    const timeSinceLastScroll = Date.now() - lastManualScrollTime
+    const SCROLL_GRACE_PERIOD = 15000 // ✅ 15 segundos de período de gracia
+    
+    // ✅ Si el usuario ha scrolleado recientemente, NO hacer scroll automático
+    if (timeSinceLastScroll < SCROLL_GRACE_PERIOD && lastManualScrollTime > 0) {
+      if (import.meta.env.DEV) console.log(`🚫 ChatWindow: Scroll automático bloqueado - usuario scrolleó hace ${Math.round(timeSinceLastScroll / 1000)}s (período de gracia: 15s)`) 
+      return
     }
-  }, [messages.length, scrollToBottomInstant, userIsScrolling, isNearBottom, isLoadingHistoricalMessages])
+    
+    // Solo scroll automático si:
+    // 1. El usuario NO ha scrolleado recientemente (o nunca ha scrolleado)
+    // 2. Y está cerca del final O es la primera carga
+    if (messages.length > 0 && isNearBottom) {
+      // ✅ Delay antes de hacer scroll (período de gracia adicional)
+      const timer = setTimeout(() => {
+        // ✅ Doble verificación: asegurar que el usuario siga cerca del final y no haya scrolleado
+        const timeSinceLastScrollNow = Date.now() - lastManualScrollTime
+        if (timeSinceLastScrollNow >= SCROLL_GRACE_PERIOD && isNearBottom && !isLoadingHistoricalMessages) {
+          scrollToBottomInstant()
+          if (import.meta.env.DEV) console.log('📍 ChatWindow: Scroll automático al final (período de gracia completado)')
+        } else {
+          if (import.meta.env.DEV) console.log('📍 ChatWindow: Scroll automático cancelado - usuario scrolleó durante período de gracia')
+        }
+      }, 2000) // Esperar 2 segundos adicionales antes de hacer scroll
+      
+      return () => clearTimeout(timer)
+    } else if (userIsScrolling && !isNearBottom) {
+      if (import.meta.env.DEV) console.log('📍 ChatWindow: Scroll automático omitido - usuario scrolleando manualmente y lejos del final')
+    }
+  }, [messages.length, scrollToBottomInstant, userIsScrolling, isNearBottom, isLoadingHistoricalMessages, lastManualScrollTime])
 
   // Asegurar scroll al fondo cuando se cambia de conversación
   useEffect(() => {
@@ -523,7 +471,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   useEffect(() => {
     // 🔧 FIX: NUNCA hacer smooth scroll si se están cargando mensajes históricos
     if (isLoadingHistoricalMessages) {
-      console.log('🚫 ChatWindow: Smooth scroll bloqueado - cargando mensajes históricos')
+      if (import.meta.env.DEV) console.log('🚫 ChatWindow: Smooth scroll bloqueado - cargando mensajes históricos')
       return
     }
     
@@ -533,7 +481,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
         // Doble verificación para evitar race conditions
         if (!isLoadingHistoricalMessages && (!userIsScrolling || isNearBottom)) {
           scrollToBottom('smooth')
-          console.log('📍 ChatWindow: Smooth scroll al final')
+          if (import.meta.env.DEV) console.log('📍 ChatWindow: Smooth scroll al final')
         }
       }, 100)
       return () => clearTimeout(timer)
@@ -1137,21 +1085,11 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
           ref={messagesContainerRef} 
           className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain px-3 py-3 tablet:px-4 tablet:py-4 desktop:px-6 desktop:py-6 space-y-3 tablet:space-y-2 desktop:space-y-2 chat-messages-scroll dark:[&>.message-sep]:border-slate-700"
         >
-          {/* Indicadores de historial en la parte superior */}
-          {(isLoadingOlderMessages || loadingHistory) && (
-            <div className="flex justify-center py-3">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                <span>Cargando mensajes anteriores...</span>
-              </div>
-            </div>
-          )}
-          
-          {!hasMoreHistory && messages.length > 30 && (
-            <div className="flex justify-center py-2">
-              <div className="text-xs text-muted-foreground px-3 py-1 rounded-full bg-muted/50">
-                No hay más mensajes en esta conversación
-              </div>
+          {/* Indicador de carga de historial */}
+          {loadingHistory && (
+            <div className="flex items-center justify-center py-4">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+              <span className="ml-2 text-sm text-muted-foreground">Cargando historial...</span>
             </div>
           )}
           
@@ -1161,23 +1099,6 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
             </div>
           ) : (
             <>
-              {/* Historial de conversaciones anteriores */}
-              {historicalConversations.map((conv, idx) => (
-                <div key={conv.id} className="space-y-3">
-                  <div className="relative my-6 message-sep">
-                    <div className="absolute inset-0 flex items-center">
-                      <span className="w-full border-t border-dashed border-muted-foreground/30" />
-                    </div>
-                    <div className="relative flex justify-center text-[11px] uppercase">
-                      <span className="bg-background px-2 text-muted-foreground">
-                        Histórico • {format(new Date(conv.created_at), 'dd/MM/yyyy', { locale: es })}
-                      </span>
-                    </div>
-                  </div>
-                  {conv.messages.map((m) => renderMessageBubble(m, true))}
-                </div>
-              ))}
-
               {/* Mensajes de la conversación actual */}
               {messages.length === 0 ? (
                 <div className="text-center text-muted-foreground">
@@ -1185,12 +1106,13 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                 </div>
               ) : (
                 messages.map((msg, idx) => {
-                  // Verificar si necesitamos mostrar un separador de fecha
+                  // ¿Hay cambio de día o es el primero?
                   const showDateSeparator = idx === 0 || 
                     !isSameDay(new Date(messages[idx - 1].created_at), new Date(msg.created_at))
-                  
+
                   return (
                     <React.Fragment key={msg.id}>
+                      {/* Separador de fecha normal */}
                       {showDateSeparator && (
                         <div className="relative my-4">
                           <div className="absolute inset-0 flex items-center">
@@ -1203,6 +1125,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
                           </div>
                         </div>
                       )}
+
                       {renderMessageBubble(msg, false)}
                     </React.Fragment>
                   )
@@ -1212,16 +1135,6 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
           )}
           
           <div ref={messagesEndRef} />
-          
-          {/* Mensaje de ayuda para scroll hacia arriba */}
-          {/* 🔧 FIX 3: Solo mostrar ayuda si hay suficientes mensajes (>10) para evitar confusión */}
-          {messages.length > 10 && hasMoreHistory && !loading && (
-            <div className="flex justify-center py-2 opacity-60">
-              <div className="text-xs text-muted-foreground">
-                Desliza hacia arriba para ver más mensajes
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
@@ -1282,7 +1195,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
             size="icon" 
             className="flex-shrink-0 h-11 w-11 min-w-[44px] min-h-[44px] touch-manipulation"
             onClick={() => fileInputRef.current?.click()}
-            disabled={!conversationId || conversation?.status === 'closed' || uploading || conversation?.channel === 'instagram'}
+            disabled={!conversationId || conversation?.status === 'closed' || uploading || conversation?.channel?.toLowerCase() === 'instagram'}
           >
             <Paperclip className="h-4 w-4" />
           </Button>

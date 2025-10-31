@@ -230,3 +230,5 @@ Para probar la funcionalidad:
 3. Los archivos se pueden eliminar manualmente desde Supabase si es necesario
 4. El espacio de almacenamiento está sujeto a los límites de tu plan de Supabase
 
+
+
