@@ -93,51 +93,65 @@ const App = () => (
           <Routes>
             <Route path="/" element={
               <ProtectedRoute>
-                <AppLayout>
-                  <Dashboard />
-                </AppLayout>
+                <ErrorBoundary>
+                  <AppLayout>
+                    <Dashboard />
+                  </AppLayout>
+                </ErrorBoundary>
               </ProtectedRoute>
             } />
             <Route path="/dashboard" element={
               <ProtectedRoute>
-                <AppLayout>
-                  <Dashboard />
-                </AppLayout>
+                <ErrorBoundary>
+                  <AppLayout>
+                    <Dashboard />
+                  </AppLayout>
+                </ErrorBoundary>
               </ProtectedRoute>
             } />
             <Route path="/agents" element={
               <ProtectedRoute>
-                <AppLayout>
-                  <Agents />
-                </AppLayout>
+                <ErrorBoundary>
+                  <AppLayout>
+                    <Agents />
+                  </AppLayout>
+                </ErrorBoundary>
               </ProtectedRoute>
             } />
             <Route path="/metrics" element={
               <ProtectedRoute>
-                <AppLayout>
-                  <Metrics />
-                </AppLayout>
+                <ErrorBoundary>
+                  <AppLayout>
+                    <Metrics />
+                  </AppLayout>
+                </ErrorBoundary>
               </ProtectedRoute>
             } />
             <Route path="/embudo" element={
               <ProtectedRoute>
-                <AppLayout>
-                  <Embudo />
-                </AppLayout>
+                <ErrorBoundary>
+                  <AppLayout>
+                    <Embudo />
+                  </AppLayout>
+                </ErrorBoundary>
               </ProtectedRoute>
             } />
             <Route path="/settings" element={
               <ProtectedRoute>
-                <AppLayout>
-                  <Settings />
-                </AppLayout>
+                <ErrorBoundary>
+                  <AppLayout>
+                    <Settings />
+                  </AppLayout>
+                </ErrorBoundary>
               </ProtectedRoute>
             } />
             <Route path="/debug" element={
               <ProtectedRoute>
-                <AppLayout>
-                  <Debug />
-                </AppLayout>
+                <ErrorBoundary>
+                  <AppLayout>
+                    <Debug />
+                  </AppLayout>
+                </ErrorBoundary>
               </ProtectedRoute>
             } />
             <Route path="/auth" element={
@@ -149,9 +163,11 @@ const App = () => (
             {import.meta.env.VITE_E2E === '1' && (
               <Route path="/__e2e__/responsive" element={
                 <ProtectedRoute>
-                  <AppLayout>
-                    <Dashboard />
-                  </AppLayout>
+                  <ErrorBoundary>
+                    <AppLayout>
+                      <Dashboard />
+                    </AppLayout>
+                  </ErrorBoundary>
                 </ProtectedRoute>
               } />
             )}
