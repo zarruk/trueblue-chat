@@ -37,6 +37,31 @@ function formatDateSeparator(date: Date): string {
   return format(date, "d 'de' MMMM", { locale: es })
 }
 
+// Helper para sanitizar contenido de mensajes antes de renderizar
+function sanitizeMessageContent(content: any): string {
+  if (!content) return ''
+  
+  try {
+    // Convertir a string si no lo es
+    let sanitized = typeof content === 'string' ? content : String(content)
+    
+    // Remover caracteres de control (excepto \n, \r, \t)
+    // Esto incluye: \0, \x01-\x08, \x0B, \x0C, \x0E-\x1F, \x7F
+    sanitized = sanitized.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+    
+    // Limitar longitud para prevenir problemas de rendimiento (opcional, 10,000 caracteres)
+    if (sanitized.length > 10000) {
+      sanitized = sanitized.substring(0, 10000) + '... (mensaje truncado)'
+    }
+    
+    return sanitized
+  } catch (error) {
+    console.warn('⚠️ [ChatWindow] Error al sanitizar contenido de mensaje:', error)
+    // En caso de error, retornar string vacío o contenido original como string
+    return typeof content === 'string' ? content : ''
+  }
+}
+
 interface ChatWindowProps {
   conversationId?: string
   messages?: any[]
@@ -186,42 +211,88 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   // Helper: extraer URL de imagen desde metadata y normalizar Drive
   function getImageUrlFromMetadata(metadata: any): string | undefined {
     try {
-      if (!metadata) return undefined
+      // Validación defensiva: retornar undefined si metadata es inválido
+      if (!metadata || (typeof metadata !== 'string' && typeof metadata !== 'object')) {
+        return undefined
+      }
+
       let url: string | undefined
+      
       if (typeof metadata === 'string') {
         const trimmed = metadata.trim()
-        if (!trimmed || trimmed === 'undefined' || trimmed === 'null' || trimmed === 'NaN') return undefined
+        // Validar que el string no esté vacío o contenga valores inválidos
+        if (!trimmed || trimmed === 'undefined' || trimmed === 'null' || trimmed === 'NaN' || trimmed === '{}' || trimmed === '[]') {
+          return undefined
+        }
+        
+        // Intentar parsear JSON si parece ser JSON
         if (/^[{\[]/.test(trimmed)) {
-          const parsed = JSON.parse(trimmed)
-          // ✅ Buscar file-url además de img-url
-          url = parsed?.['img-url'] || parsed?.imgUrl || parsed?.['file-url']
+          try {
+            const parsed = JSON.parse(trimmed)
+            // Validar que el parsed sea un objeto válido
+            if (parsed && typeof parsed === 'object') {
+              url = parsed?.['img-url'] || parsed?.imgUrl || parsed?.['file-url']
+            }
+          } catch (parseError) {
+            // Si falla el parseo, tratar como URL directa
+            url = trimmed
+          }
         } else {
           url = trimmed
         }
-      } else if (typeof metadata === 'object') {
-        // ✅ Buscar file-url además de img-url
+      } else if (typeof metadata === 'object' && metadata !== null) {
+        // Validar que no sea un array vacío o objeto sin propiedades relevantes
+        if (Array.isArray(metadata) && metadata.length === 0) {
+          return undefined
+        }
+        
+        // Buscar file-url además de img-url
         url = (metadata as any)?.['img-url'] || (metadata as any)?.imgUrl || (metadata as any)?.['file-url']
       }
-      if (!url) return undefined
+      
+      // Validar que url sea una string válida y no vacía
+      if (!url || typeof url !== 'string' || url.trim() === '') {
+        return undefined
+      }
       
       // ✅ Verificar que sea una imagen si hay file-type
-      if (typeof metadata === 'object' && (metadata as any)?.['file-type']) {
+      if (typeof metadata === 'object' && metadata !== null && (metadata as any)?.['file-type']) {
         const fileType = (metadata as any)?.['file-type']
-        if (!fileType.startsWith('image/')) {
+        if (typeof fileType === 'string' && !fileType.startsWith('image/')) {
           return undefined // No es una imagen, se mostrará en la sección de documentos
         }
       }
       
-      // Normalizar esquema si viene sin http(s)
-      if (!/^https?:\/\//i.test(url) && /^([\w-]+\.)+[\w-]{2,}/.test(url)) {
-        url = `https://${url}`
+      // Normalizar esquema si viene sin http(s) - solo si parece una URL válida
+      if (typeof url === 'string') {
+        if (!/^https?:\/\//i.test(url) && /^([\w-]+\.)+[\w-]{2,}/.test(url)) {
+          url = `https://${url}`
+        }
+        
+        // Validar que la URL sea válida antes de procesarla
+        try {
+          new URL(url) // Esto lanzará error si la URL es inválida
+        } catch (urlError) {
+          // Si la URL no es válida, intentar normalizar URLs de Google Drive directamente
+          const googleDriveMatch = url.match(/(?:id=|file\/d\/|drive\.google\.com\/file\/d\/)([a-zA-Z0-9_-]+)/)
+          if (googleDriveMatch && googleDriveMatch[1]) {
+            const fileId = googleDriveMatch[1]
+            return `https://drive.google.com/uc?export=view&id=${fileId}`
+          }
+          // Si no es una URL válida ni un ID de Google Drive, retornar undefined
+          return undefined
+        }
       }
+      
       // Normalizar URLs de Google Drive a uc?export=view&id=
-      const googleDriveMatch = url.match(/(?:id=|file\/d\/|drive\.google\.com\/file\/d\/)([a-zA-Z0-9_-]+)/)
-      if (googleDriveMatch && googleDriveMatch[1]) {
-        const fileId = googleDriveMatch[1]
-        return `https://drive.google.com/uc?export=view&id=${fileId}`
+      if (typeof url === 'string') {
+        const googleDriveMatch = url.match(/(?:id=|file\/d\/|drive\.google\.com\/file\/d\/)([a-zA-Z0-9_-]+)/)
+        if (googleDriveMatch && googleDriveMatch[1]) {
+          const fileId = googleDriveMatch[1]
+          return `https://drive.google.com/uc?export=view&id=${fileId}`
+        }
       }
+      
       return url
     } catch (e) {
       console.warn('⚠️ [ChatWindow] No se pudo parsear metadata de mensaje:', e)
@@ -492,43 +563,70 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
     e.preventDefault()
     if ((!message.trim() && selectedFiles.length === 0) || !conversationId) return
 
+    // Guardar valores antes de enviar para restaurar en caso de error
+    const messageToSend = message
+    const filesToSend = [...selectedFiles]
+    let messageSent = false
+
     try {
-      if (!onSendMessage) throw new Error('onSendMessage no definido')
+      if (!onSendMessage) {
+        throw new Error('onSendMessage no definido')
+      }
       
       // Si hay archivos, subirlos primero
       if (selectedFiles.length > 0 && profile?.client_id && conversationId) {
         setUploading(true)
         setUploadProgress(0)
         
-        const firstFile = selectedFiles[0] // Inicialmente solo 1 archivo
-        const result = await uploadFile(
-          firstFile,
-          profile.client_id,
-          conversationId,
-          (progress) => setUploadProgress(progress)
-        )
-        
-        setUploading(false)
-        
-        if (!result.success || !result.metadata) {
-          console.error('Error subiendo archivo:', result.error)
-          toast.error(result.error || 'Error al subir archivo')
-          return
+        try {
+          const firstFile = selectedFiles[0] // Inicialmente solo 1 archivo
+          const result = await uploadFile(
+            firstFile,
+            profile.client_id,
+            conversationId,
+            (progress) => setUploadProgress(progress)
+          )
+          
+          if (!result.success || !result.metadata) {
+            console.error('❌ [ChatWindow] Error subiendo archivo:', result.error)
+            toast.error(result.error || 'Error al subir archivo')
+            return
+          }
+          
+          console.log('🔍 ChatWindow: Enviando mensaje con metadata:', result.metadata)
+          // El metadata se manejará en el hook de conversaciones
+          await onSendMessage(conversationId, message, 'agent', result.metadata)
+          messageSent = true
+        } catch (uploadError) {
+          console.error('❌ [ChatWindow] Error durante subida de archivo:', uploadError)
+          toast.error('Error al subir archivo')
+          throw uploadError
+        } finally {
+          setUploading(false)
         }
-        
-        console.log('🔍 ChatWindow: Enviando mensaje con metadata:', result.metadata)
-        // El metadata se manejará en el hook de conversaciones
-        await onSendMessage(conversationId, message, 'agent', result.metadata)
       } else {
         await onSendMessage(conversationId, message, 'agent')
+        messageSent = true
       }
       
-      setMessage('')
-      setSelectedFiles([])
-      setUploadProgress(0)
+      // Solo limpiar el estado si el mensaje se envió exitosamente
+      if (messageSent) {
+        setMessage('')
+        setSelectedFiles([])
+        setUploadProgress(0)
+      }
     } catch (error) {
-      console.error('Error sending message:', error)
+      console.error('❌ [ChatWindow] Error sending message:', error)
+      
+      // Restaurar estados en caso de error
       setUploading(false)
+      setUploadProgress(0)
+      
+      // No limpiar el mensaje ni archivos si hubo error, para que el usuario pueda reintentar
+      // Solo mostrar error si no fue un error de subida de archivo (ya se mostró arriba)
+      if (selectedFiles.length === 0 || messageSent) {
+        toast.error('Error al enviar el mensaje. Por favor, intenta nuevamente.')
+      }
     }
   }
 
@@ -701,40 +799,53 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
   }
 
   const renderMessageBubble = (msg: Message, muted = false) => {
-    const senderInfo = getSenderInfo(msg)
-    const alignment = getMessageAlignment(msg)
-    const baseImageUrl = getImageUrlFromMetadata(msg?.metadata)
-    const hasImage = Boolean(baseImageUrl)
-
-    // Variantes para Google Drive (sin hooks dentro del render de burbuja)
-    let googleDriveVariants: string[] = []
-    if (baseImageUrl && (baseImageUrl.includes('drive.google.com') || baseImageUrl.includes('drive.usercontent.google.com'))) {
-      const fileIdMatch = baseImageUrl.match(/(?:id=|file\/d\/)([a-zA-Z0-9_-]+)/)
-      if (fileIdMatch) {
-        const fileId = fileIdMatch[1]
-        googleDriveVariants = [
-          // Preferir dominios que no dan CORS en <img>
-          `https://lh3.googleusercontent.com/d/${fileId}=s2048`,
-          `https://lh3.googleusercontent.com/d/${fileId}`,
-          `https://drive.usercontent.google.com/uc?export=view&id=${fileId}`,
-          `https://drive.google.com/thumbnail?id=${fileId}&sz=w2000`,
-          `https://drive.google.com/open?id=${fileId}`,
-          `https://drive.google.com/file/d/${fileId}/view?usp=sharing`,
-          // Dejar uc al final porque suele bloquear por CORS
-          `https://drive.google.com/uc?export=view&id=${fileId}`,
-          `https://drive.google.com/uc?export=download&id=${fileId}`
-        ]
+    try {
+      // Validar que el mensaje tenga datos válidos
+      if (!msg || !msg.id) {
+        console.warn('⚠️ [ChatWindow] Mensaje inválido recibido en renderMessageBubble:', msg)
+        return (
+          <div className="flex justify-center">
+            <div className="rounded-2xl px-4 py-3 bg-muted text-muted-foreground text-sm">
+              Error al mostrar mensaje
+            </div>
+          </div>
+        )
       }
-    }
 
-    const idx = imageVariantIndex[msg.id] || 0
-    const imageUrl = hasImage
-      ? (googleDriveVariants.length > 0
-          ? googleDriveVariants[idx % googleDriveVariants.length]
-          : baseImageUrl)
-      : undefined
+      const senderInfo = getSenderInfo(msg)
+      const alignment = getMessageAlignment(msg)
+      const baseImageUrl = getImageUrlFromMetadata(msg?.metadata)
+      const hasImage = Boolean(baseImageUrl)
 
-    return (
+      // Variantes para Google Drive (sin hooks dentro del render de burbuja)
+      let googleDriveVariants: string[] = []
+      if (baseImageUrl && (baseImageUrl.includes('drive.google.com') || baseImageUrl.includes('drive.usercontent.google.com'))) {
+        const fileIdMatch = baseImageUrl.match(/(?:id=|file\/d\/)([a-zA-Z0-9_-]+)/)
+        if (fileIdMatch) {
+          const fileId = fileIdMatch[1]
+          googleDriveVariants = [
+            // Preferir dominios que no dan CORS en <img>
+            `https://lh3.googleusercontent.com/d/${fileId}=s2048`,
+            `https://lh3.googleusercontent.com/d/${fileId}`,
+            `https://drive.usercontent.google.com/uc?export=view&id=${fileId}`,
+            `https://drive.google.com/thumbnail?id=${fileId}&sz=w2000`,
+            `https://drive.google.com/open?id=${fileId}`,
+            `https://drive.google.com/file/d/${fileId}/view?usp=sharing`,
+            // Dejar uc al final porque suele bloquear por CORS
+            `https://drive.google.com/uc?export=view&id=${fileId}`,
+            `https://drive.google.com/uc?export=download&id=${fileId}`
+          ]
+        }
+      }
+
+      const idx = imageVariantIndex[msg.id] || 0
+      const imageUrl = hasImage
+        ? (googleDriveVariants.length > 0
+            ? googleDriveVariants[idx % googleDriveVariants.length]
+            : baseImageUrl)
+        : undefined
+
+      return (
       <div key={msg.id} className={`flex ${alignment}`}>
         <div className={`flex items-start space-x-3 max-w-[86%] tablet:max-w-[75%] desktop:max-w-[70%] ${alignment === 'justify-end' ? 'flex-row-reverse space-x-reverse' : ''}`}>
           {msg.sender_role === 'user' && (
@@ -822,7 +933,7 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
               return null
             })()}
             {msg.content && (
-              <p className="chat-message-content text-[15px] leading-6 tablet:text-sm tablet:leading-5 whitespace-pre-wrap break-words">{msg.content}</p>
+              <p className="chat-message-content text-[15px] leading-6 tablet:text-sm tablet:leading-5 whitespace-pre-wrap break-words">{sanitizeMessageContent(msg.content)}</p>
             )}
             <p className={`text-xs mt-1 ${
               msg.sender_role === 'user'
@@ -840,6 +951,21 @@ export function ChatWindow({ conversationId, messages: propMessages, loading: pr
         </div>
       </div>
     )
+    } catch (error) {
+      console.error('❌ [ChatWindow] Error al renderizar mensaje:', error, { messageId: msg?.id, content: msg?.content?.substring(0, 50) })
+      
+      // Retornar UI de error en lugar de romper toda la aplicación
+      return (
+        <div className="flex justify-center">
+          <div className="rounded-2xl px-4 py-3 bg-muted text-muted-foreground text-sm max-w-[86%] tablet:max-w-[75%] desktop:max-w-[70%]">
+            <p className="font-medium mb-1">Error al mostrar mensaje</p>
+            {msg?.content && (
+              <p className="text-xs opacity-75 truncate">{msg.content.substring(0, 100)}{msg.content.length > 100 ? '...' : ''}</p>
+            )}
+          </div>
+        </div>
+      )
+    }
   }
 
   if (!conversationId) {
